@@ -1,0 +1,112 @@
+name: OmniRoute patch artifact
+
+on:
+  push:
+    branches:
+      - "deploy/artifact/**"
+
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+
+concurrency:
+  group: omniroute-artifact-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: startsWith(github.ref, 'refs/heads/deploy/artifact/')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      CI: "1"
+      NEXT_TELEMETRY_DISABLED: "1"
+      OMNIROUTE_GITHUB_WORKFLOW: .github/workflows/omniroute-patch-artifact.yml
+    steps:
+      - name: Checkout immutable deployment request
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.2
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Tiny-compatible Node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.2.0
+        with:
+          node-version: 22.22.3
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Pin npm and validate hosted runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --global npm@10.9.8 --no-audit --no-fund
+          test "$RUNNER_ENVIRONMENT" = github-hosted
+          test "$RUNNER_OS" = Linux
+          test "$(node --version)" = v22.22.3
+          test "$(npm --version)" = 10.9.8
+          test "$(node -p 'process.versions.modules')" = 127
+          test "$(getconf GNU_LIBC_VERSION)" = 'glibc 2.39'
+
+      - name: Validate and pack reviewed request
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod 0755 .omniroute-deploy/artifact-format.py .omniroute-deploy/artifact-builder.sh
+          mkdir -p "$RUNNER_TEMP/reviewed-request/patches"
+          cp .omniroute-deploy/input/request.data "$RUNNER_TEMP/reviewed-request/request.json"
+          cp .omniroute-deploy/input/request-files.data "$RUNNER_TEMP/reviewed-request/request-files.json"
+          cp .omniroute-deploy/input/patches/*.patch "$RUNNER_TEMP/reviewed-request/patches/"
+          .omniroute-deploy/artifact-format.py pack-request \
+            --directory "$RUNNER_TEMP/reviewed-request" \
+            --output "$RUNNER_TEMP/request.tar.gz"
+
+      - name: Build one webpack runtime overlay
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .omniroute-deploy/output
+          .omniroute-deploy/artifact-builder.sh \
+            <"$RUNNER_TEMP/request.tar.gz" \
+            >.omniroute-deploy/output/response.tar.gz \
+            2>.omniroute-deploy/output/build.log
+          cp "$RUNNER_TEMP/request.tar.gz" .omniroute-deploy/output/request.tar.gz
+          cp "$RUNNER_TEMP/reviewed-request/request.json" .omniroute-deploy/output/request.json
+          sha256sum \
+            .omniroute-deploy/output/response.tar.gz \
+            .omniroute-deploy/output/request.tar.gz \
+            .omniroute-deploy/output/request.json \
+            >.omniroute-deploy/output/SHA256SUMS
+
+      - name: Attest exact response archive
+        id: attest
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
+        with:
+          subject-path: .omniroute-deploy/output/response.tar.gz
+
+      - name: Preserve provenance bundle and run identity
+        shell: bash
+        env:
+          BUNDLE_PATH: ${{ steps.attest.outputs.bundle-path }}
+        run: |
+          set -euo pipefail
+          cp "$BUNDLE_PATH" .omniroute-deploy/output/attestation-bundle.jsonl
+          jq -n \
+            --arg repository "$GITHUB_REPOSITORY" \
+            --arg workflow ".github/workflows/omniroute-patch-artifact.yml" \
+            --arg ref "$GITHUB_REF" \
+            --arg sourceDigest "$GITHUB_SHA" \
+            --argjson runId "$GITHUB_RUN_ID" \
+            --argjson runAttempt "$GITHUB_RUN_ATTEMPT" \
+            '{repository:$repository,workflow:$workflow,ref:$ref,sourceDigest:$sourceDigest,runId:$runId,runAttempt:$runAttempt,runnerEnvironment:"github-hosted"}' \
+            >.omniroute-deploy/output/run.json
+
+      - name: Upload immutable artifact evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: omniroute-patch-${{ github.sha }}
+          path: .omniroute-deploy/output/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
