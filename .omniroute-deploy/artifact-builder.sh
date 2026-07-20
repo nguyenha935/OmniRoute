@@ -187,6 +187,15 @@ prune_full_package_development_residue() {
   done
 }
 
+remove_standalone_dependency_duplicates() {
+  local standalone_modules="$PACKAGE_STAGE/dist/node_modules"
+  [ -e "$standalone_modules" ] || return 0
+  [ -d "$standalone_modules" ] && [ ! -L "$standalone_modules" ] \
+    || die "standalone dependency tree is not a safe directory"
+  rm -rf -- "$standalone_modules"
+  log "removed standalone dependency duplicates; runtime resolves from production root"
+}
+
 copy_native_file() {
   local source="$1"
   local destination="$2"
@@ -363,6 +372,7 @@ assemble_full_package() {
     npm ci --omit=dev --ignore-scripts --legacy-peer-deps --no-audit --no-fund >&2
   )
   materialize_workspace
+  remove_standalone_dependency_duplicates
   assemble_native_assets
   colocate_optional_runtime_closure
   prune_full_package_development_residue
