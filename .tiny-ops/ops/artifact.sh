@@ -286,15 +286,12 @@ jobs:
           test "$(getconf GNU_LIBC_VERSION)" = 'glibc 2.39'
 
       - name: Restore Next.js build cache
-        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        uses: actions/cache/restore@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
         with:
           path: .omniroute-deploy/cache/next
           key: omniroute-next-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-${{ github.sha }}
           restore-keys: |
             omniroute-next-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-
-          # artifact-builder only publishes this directory after a successful
-          # Next.js build. Preserve it even if later packaging/attestation fails.
-          save-always: true
 
       - name: Validate and pack reviewed request
         shell: bash
@@ -354,6 +351,13 @@ jobs:
             .omniroute-deploy/output/request.tar.gz \
             .omniroute-deploy/output/request.json \
             >.omniroute-deploy/output/SHA256SUMS
+
+      - name: Save successful Next.js build cache
+        if: ${{ always() && hashFiles('.omniroute-deploy/cache/next/**') != '' }}
+        uses: actions/cache/save@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        with:
+          path: .omniroute-deploy/cache/next
+          key: omniroute-next-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-${{ github.sha }}
 
       - name: Upload builder diagnostics
         if: ${{ always() }}

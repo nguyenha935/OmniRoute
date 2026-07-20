@@ -15,8 +15,12 @@ grep -Fq 'gh attestation verify' "$ORCHESTRATOR" || fail "download path does not
 grep -Fq -- '--deny-self-hosted-runners' "$ORCHESTRATOR" || fail "attestation accepts self-hosted runners"
 grep -Fq 'deploy/integration' "$ORCHESTRATOR" || fail "persistent integration branch is missing"
 grep -Fq 'Restore Next.js build cache' "$ORCHESTRATOR" || fail "workflow omits the Next.js build cache"
-grep -Fq 'save-always: true' "$ORCHESTRATOR" \
-  || fail "successful build cache is discarded when a later packaging step fails"
+grep -Fq 'actions/cache/restore@0400d5f644dc74513175e3cd8d07132dd4860809' "$ORCHESTRATOR" \
+  || fail "workflow does not use the dedicated cache restore action"
+grep -Fq 'actions/cache/save@0400d5f644dc74513175e3cd8d07132dd4860809' "$ORCHESTRATOR" \
+  || fail "workflow does not preserve a successful build cache after later failures"
+grep -Fq "hashFiles('.omniroute-deploy/cache/next/**') != ''" "$ORCHESTRATOR" \
+  || fail "workflow may save an incomplete build cache"
 grep -Fq 'Build one reviewed Webpack artifact' "$ORCHESTRATOR" \
   || fail "workflow does not identify the bounded-memory Webpack lane"
 grep -Fq 'published_blob_matches' "$ORCHESTRATOR" \

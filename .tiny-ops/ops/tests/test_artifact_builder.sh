@@ -20,6 +20,10 @@ grep -Fq '$SOURCE_TREE/.build/next/cache' "$BUILDER" \
 ! grep -Fq '$SOURCE_TREE/.next/cache' "$BUILDER" \
   || fail "builder retains the unused default Next.js cache path"
 grep -Fq 'npm run check:dashboard-typecheck' "$BUILDER" || fail "builder omits dashboard typecheck gate"
+grep -Fq 'run_typecheck_regression_gate' "$BUILDER" \
+  || fail "builder does not compare target and candidate typecheck diagnostics"
+grep -Fq 'comm -13 "$baseline_signatures" "$candidate_signatures"' "$BUILDER" \
+  || fail "typecheck baseline gate does not reject newly introduced diagnostics"
 grep -Fq 'npm ci --omit=dev --ignore-scripts --legacy-peer-deps --no-audit --no-fund' "$BUILDER" \
   || fail "full-package production install does not preserve the reviewed lockfile resolver contract"
 grep -Fq 'materialize_workspace' "$BUILDER" || fail "builder does not materialize workspace packages"

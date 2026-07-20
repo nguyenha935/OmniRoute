@@ -219,5 +219,14 @@ Không push/open/update PR trước deploy và người dùng test nếu chưa c
   không mang cấu hình đó nên npm dùng resolver khác với lúc tạo lockfile.
 - Production-prune phải truyền rõ `--legacy-peer-deps` cùng `--ignore-scripts`.
   Không copy `.npmrc` để tránh đưa registry/auth config tương lai vào payload.
-- Cache action dùng `save-always: true`; builder chỉ materialize cache ngoài sau
-  khi Next.js build xanh, nên lỗi đóng gói phía sau không làm mất kết quả compile.
+- Dùng riêng `actions/cache/restore` và `actions/cache/save`; builder chỉ
+  materialize cache ngoài sau khi Next.js build xanh, nên lỗi đóng gói phía sau
+  không làm mất kết quả compile.
+
+### Upstream target đỏ sẵn ở typecheck
+
+- Target `470e0811f` lỗi `typecheck:core` trong `src/lib/db/core.ts` và
+  `agentBridgeState.ts`; hai patch local không chạm các file này.
+- Hosted builder chạy cùng `typecheck:core` trên exact target nguyên bản và cây
+  đã áp patch, chuẩn hóa/sắp xếp diagnostics rồi dùng phép tập hợp để phát hiện
+  lỗi mới. Candidate chỉ được qua khi không thêm diagnostic so với target.

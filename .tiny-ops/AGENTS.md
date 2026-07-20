@@ -59,9 +59,10 @@ Quy tắc bắt buộc:
 10. Khi có patch local, `--preflight` phải dry-run patch trên target đã pin; builder phải dùng đúng ordered snapshots, bỏ qua patch đã có upstream, apply patch còn lại và dừng nếu conflict.
 11. Source candidate chỉ build một lần trên GitHub-hosted `ubuntu-24.04`; workflow không chạy coverage và không dùng `npm pack`. Lane full-package phải production-prune, materialize workspace closure và validate native/runtime closure hoàn toàn trên hosted runner; Tiny không được chạy lifecycle/postinstall hay native rebuild. Tiny vẫn phải xác minh GitHub attestation, exact commit/ref/run, mode/type/policy, target/patch, package/lock, platform/ABI, dependency, production-tree, native/file/link indexes và mọi payload hash trước candidate smoke.
 12. Production-prune phải dùng `npm ci --omit=dev --ignore-scripts --legacy-peer-deps` vì lockfile upstream được tạo dưới `legacy-peer-deps=true`; không copy nguyên `.npmrc` vào payload và không được chạy lifecycle script.
-13. `--update` phải backup package, data và config; package được đổi nguyên tử; health check lỗi hoặc tiến trình bị ngắt sau khi package thay đổi phải rollback.
-14. Không chạy `npm install -g omniroute` thủ công để bỏ qua luồng update an toàn.
-15. Không dùng `git stash` trong bất kỳ luồng OmniRoute nào.
+13. Nếu exact upstream target đỏ sẵn ở `typecheck:core`, hosted builder phải chạy cùng gate trên target nguyên bản và candidate, chuẩn hóa diagnostics và chỉ cho qua khi candidate không thêm lỗi TypeScript mới. Không được bỏ typecheck hoặc dùng lỗi nền để che regression của patch.
+14. `--update` phải backup package, data và config; package được đổi nguyên tử; health check lỗi hoặc tiến trình bị ngắt sau khi package thay đổi phải rollback.
+15. Không chạy `npm install -g omniroute` thủ công để bỏ qua luồng update an toàn.
+16. Không dùng `git stash` trong bất kỳ luồng OmniRoute nào.
 
 ## Luồng bản vá và PR
 
