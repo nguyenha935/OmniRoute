@@ -27,6 +27,10 @@ grep -Fq 'comm -13 "$baseline_signatures" "$candidate_signatures"' "$BUILDER" \
 grep -Fq 'npm ci --omit=dev --ignore-scripts --legacy-peer-deps --no-audit --no-fund' "$BUILDER" \
   || fail "full-package production install does not preserve the reviewed lockfile resolver contract"
 grep -Fq 'materialize_workspace' "$BUILDER" || fail "builder does not materialize workspace packages"
+grep -Fq 'copy_scoped_runtime_packages' "$BUILDER" \
+  || fail "builder does not constrain scoped packages to declared runtime files"
+grep -Fq 'prune_full_package_development_residue' "$BUILDER" \
+  || fail "builder does not prune root-package test residue"
 grep -Fq 'validate_dlopen' "$BUILDER" || fail "builder does not explicitly validate native binaries"
 grep -Fq 'wreq-js.linux-x64-gnu.node' "$BUILDER" \
   || fail "builder does not recognize the current wreq-js Linux GNU binary name"
@@ -64,7 +68,7 @@ cat >"$repository/package.json" <<'JSON'
   "dependencies": {"fixture": "1.0.0"},
   "devDependencies": {"fumadocs-mdx": "1.0.0"},
   "engines": {"node": ">=22"},
-  "files": ["bin/", "dist/", "open-sse/", "README.md", "LICENSE"],
+  "files": ["bin/", "dist/", "@omniroute/", "open-sse/", "src/", "README.md", "LICENSE"],
   "name": "omniroute",
   "optionalDependencies": {},
   "scripts": {},
@@ -96,10 +100,22 @@ JSON
 printf 'base\n' >"$repository/README.md"
 printf 'fixture license\n' >"$repository/LICENSE"
 printf 'must not ship\n' >"$repository/UNRELATED.md"
-mkdir -p "$repository/open-sse" "$repository/scripts/build"
+mkdir -p "$repository/open-sse/__tests__" "$repository/src/lib/__tests__" \
+  "$repository/@omniroute/opencode-plugin/src" \
+  "$repository/@omniroute/opencode-plugin/tests" \
+  "$repository/scripts/build"
 cat >"$repository/open-sse/package.json" <<'JSON'
 {"name":"@omniroute/open-sse","version":"3.8.49"}
 JSON
+printf 'must not ship\n' >"$repository/open-sse/__tests__/runtime.test.ts"
+printf 'must not ship\n' >"$repository/src/lib/__tests__/runtime.spec.ts"
+cat >"$repository/@omniroute/opencode-plugin/package.json" <<'JSON'
+{"name":"@omniroute/opencode-plugin","version":"0.2.0","files":["dist","README.md","LICENSE"]}
+JSON
+printf 'fixture plugin\n' >"$repository/@omniroute/opencode-plugin/README.md"
+printf 'fixture plugin license\n' >"$repository/@omniroute/opencode-plugin/LICENSE"
+printf 'must not ship\n' >"$repository/@omniroute/opencode-plugin/src/index.ts"
+printf 'must not ship\n' >"$repository/@omniroute/opencode-plugin/tests/features.test.ts"
 cat >"$repository/scripts/build/write-build-sha.mjs" <<'NODE'
 import fs from "node:fs";
 fs.mkdirSync("dist", { recursive: true });
@@ -193,10 +209,11 @@ JSON
     case "${2:-}" in
       check:build-scope|typecheck:core|check:dashboard-typecheck) ;;
       build:release)
-        mkdir -p dist bin/cli/runtime
+        mkdir -p dist bin/cli/runtime @omniroute/opencode-plugin/dist
         printf 'fixture server\n' >dist/server.js
         printf '#!/usr/bin/env node\n' >bin/omniroute.mjs
         printf 'fixture runtime\n' >bin/cli/runtime/entry.mjs
+        printf 'fixture plugin runtime\n' >@omniroute/opencode-plugin/dist/index.js
         chmod 0755 bin/omniroute.mjs
         ;;
       *) exit 2 ;;
@@ -268,6 +285,18 @@ grep -Fqx patched "$full_root/README.md" || fail "full package lacks applied pat
 [ "$(readlink "$full_root/node_modules/.bin/fixture")" = '../fixture/cli.js' ] \
   || fail "reconstructed npm .bin link target differs"
 [ -d "$full_root/bin/cli/runtime" ] || fail "full package omits bin/cli/runtime"
+[ -f "$full_root/@omniroute/opencode-plugin/dist/index.js" ] \
+  || fail "full package omits bundled OpenCode plugin runtime"
+[ -f "$full_root/@omniroute/opencode-plugin/package.json" ] \
+  || fail "full package omits bundled OpenCode plugin metadata"
+[ ! -e "$full_root/@omniroute/opencode-plugin/tests/features.test.ts" ] \
+  || fail "scoped package tests leaked into the full package"
+[ ! -e "$full_root/@omniroute/opencode-plugin/src/index.ts" ] \
+  || fail "scoped package development source leaked into the full package"
+[ ! -e "$full_root/open-sse/__tests__/runtime.test.ts" ] \
+  || fail "open-sse test residue leaked into the full package"
+[ ! -e "$full_root/src/lib/__tests__/runtime.spec.ts" ] \
+  || fail "root source test residue leaked into the full package"
 [ ! -e "$full_root/node_modules/fumadocs-mdx" ] || fail "dev-only fumadocs-mdx leaked"
 [ ! -e "$full_root/package-lock.json" ] || fail "source lock leaked into runtime package"
 [ ! -e "$full_root/UNRELATED.md" ] || fail "unapproved root file leaked into runtime package"

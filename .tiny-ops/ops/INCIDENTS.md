@@ -238,3 +238,17 @@ Không push/open/update PR trước deploy và người dùng test nếu chưa c
   `wreq-js.linux-x64.node` nên báo thiếu dù package đã cài đúng.
 - Builder chọn tên GNU hiện tại trước, giữ fallback tên cũ, chép nguyên basename
   vào package/standalone và vẫn bắt buộc `dlopen` thành công.
+
+### Full-package kéo test của package con vào production payload
+
+- Run `29783424308` đã hoàn tất Webpack, typecheck, production-prune, native
+  validation và LLMLingua closure nhưng dừng ở artifact policy vì
+  `@omniroute/opencode-plugin/tests/features.test.ts` bị chép vào package-stage.
+- Nguyên nhân là builder copy nguyên thư mục `@omniroute`; cách này bỏ qua
+  `package.json.files` của từng package con và kéo cả test/source dev vào payload.
+- Builder phải copy `package.json` cùng đúng các entry runtime được khai báo trong
+  `files`, sau đó prune test/dev residue ở các runtime root ngoài `node_modules`.
+  Artifact policy vẫn giữ fail-closed; tuyệt đối không cho phép test chỉ để build qua.
+- Fixture bắt buộc phải chứng minh plugin còn `dist/index.js` và metadata, đồng thời
+  `@omniroute/*/tests/**`, `src/**/__tests__/**` và `open-sse/**/__tests__/**`
+  không xuất hiện trong full-package.
