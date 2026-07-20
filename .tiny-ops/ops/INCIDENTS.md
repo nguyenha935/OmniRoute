@@ -210,3 +210,14 @@ Không push/open/update PR trước deploy và người dùng test nếu chưa c
   ứng dụng giống nhau nhưng toolchain khác thì phải tạo commit mới.
 - Giữ heap Webpack ở 6 GiB, telemetry mỗi phút, cache `.build/next/cache` và mọi
   cổng attestation/provenance/smoke/rollback hiện có.
+
+### Lỗi production-prune phát hiện sau khi Webpack xanh
+
+- Webpack hoàn tất nhưng `npm ci --omit=dev` trong package-stage vấp ERESOLVE
+  giữa `marked-terminal@7.3.0` và `marked@18.x`.
+- Lockfile upstream được tạo với `legacy-peer-deps=true` trong `.npmrc`; package-stage
+  không mang cấu hình đó nên npm dùng resolver khác với lúc tạo lockfile.
+- Production-prune phải truyền rõ `--legacy-peer-deps` cùng `--ignore-scripts`.
+  Không copy `.npmrc` để tránh đưa registry/auth config tương lai vào payload.
+- Cache action dùng `save-always: true`; builder chỉ materialize cache ngoài sau
+  khi Next.js build xanh, nên lỗi đóng gói phía sau không làm mất kết quả compile.

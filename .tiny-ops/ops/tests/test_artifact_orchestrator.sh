@@ -15,6 +15,8 @@ grep -Fq 'gh attestation verify' "$ORCHESTRATOR" || fail "download path does not
 grep -Fq -- '--deny-self-hosted-runners' "$ORCHESTRATOR" || fail "attestation accepts self-hosted runners"
 grep -Fq 'deploy/integration' "$ORCHESTRATOR" || fail "persistent integration branch is missing"
 grep -Fq 'Restore Next.js build cache' "$ORCHESTRATOR" || fail "workflow omits the Next.js build cache"
+grep -Fq 'save-always: true' "$ORCHESTRATOR" \
+  || fail "successful build cache is discarded when a later packaging step fails"
 grep -Fq 'Build one reviewed Webpack artifact' "$ORCHESTRATOR" \
   || fail "workflow does not identify the bounded-memory Webpack lane"
 grep -Fq 'published_blob_matches' "$ORCHESTRATOR" \
