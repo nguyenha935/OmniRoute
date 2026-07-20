@@ -76,11 +76,29 @@ jobs:
         run: |
           set -uo pipefail
           mkdir -p .omniroute-deploy/output
+          monitor_pid=""
+          cleanup_monitor() {
+            [ -z "$monitor_pid" ] || kill "$monitor_pid" 2>/dev/null || true
+            [ -z "$monitor_pid" ] || wait "$monitor_pid" 2>/dev/null || true
+          }
+          monitor_resources() {
+            while sleep 60; do
+              echo "::group::hosted runner resources $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+              free -h || true
+              ps -eo pid,ppid,rss,vsz,etime,comm --sort=-rss | head -n 16 || true
+              echo "::endgroup::"
+            done
+          }
+          trap cleanup_monitor EXIT INT TERM HUP
+          monitor_resources &
+          monitor_pid=$!
           status=0
           .omniroute-deploy/artifact-builder.sh \
             <"$RUNNER_TEMP/request.tar.gz" \
             >.omniroute-deploy/output/response.tar.gz \
             2>.omniroute-deploy/output/build.log || status=$?
+          cleanup_monitor
+          monitor_pid=""
           # Always surface the builder log on the console: on failure the upload
           # step is skipped, so the file alone would be lost with the runner.
           echo "::group::artifact builder log"
