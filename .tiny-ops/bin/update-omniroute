@@ -6,6 +6,8 @@ readonly DEPLOY_SCRIPT="/opt/omniroute/ops/deploy.sh"
 readonly MODE="${1:---check}"
 readonly LOCK_FILE="/run/omniroute-update-wrapper.lock"
 readonly UNIT_FILE="/run/omniroute-update.unit"
+readonly RUNTIME_HOME="${OMNIROUTE_UPDATE_HOME:-/root}"
+readonly GH_CONFIG_DIR="${GH_CONFIG_DIR:-$RUNTIME_HOME/.config/gh}"
 
 export CIRCLE_NODE_TOTAL="${CIRCLE_NODE_TOTAL:-1}"
 
@@ -96,6 +98,8 @@ case "$MODE" in
       --property=KillMode=control-group \
       --property=TimeoutStopSec=20s \
       --property=RuntimeMaxSec=35min \
+      --setenv=HOME="$RUNTIME_HOME" \
+      --setenv=GH_CONFIG_DIR="$GH_CONFIG_DIR" \
       --setenv=CIRCLE_NODE_TOTAL="$CIRCLE_NODE_TOTAL" \
       "$DEPLOY_SCRIPT" update &
     RUNNER_PID=$!

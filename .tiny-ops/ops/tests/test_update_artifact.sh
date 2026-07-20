@@ -57,6 +57,8 @@ grep -Fq 'rollback_update "$DEPLOY_BACKUP" "$DEPLOY_STAMP"' "$UPDATE" \
   || fail "interrupted post-mutation update lacks rollback"
 grep -Fq -- '--property=KillMode=control-group' "$WRAPPER" \
   || fail "wrapper does not contain complete cgroup cleanup"
+grep -Fq -- '--setenv=GH_CONFIG_DIR="$GH_CONFIG_DIR"' "$WRAPPER" \
+  || fail "wrapper does not pass GitHub authentication into the transient unit"
 grep -Fq 'artifactRequestSha256' "$UPDATE" || fail "deployment state lacks request provenance"
 grep -Fq 'confirmedReleaseHead' "$UPDATE" || fail "deployment state lacks the separately confirmed release head"
 grep -Fq -- '--arg sourceCommit "$EXPECTED_TARGET_COMMIT"' "$UPDATE" \
