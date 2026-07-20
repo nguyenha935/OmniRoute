@@ -334,7 +334,7 @@ make_artifact() {
     --arg repository diegosouzapw/OmniRoute --arg requestSha256 "$request_sha" \
     --arg targetRef upstream/release/v3.8.49 --arg targetCommit "$target" --arg version 3.8.49 \
     --arg patchSetHash none --arg sourcePackageSha256 "$source_package_sha" --arg sourceLockSha256 "$source_lock_sha" \
-    --argjson dependencyFingerprint "$dependency_fingerprint" --arg buildSha "$build_sha" --arg buildBundler turbopack \
+    --argjson dependencyFingerprint "$dependency_fingerprint" --arg buildSha "$build_sha" --arg buildBundler webpack \
     --argjson runtime "$runtime" --arg payloadSha256 "$payload_sha" \
     --arg fileIndexSha256 "$index_sha" --arg linkIndexSha256 "$link_index_sha" \
     --arg productionTreeSha256 "$production_tree_sha" --arg nativeIndexSha256 "$native_index_sha" \

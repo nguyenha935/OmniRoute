@@ -14,7 +14,9 @@ grep -Fq 'persist-credentials: false' "$ORCHESTRATOR" || fail "workflow checkout
 grep -Fq 'gh attestation verify' "$ORCHESTRATOR" || fail "download path does not verify GitHub attestation"
 grep -Fq -- '--deny-self-hosted-runners' "$ORCHESTRATOR" || fail "attestation accepts self-hosted runners"
 grep -Fq 'deploy/integration' "$ORCHESTRATOR" || fail "persistent integration branch is missing"
-grep -Fq 'Restore Turbopack cache' "$ORCHESTRATOR" || fail "workflow omits Turbopack cache"
+grep -Fq 'Restore Next.js build cache' "$ORCHESTRATOR" || fail "workflow omits the Next.js build cache"
+grep -Fq 'Build one reviewed Webpack artifact' "$ORCHESTRATOR" \
+  || fail "workflow does not identify the bounded-memory Webpack lane"
 grep -Fq 'monitor_resources' "$ORCHESTRATOR" || fail "workflow omits hosted-runner resource telemetry"
 grep -Fq 'trap cleanup_monitor EXIT INT TERM HUP' "$ORCHESTRATOR" \
   || fail "workflow resource monitor is not cleaned up safely"
@@ -300,7 +302,7 @@ jq -n --argjson schemaVersion 3 --arg artifactMode "$request_mode" --arg artifac
   --arg targetCommit "$request_target" --arg version 3.8.49 --arg patchSetHash "$request_patch_set" \
   --arg sourcePackageSha256 "$package_sha" --arg sourceLockSha256 "$lock_sha" \
   --argjson dependencyFingerprint "$dependency_fingerprint" --arg buildSha "$request_build_sha" \
-  --arg buildBundler turbopack --argjson runtime "$runtime" --arg payloadSha256 "$payload_sha" \
+  --arg buildBundler webpack --argjson runtime "$runtime" --arg payloadSha256 "$payload_sha" \
   --arg fileIndexSha256 "$index_sha" --arg linkIndexSha256 "$link_index_sha" \
   --arg productionTreeSha256 "$production_tree_sha" --arg nativeIndexSha256 "$native_index_sha" \
   --argjson payloadEntryCount "$entry_count" --argjson payloadUnpackedBytes "$unpacked_bytes" \

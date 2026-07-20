@@ -10,11 +10,11 @@ pass() { printf 'ok - %s\n' "$*"; }
 bash -n "$BUILDER" || fail "builder syntax"
 grep -Fq 'builder must run in GitHub Actions' "$BUILDER" || fail "builder lacks GitHub Actions guard"
 grep -Fq 'builder requires a GitHub-hosted runner' "$BUILDER" || fail "builder lacks hosted-runner guard"
-grep -Fq 'OMNIROUTE_USE_TURBOPACK=1' "$BUILDER" || fail "builder does not force Turbopack"
-grep -Fq 'restore_next_cache' "$BUILDER" || fail "builder does not restore Turbopack cache"
-grep -Fq 'save_next_cache' "$BUILDER" || fail "builder does not preserve Turbopack cache"
+grep -Fq 'OMNIROUTE_USE_TURBOPACK=0' "$BUILDER" || fail "builder does not force the bounded-memory Webpack lane"
+grep -Fq 'restore_next_cache' "$BUILDER" || fail "builder does not restore the Next.js build cache"
+grep -Fq 'save_next_cache' "$BUILDER" || fail "builder does not preserve the Next.js build cache"
 grep -Fq 'readonly BUILD_MEMORY_MB="${OMNIROUTE_BUILD_MEMORY_MB:-6144}"' "$BUILDER" \
-  || fail "builder does not reserve hosted-runner memory for native Turbopack work"
+  || fail "builder does not reserve hosted-runner memory outside the Webpack heap"
 grep -Fq '$SOURCE_TREE/.build/next/cache' "$BUILDER" \
   || fail "builder cache path does not match OmniRoute NEXT_DIST_DIR"
 ! grep -Fq '$SOURCE_TREE/.next/cache' "$BUILDER" \
@@ -28,6 +28,8 @@ for forbidden in OMNIROUTE_BUILDER_CGROUP SIGN_HELPER 'sudo -n' artifact-manifes
   'npm rebuild' 'node-pre-gyp install'; do
   ! grep -Fq "$forbidden" "$BUILDER" || fail "builder retains forbidden VM/signing/fallback path: $forbidden"
 done
+grep -Fq -- '--arg buildBundler webpack' "$BUILDER" \
+  || fail "builder manifest does not bind the reviewed Webpack lane"
 pass "builder is hosted-only and contains fail-closed full-package assembly"
 
 if OMNIROUTE_ARTIFACT_FORMAT_TOOL=/bin/true OMNIROUTE_BUILDER_WORK_ROOT=/tmp/omniroute-builder-never \

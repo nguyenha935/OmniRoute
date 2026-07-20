@@ -180,7 +180,7 @@ Không push/open/update PR trước deploy và người dùng test nếu chưa c
   `state/candidate.json`, preflight, deploy và verify; không nhập pin thủ công.
 - Dùng một nhánh fast-forward cố định `deploy/integration`; commit SHA và
   attestation vẫn là provenance bất biến.
-- Cache cả npm và Turbopack `.build/next/cache` trên GitHub-hosted runner.
+- Cache cả npm và cache build Next.js `.build/next/cache` trên GitHub-hosted runner.
 - Release head đổi trong lúc build phải đi qua bounded-ancestor gate sẵn có,
   không tự khởi động lại build.
 - Caller timeout hoặc mất SSH phải đọc lại request trên `deploy/integration`,
@@ -189,3 +189,22 @@ Không push/open/update PR trước deploy và người dùng test nếu chưa c
 - Tiny vẫn tuyệt đối không chạy `npm ci`, production build, lifecycle hoặc native
   rebuild. Attestation, archive validation, candidate smoke, backup, atomic swap
   và rollback vẫn là cổng bắt buộc.
+
+## 2026-07-21 — Turbopack làm cạn RAM GitHub-hosted runner
+
+### Hiện tượng đã xác nhận
+
+- Telemetry của run `29764024181` ghi nhận tiến trình Node/Turbopack tăng tới
+  `15,090,716 KiB` RSS trên runner 15 GiB; toàn bộ 3 GiB swap cũng bị dùng hết.
+- `--max-old-space-size=6144` không giới hạn được phần bộ nhớ Rust/native nằm
+  ngoài V8. Runner gửi SIGTERM, builder thoát 143 và không tạo artifact.
+- Production không bị chạm vì updater dừng đúng fail-closed boundary.
+
+### Khắc phục bắt buộc
+
+- Lane artifact GitHub dùng `OMNIROUTE_USE_TURBOPACK=0` để chọn Webpack, đúng
+  fallback bộ nhớ thấp đã được mã nguồn OmniRoute hỗ trợ.
+- Manifest và verifier phải khóa `buildBundler=webpack`; không được âm thầm nhận
+  artifact từ bundler khác.
+- Giữ heap Webpack ở 6 GiB, telemetry mỗi phút, cache `.build/next/cache` và mọi
+  cổng attestation/provenance/smoke/rollback hiện có.

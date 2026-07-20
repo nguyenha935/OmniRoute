@@ -5,10 +5,10 @@ readonly LOG_TAG="[omniroute-builder]"
 readonly FORMAT_TOOL="${OMNIROUTE_ARTIFACT_FORMAT_TOOL:-${GITHUB_WORKSPACE:-}/.omniroute-deploy/artifact-format.py}"
 readonly WORK_ROOT="${OMNIROUTE_BUILDER_WORK_ROOT:-${RUNNER_TEMP:-}/omniroute-builder}"
 readonly REPOSITORY_URL="${OMNIROUTE_REPOSITORY_URL:-https://github.com/diegosouzapw/OmniRoute.git}"
-# GitHub-hosted ubuntu-24.04 public runners have 16 GB RAM. `--max-old-space-size`
-# bounds only V8's JS heap, not Turbopack's native/worker allocations. Keep V8 at
-# 6 GiB so the Rust graph, workers, npm and the OS retain real headroom; a 10 GiB
-# heap allowed the entire hosted VM to be OOM-killed before diagnostics could run.
+# GitHub-hosted ubuntu-24.04 public runners have 16 GB RAM. Keep Webpack's V8 heap
+# at 6 GiB so npm, native modules and the OS retain real headroom. Turbopack is
+# intentionally disabled below: its Rust graph reached 15.1 GiB RSS plus 3 GiB
+# swap on this source tree and was killed by the hosted runner.
 readonly BUILD_MEMORY_MB="${OMNIROUTE_BUILD_MEMORY_MB:-6144}"
 readonly BUILDER_REPOSITORY="${GITHUB_REPOSITORY:-}"
 readonly BUILDER_WORKFLOW="${OMNIROUTE_GITHUB_WORKFLOW:-.github/workflows/omniroute-patch-artifact.yml}"
@@ -33,7 +33,7 @@ restore_next_cache() {
   local source_cache="$SOURCE_TREE/.build/next/cache"
   mkdir -p "$source_cache"
   cp -a -- "$NEXT_CACHE_DIR/." "$source_cache/"
-  log "restored Turbopack cache"
+  log "restored Next.js build cache"
 }
 
 save_next_cache() {
@@ -42,7 +42,7 @@ save_next_cache() {
   rm -rf -- "$NEXT_CACHE_DIR"
   mkdir -p "$NEXT_CACHE_DIR"
   cp -a -- "$source_cache/." "$NEXT_CACHE_DIR/"
-  log "saved Turbopack cache"
+  log "saved Next.js build cache"
 }
 
 sha256_file() {
@@ -374,8 +374,8 @@ npm run check:dashboard-typecheck >&2
 if ! git diff --quiet -- src/i18n/messages; then
   node --import tsx/esm --test tests/unit/i18n-vi-completeness.test.ts >&2
 fi
-log "building one Turbopack release artifact"
-OMNIROUTE_USE_TURBOPACK=1 \
+log "building one Webpack release artifact"
+OMNIROUTE_USE_TURBOPACK=0 \
 OMNIROUTE_BUILD_MEMORY_MB="$BUILD_MEMORY_MB" \
 npm run build:release >&2
 OMNIROUTE_BUILD_SHA="$expected_build" node scripts/build/write-build-sha.mjs >&2
@@ -431,7 +431,7 @@ jq -n \
   --arg patchSetHash "$patch_set" \
   --arg artifactPolicyHash "$artifact_policy_hash" \
   --arg buildSha "$expected_build" \
-  --arg buildBundler turbopack \
+  --arg buildBundler webpack \
   --arg sourcePackageSha256 "$expected_package_sha" \
   --arg sourceLockSha256 "$expected_lock_sha" \
   --arg payloadSha256 "$payload_sha" \

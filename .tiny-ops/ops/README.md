@@ -46,7 +46,7 @@ run IDs manually in the normal flow.
 
 Candidate requests are published as fast-forward commits on the persistent
 `deploy/integration` branch. The commit SHA remains immutable provenance while
-the branch avoids one throwaway branch per build. npm downloads and Turbopack's
+the branch avoids one throwaway branch per build. npm downloads and Next.js's
 `.build/next/cache` are cached on GitHub-hosted runners. A candidate with the same
 target, patch identity, lane, runtime and dependency fingerprint is reused. If
 the release branch advances while a fresh candidate is building, the automatic
@@ -76,7 +76,7 @@ Before that request is published, the requestor compares the exact target
 fingerprint, and source package/lock hashes are request identity and cannot be
 silently changed by the builder or updater.
 
-The workflow runs the focused release gates and exactly one Turbopack release
+The workflow runs the focused release gates and exactly one Webpack release
 build with development dependencies on GitHub-hosted `ubuntu-24.04`. The overlay
 lane emits only the approved runtime roots. For dependency drift, the
 full-package lane assembles an independent package and production-pruned

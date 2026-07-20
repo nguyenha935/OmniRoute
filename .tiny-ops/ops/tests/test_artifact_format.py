@@ -400,7 +400,7 @@ class ArtifactFormatTests(unittest.TestCase):
             "sourceLockSha256": request["sourceLockSha256"],
             "dependencyFingerprint": request["dependencyFingerprint"],
             "buildSha": build_sha,
-            "buildBundler": "turbopack",
+            "buildBundler": "webpack",
             "runtime": self.runtime(),
             "payloadSha256": artifact.sha256_file(payload),
             "fileIndexSha256": artifact.sha256_file(file_index),
