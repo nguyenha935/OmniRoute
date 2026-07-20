@@ -184,8 +184,7 @@ materialize_workspace() {
 assemble_native_assets() {
   local source_better="$SOURCE_TREE/node_modules/better-sqlite3/build/Release/better_sqlite3.node"
   local staged_better="$PACKAGE_STAGE/node_modules/better-sqlite3/build/Release/better_sqlite3.node"
-  local source_wreq="$SOURCE_TREE/node_modules/wreq-js/rust/wreq-js.linux-x64.node"
-  local staged_wreq="$PACKAGE_STAGE/node_modules/wreq-js/rust/wreq-js.linux-x64.node"
+  local source_wreq="" staged_wreq="" wreq_name="" candidate
   local source_tls="$SOURCE_TREE/node_modules/tls-client-node/bin"
   local staged_tls="$PACKAGE_STAGE/node_modules/tls-client-node/bin"
 
@@ -207,14 +206,25 @@ assemble_native_assets() {
   if jq -e '.optionalDependencies["wreq-js"] | type == "string"' "$SOURCE_TREE/package.json" >/dev/null; then
     [ -d "$PACKAGE_STAGE/node_modules/wreq-js" ] \
       || die "wreq-js is missing from the Linux production install"
+    for candidate in \
+      "$SOURCE_TREE/node_modules/wreq-js/rust/wreq-js.linux-x64-gnu.node" \
+      "$SOURCE_TREE/node_modules/wreq-js/rust/wreq-js.linux-x64.node"; do
+      if [ -f "$candidate" ]; then
+        source_wreq="$candidate"
+        break
+      fi
+    done
+    [ -n "$source_wreq" ] || die "wreq-js Linux x64 GNU binary is missing from the hosted development install"
+    wreq_name="${source_wreq##*/}"
+    staged_wreq="$PACKAGE_STAGE/node_modules/wreq-js/rust/$wreq_name"
     copy_native_file "$source_wreq" "$staged_wreq" "wreq-js"
     validate_dlopen "$staged_wreq" "wreq-js"
     if [ -d "$PACKAGE_STAGE/dist/node_modules/wreq-js" ]; then
       copy_native_file "$source_wreq" \
-        "$PACKAGE_STAGE/dist/node_modules/wreq-js/rust/wreq-js.linux-x64.node" \
+        "$PACKAGE_STAGE/dist/node_modules/wreq-js/rust/$wreq_name" \
         "standalone wreq-js"
       validate_dlopen \
-        "$PACKAGE_STAGE/dist/node_modules/wreq-js/rust/wreq-js.linux-x64.node" \
+        "$PACKAGE_STAGE/dist/node_modules/wreq-js/rust/$wreq_name" \
         "standalone wreq-js"
     fi
   fi
