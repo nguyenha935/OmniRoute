@@ -47,11 +47,15 @@ run IDs manually in the normal flow.
 Candidate requests are published as fast-forward commits on the persistent
 `deploy/integration` branch. The commit SHA remains immutable provenance while
 the branch avoids one throwaway branch per build. npm downloads and Turbopack's
-`.next/cache` are cached on GitHub-hosted runners. A candidate with the same
+`.build/next/cache` are cached on GitHub-hosted runners. A candidate with the same
 target, patch identity, lane, runtime and dependency fingerprint is reused. If
 the release branch advances while a fresh candidate is building, the automatic
 flow uses the existing bounded-ancestor verification instead of restarting the
 build loop.
+If the caller or SSH session ends, the next `--update` reads the published
+integration request and resumes its exact run when the patch set/ref match, the
+target is an ancestor of the current release head, and the request is at most
+60 minutes old.
 `--check` never fetches, checks out, stashes, restarts, or edits production data.
 It exits `0` when healthy and current, `10` when an update is available, and
 `20` when a blocker is detected.

@@ -311,11 +311,29 @@ jobs:
         run: |
           set -uo pipefail
           mkdir -p .omniroute-deploy/output
+          monitor_pid=""
+          cleanup_monitor() {
+            [ -z "$monitor_pid" ] || kill "$monitor_pid" 2>/dev/null || true
+            [ -z "$monitor_pid" ] || wait "$monitor_pid" 2>/dev/null || true
+          }
+          monitor_resources() {
+            while sleep 60; do
+              echo "::group::hosted runner resources $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+              free -h || true
+              ps -eo pid,ppid,rss,vsz,etime,comm --sort=-rss | head -n 16 || true
+              echo "::endgroup::"
+            done
+          }
+          trap cleanup_monitor EXIT INT TERM HUP
+          monitor_resources &
+          monitor_pid=$!
           status=0
           .omniroute-deploy/artifact-builder.sh \
             <"$RUNNER_TEMP/request.tar.gz" \
             >.omniroute-deploy/output/response.tar.gz \
             2>.omniroute-deploy/output/build.log || status=$?
+          cleanup_monitor
+          monitor_pid=""
           # Always surface the builder log on the console: on failure the upload
           # step is skipped, so the file alone would be lost with the runner.
           echo "::group::artifact builder log"
@@ -525,6 +543,39 @@ candidate_is_reusable() {
   log "workflow-run: $(jq -r '.runId' "$CANDIDATE_FILE") attempt=$(jq -r '.runAttempt' "$CANDIDATE_FILE")"
 }
 
+reuse_published_request() {
+  local request_dir="$1" remote_commit published patch_count index patch_file
+  remote_commit="$(git -C "$SOURCE_DIR" ls-remote origin "refs/heads/$INTEGRATION_BRANCH" 2>/dev/null | awk 'NR==1 {print $1}')"
+  [ -n "$remote_commit" ] || return 1
+  git -C "$SOURCE_DIR" fetch --no-tags origin \
+    "+refs/heads/$INTEGRATION_BRANCH:refs/remotes/origin/$INTEGRATION_BRANCH" >/dev/null
+  published="$WORKSPACE/published-request"
+  mkdir -p "$published/patches"
+  git -C "$SOURCE_DIR" show \
+    "$remote_commit:.omniroute-deploy/input/request.data" >"$published/request.json" 2>/dev/null \
+    || return 1
+  [ "$(request_identity "$request_dir/request.json")" = "$(request_identity "$published/request.json")" ] \
+    || return 1
+  git -C "$SOURCE_DIR" show \
+    "$remote_commit:.omniroute-deploy/input/request-files.data" >"$published/request-files.json" \
+    || die "published integration request file index is missing"
+  patch_count="$(jq '.patches | length' "$published/request.json")"
+  for ((index=0; index<patch_count; index++)); do
+    patch_file="$(jq -r ".patches[$index].file" "$published/request.json")"
+    [[ "$patch_file" =~ ^patches/[A-Za-z0-9._-]+\.patch$ ]] \
+      || die "published integration request has an unsafe patch path"
+    git -C "$SOURCE_DIR" show \
+      "$remote_commit:.omniroute-deploy/input/$patch_file" >"$published/$patch_file" \
+      || die "published integration patch is missing: $patch_file"
+  done
+  rm -rf -- "$request_dir"
+  mv "$published" "$request_dir"
+  DEPLOY_BRANCH="$INTEGRATION_BRANCH"
+  DEPLOY_COMMIT="$remote_commit"
+  DEPLOY_COMMIT_CREATED=0
+  log "resuming published integration request at $remote_commit"
+}
+
 write_candidate() {
   local destination="$1" request_file="$2" branch="$3" source_digest="$4" run_id="$5" run_attempt="$6"
   local inspection artifact_id manifest_id request_sha temporary
@@ -582,7 +633,9 @@ build_artifact() {
   fi
 
   local branch source_digest run_json run_id run_attempt destination artifact_name
-  prepare_deployment_commit "$request_dir"
+  if ! reuse_published_request "$request_dir"; then
+    prepare_deployment_commit "$request_dir"
+  fi
   branch="$DEPLOY_BRANCH"
   source_digest="$DEPLOY_COMMIT"
   [[ "$source_digest" =~ ^[0-9a-f]{40}$ ]] || die "could not determine deployment commit"
@@ -616,8 +669,10 @@ build_artifact() {
   verify_downloaded_artifact "$destination" "$request_dir/request.json" "$branch" "$source_digest" "$run_id" "$run_attempt"
   write_candidate "$destination" "$request_dir/request.json" "$branch" "$source_digest" "$run_id" "$run_attempt"
 
-  git -C "$SOURCE_DIR" worktree remove "$DEPLOY_TREE" --force >/dev/null
-  DEPLOY_TREE=""
+  if [ -n "$DEPLOY_TREE" ] && [ -e "$DEPLOY_TREE/.git" ]; then
+    git -C "$SOURCE_DIR" worktree remove "$DEPLOY_TREE" --force >/dev/null
+    DEPLOY_TREE=""
+  fi
   rm -rf -- "$WORKSPACE"
   WORKSPACE=""
   trap - EXIT INT TERM HUP

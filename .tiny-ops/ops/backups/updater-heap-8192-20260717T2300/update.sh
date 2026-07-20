@@ -16,29 +16,12 @@ readonly HISTORY_FILE="$STATE_DIR/history.log"
 readonly SERVICE_NAME="${OMNIROUTE_SERVICE_NAME:-omniroute.service}"
 readonly APP_USER="${OMNIROUTE_APP_USER:-omniroute}"
 readonly UPSTREAM_REPO="${OMNIROUTE_UPSTREAM_REPO:-diegosouzapw/OmniRoute}"
-readonly UPSTREAM_URL="${OMNIROUTE_UPSTREAM_URL:-https://github.com/$UPSTREAM_REPO.git}"
-readonly GITHUB_API_URL="${OMNIROUTE_GITHUB_API_URL:-https://api.github.com}"
 readonly INSTALL_DIR="${OMNIROUTE_INSTALL_DIR:-/usr/lib/node_modules/omniroute}"
-readonly CLI="${OMNIROUTE_CLI:-/usr/bin/omniroute}"
-readonly CLI_LINK="${OMNIROUTE_CLI_LINK:-/usr/bin/omniroute}"
-readonly CLI_LINK_TARGET="${OMNIROUTE_CLI_LINK_TARGET:-../lib/node_modules/omniroute/bin/omniroute.mjs}"
+readonly BUILD_MEMORY_MB="${OMNIROUTE_BUILD_MEMORY_MB:-7168}"
 readonly UPDATE_CHANNEL="${OMNIROUTE_UPDATE_CHANNEL:-release}"
-readonly ARTIFACT_TOOL="${OMNIROUTE_ARTIFACT_FORMAT_TOOL:-$ROOT_DIR/ops/artifact-format.py}"
-readonly ARTIFACT_BUILDER="${OMNIROUTE_ARTIFACT_BUILDER:-$ROOT_DIR/ops/artifact.sh}"
-readonly ARTIFACT_REPOSITORY="${OMNIROUTE_ARTIFACT_REPOSITORY:-nguyenha935/OmniRoute}"
-readonly ARTIFACT_WORKFLOW="${OMNIROUTE_ARTIFACT_WORKFLOW:-.github/workflows/omniroute-patch-artifact.yml}"
 MODE="${1:---check}"
 EXPECTED_TARGET_COMMIT="${OMNIROUTE_EXPECT_TARGET_COMMIT:-}"
-EXPECTED_CURRENT_HEAD="${OMNIROUTE_EXPECT_CURRENT_HEAD:-}"
 EXPECTED_PATCH_SET_HASH="${OMNIROUTE_EXPECT_PATCH_SET_HASH:-}"
-ALLOW_ANCESTOR_TARGET=0
-EXPECTED_ARTIFACT_ID="${OMNIROUTE_EXPECT_ARTIFACT_ID:-}"
-EXPECTED_MANIFEST_ID="${OMNIROUTE_EXPECT_MANIFEST_ID:-}"
-EXPECTED_ARTIFACT_SOURCE="${OMNIROUTE_EXPECT_ARTIFACT_SOURCE:-}"
-EXPECTED_ARTIFACT_REF="${OMNIROUTE_EXPECT_ARTIFACT_REF:-}"
-EXPECTED_ARTIFACT_RUN_ID="${OMNIROUTE_EXPECT_ARTIFACT_RUN_ID:-}"
-EXPECTED_ARTIFACT_RUN_ATTEMPT="${OMNIROUTE_EXPECT_ARTIFACT_RUN_ATTEMPT:-}"
-ARTIFACT_FILE="${OMNIROUTE_ARTIFACT_FILE:-}"
 
 PORT="${OMNIROUTE_PORT:-20130}"
 API_PORT="${OMNIROUTE_API_PORT:-20131}"
@@ -68,24 +51,6 @@ UPDATE_ATTEMPT_ACTIVE=0
 UPDATE_ATTEMPT_STARTED=""
 APPLIED_PATCHES=()
 SKIPPED_PATCHES=()
-ARTIFACT_MANIFEST_JSON=""
-ARTIFACT_REQUEST_SHA=""
-ARTIFACT_ID=""
-ARTIFACT_MANIFEST_SHA=""
-ARTIFACT_ATTESTATION_VERIFICATION=""
-ARTIFACT_RUNTIME_DIR=""
-ARTIFACT_MODE=""
-ARTIFACT_TYPE=""
-ARTIFACT_POLICY_HASH=""
-ARTIFACT_SOURCE_PACKAGE_SHA=""
-ARTIFACT_SOURCE_LOCK_SHA=""
-ARTIFACT_PAYLOAD_SHA=""
-ARTIFACT_FILE_INDEX_SHA=""
-ARTIFACT_LINK_INDEX_SHA=""
-ARTIFACT_PRODUCTION_TREE_SHA=""
-ARTIFACT_NATIVE_INDEX_SHA=""
-ARTIFACT_DEPENDENCY_FINGERPRINT=""
-CANDIDATE_UNIT=""
 
 log() {
   printf '%s %s\n' "$LOG_TAG" "$*"
@@ -109,53 +74,9 @@ parse_args() {
         EXPECTED_TARGET_COMMIT="$2"
         shift 2
         ;;
-      --expect-current-head)
-        [ "$#" -ge 2 ] || die "--expect-current-head requires a 40-character commit SHA"
-        EXPECTED_CURRENT_HEAD="$2"
-        shift 2
-        ;;
-      --allow-ancestor-target)
-        ALLOW_ANCESTOR_TARGET=1
-        shift
-        ;;
       --expect-patch-set)
         [ "$#" -ge 2 ] || die "--expect-patch-set requires a SHA-256 hash or 'none'"
         EXPECTED_PATCH_SET_HASH="$2"
-        shift 2
-        ;;
-      --artifact)
-        [ "$#" -ge 2 ] || die "--artifact requires a signed response archive path"
-        ARTIFACT_FILE="$2"
-        shift 2
-        ;;
-      --expect-artifact)
-        [ "$#" -ge 2 ] || die "--expect-artifact requires the response archive SHA-256"
-        EXPECTED_ARTIFACT_ID="$2"
-        shift 2
-        ;;
-      --expect-manifest)
-        [ "$#" -ge 2 ] || die "--expect-manifest requires the manifest SHA-256"
-        EXPECTED_MANIFEST_ID="$2"
-        shift 2
-        ;;
-      --expect-artifact-source)
-        [ "$#" -ge 2 ] || die "--expect-artifact-source requires the deployment commit SHA"
-        EXPECTED_ARTIFACT_SOURCE="$2"
-        shift 2
-        ;;
-      --expect-artifact-ref)
-        [ "$#" -ge 2 ] || die "--expect-artifact-ref requires the immutable deployment ref"
-        EXPECTED_ARTIFACT_REF="$2"
-        shift 2
-        ;;
-      --expect-artifact-run)
-        [ "$#" -ge 2 ] || die "--expect-artifact-run requires the GitHub workflow run ID"
-        EXPECTED_ARTIFACT_RUN_ID="$2"
-        shift 2
-        ;;
-      --expect-artifact-attempt)
-        [ "$#" -ge 2 ] || die "--expect-artifact-attempt requires the GitHub workflow run attempt"
-        EXPECTED_ARTIFACT_RUN_ATTEMPT="$2"
         shift 2
         ;;
       *) die "unknown argument: $1" ;;
@@ -168,63 +89,15 @@ require_expected_state() {
     || die "--expect-target with the reviewed 40-character commit SHA is required"
   [[ "$EXPECTED_PATCH_SET_HASH" = "none" || "$EXPECTED_PATCH_SET_HASH" =~ ^[0-9a-f]{64}$ ]] \
     || die "--expect-patch-set with the reviewed SHA-256 hash (or 'none') is required"
-  if [ "$ALLOW_ANCESTOR_TARGET" -eq 1 ]; then
-    [[ "$EXPECTED_CURRENT_HEAD" =~ ^[0-9a-f]{40}$ ]] \
-      || die "--expect-current-head with the reviewed current release head is required when --allow-ancestor-target is used"
-  elif [ -n "$EXPECTED_CURRENT_HEAD" ]; then
-    die "--expect-current-head requires --allow-ancestor-target"
-  fi
-}
-
-require_expected_artifact() {
-  [ -n "$ARTIFACT_FILE" ] && [ -f "$ARTIFACT_FILE" ] \
-    || die "--artifact with the GitHub-attested response is required; local build fallback is disabled"
-  [[ "$EXPECTED_ARTIFACT_ID" =~ ^[0-9a-f]{64}$ ]] \
-    || die "--expect-artifact with the reviewed response SHA-256 is required"
-  [[ "$EXPECTED_MANIFEST_ID" =~ ^[0-9a-f]{64}$ ]] \
-    || die "--expect-manifest with the reviewed manifest SHA-256 is required"
-  [[ "$EXPECTED_ARTIFACT_SOURCE" =~ ^[0-9a-f]{40}$ ]] \
-    || die "--expect-artifact-source with the reviewed deployment commit SHA is required"
-  [[ "$EXPECTED_ARTIFACT_REF" =~ ^refs/heads/deploy/(integration|artifact/[0-9a-f]{16,64})$ ]] \
-    || die "--expect-artifact-ref with the reviewed immutable deployment ref is required"
-  [[ "$EXPECTED_ARTIFACT_RUN_ID" =~ ^[1-9][0-9]*$ ]] \
-    || die "--expect-artifact-run with the reviewed GitHub run ID is required"
-  [[ "$EXPECTED_ARTIFACT_RUN_ATTEMPT" =~ ^[1-9][0-9]*$ ]] \
-    || die "--expect-artifact-attempt with the reviewed GitHub run attempt is required"
-  [ -x "$ARTIFACT_TOOL" ] || die "artifact verifier is unavailable: $ARTIFACT_TOOL"
-  command -v gh >/dev/null || die "GitHub attestation verifier is unavailable"
-}
-
-fetch_commit_for_ancestry() {
-  local commit="$1"
-  if ! git -C "$SOURCE_DIR" cat-file -e "$commit^{commit}" 2>/dev/null; then
-    git -C "$SOURCE_DIR" fetch --no-tags upstream "$commit" >/dev/null 2>&1 \
-      || die "could not fetch reviewed commit for ancestry verification: $commit"
-  fi
 }
 
 verify_expected_state() {
   local phase="$1"
+  [ "$TARGET_COMMIT" = "$EXPECTED_TARGET_COMMIT" ] \
+    || die "$phase: target drifted: expected $EXPECTED_TARGET_COMMIT, got ${TARGET_COMMIT:-missing}"
   [ "$PATCH_SET_HASH" = "$EXPECTED_PATCH_SET_HASH" ] \
     || die "$phase: patch set drifted: expected $EXPECTED_PATCH_SET_HASH, got $PATCH_SET_HASH"
-
-  if [ "$ALLOW_ANCESTOR_TARGET" -eq 0 ]; then
-    [ "$TARGET_COMMIT" = "$EXPECTED_TARGET_COMMIT" ] \
-      || die "$phase: target drifted: expected $EXPECTED_TARGET_COMMIT, got ${TARGET_COMMIT:-missing}"
-    log "$phase: pinned target and patch set verified"
-    return 0
-  fi
-
-  [ "$TARGET_KIND" = "release" ] && [ "$TARGET_REF_LABEL" = "upstream/$ACTIVE_RELEASE" ] \
-    && [ "${ACTIVE_RELEASE#release/v}" = "$LATEST_VERSION" ] \
-    || die "$phase: ancestor target policy requires the same active release branch and version"
-  [ "$TARGET_COMMIT" = "$EXPECTED_CURRENT_HEAD" ] \
-    || die "$phase: current release head drifted: expected $EXPECTED_CURRENT_HEAD, got ${TARGET_COMMIT:-missing}"
-  fetch_commit_for_ancestry "$EXPECTED_TARGET_COMMIT"
-  fetch_commit_for_ancestry "$EXPECTED_CURRENT_HEAD"
-  git -C "$SOURCE_DIR" merge-base --is-ancestor "$EXPECTED_TARGET_COMMIT" "$EXPECTED_CURRENT_HEAD" \
-    || die "$phase: artifact target is not an ancestor of the pinned current release head"
-  log "$phase: bounded ancestor target verified: artifact=$EXPECTED_TARGET_COMMIT current-head=$EXPECTED_CURRENT_HEAD patch-set=$PATCH_SET_HASH"
+  log "$phase: pinned target and patch set verified"
 }
 
 record_update_attempt() {
@@ -259,8 +132,8 @@ semver_from_text() {
 }
 
 current_version() {
-  [ -x "$CLI" ] || return 1
-  "$CLI" --version 2>/dev/null | semver_from_text
+  [ -x /usr/bin/omniroute ] || return 1
+  /usr/bin/omniroute --version 2>/dev/null | semver_from_text
 }
 
 latest_version() {
@@ -275,13 +148,13 @@ github_api() {
     curl -fsSL \
       -H 'Accept: application/vnd.github+json' \
       -H 'User-Agent: omniroute-native-ops' \
-      "$GITHUB_API_URL/$endpoint"
+      "https://api.github.com/$endpoint"
   fi
 }
 
 active_release_branch() {
   local branch=""
-  branch="$(git ls-remote --heads "$UPSTREAM_URL" 'refs/heads/release/v*' 2>/dev/null \
+  branch="$(git ls-remote --heads "https://github.com/$UPSTREAM_REPO.git" 'refs/heads/release/v*' 2>/dev/null \
     | awk '{sub("refs/heads/", "", $2); print $2}' \
     | sort -V \
     | tail -n 1)"
@@ -305,7 +178,7 @@ resolve_update_target() {
         LATEST_VERSION="$release_version"
         TARGET_REF="refs/heads/$ACTIVE_RELEASE"
         TARGET_REF_LABEL="upstream/$ACTIVE_RELEASE"
-        TARGET_COMMIT="$(git ls-remote "$UPSTREAM_URL" "$TARGET_REF" 2>/dev/null | awk 'NR==1 {print $1}')"
+        TARGET_COMMIT="$(git ls-remote "https://github.com/$UPSTREAM_REPO.git" "$TARGET_REF" 2>/dev/null | awk 'NR==1 {print $1}')"
         return 0
       fi
       ;;
@@ -318,9 +191,9 @@ resolve_update_target() {
   tag_ref="refs/tags/v$LATEST_VERSION"
   TARGET_REF="$tag_ref"
   TARGET_REF_LABEL="$tag_ref"
-  TARGET_COMMIT="$(git ls-remote --tags "$UPSTREAM_URL" "$tag_ref^{}" 2>/dev/null | awk 'NR==1 {print $1}')"
+  TARGET_COMMIT="$(git ls-remote --tags "https://github.com/$UPSTREAM_REPO.git" "$tag_ref^{}" 2>/dev/null | awk 'NR==1 {print $1}')"
   if [ -z "$TARGET_COMMIT" ]; then
-    TARGET_COMMIT="$(git ls-remote --tags "$UPSTREAM_URL" "$tag_ref" 2>/dev/null | awk 'NR==1 {print $1}')"
+    TARGET_COMMIT="$(git ls-remote --tags "https://github.com/$UPSTREAM_REPO.git" "$tag_ref" 2>/dev/null | awk 'NR==1 {print $1}')"
   fi
 }
 
@@ -626,7 +499,7 @@ collect_check() {
   free_kb="$(df -Pk "$ROOT_DIR" | awk 'NR==2 {print $4}')"
   log "disk-free-gib: $((free_kb / 1024 / 1024))"
   if [ "$free_kb" -lt 15728640 ]; then
-    warn "less than 15 GiB free; candidate staging and rollback snapshot are unsafe"
+    warn "less than 15 GiB free; patched source build and rollback snapshot are unsafe"
     BLOCKERS=1
   fi
 
@@ -674,33 +547,6 @@ run_preflight() {
     log "preflight: update is required and pinned inputs are unchanged"
   fi
   preflight_source_and_patches
-  if [ -n "$ARTIFACT_FILE" ] || [ -n "$EXPECTED_ARTIFACT_ID" ]; then
-    local artifact_stage
-    require_expected_artifact
-    artifact_stage="$(mktemp -d "$STAGING_DIR/preflight-artifact.XXXXXX")"
-    verify_artifact_to_stage "$artifact_stage"
-    rm -rf -- "$artifact_stage"
-    ARTIFACT_RUNTIME_DIR=""
-    log "preflight artifact: GitHub attestation, provenance, pins, dependencies, platform, archive, and BUILD_SHA verified"
-  fi
-}
-
-run_build_artifact() {
-  require_root
-  require_source
-  require_expected_state
-  collect_check
-  [ "$BLOCKERS" -eq 0 ] || die "artifact build check has blockers"
-  runtime_surface_is_ok || die "artifact build runtime surface failed"
-  require_current_patch_snapshots
-  verify_expected_state "artifact build"
-  preflight_source_and_patches
-  [ -x "$ARTIFACT_BUILDER" ] || die "artifact builder orchestrator is unavailable: $ARTIFACT_BUILDER"
-  "$ARTIFACT_BUILDER" build \
-    --expect-target "$EXPECTED_TARGET_COMMIT" \
-    --expect-patch-set "$EXPECTED_PATCH_SET_HASH" \
-    --target-ref "$TARGET_REF_LABEL" \
-    --target-version "$LATEST_VERSION"
 }
 
 snapshot_active_patches() {
@@ -714,7 +560,7 @@ snapshot_active_patches() {
 
 prepare_build_tree() {
   local stage="$1"
-  local local_ref build_target
+  local local_ref
   require_source
   if [ "$TARGET_KIND" = "release" ]; then
     local_ref="refs/remotes/upstream/$ACTIVE_RELEASE"
@@ -725,13 +571,10 @@ prepare_build_tree() {
   fi
   git -C "$SOURCE_DIR" rev-parse -q --verify "$local_ref^{commit}" >/dev/null \
     || die "upstream source ref is unavailable: $TARGET_REF_LABEL"
-  TARGET_COMMIT="$(git -C "$SOURCE_DIR" rev-parse "$local_ref^{commit}")"
-  verify_expected_state "source fetch"
-  build_target="$EXPECTED_TARGET_COMMIT"
-  fetch_commit_for_ancestry "$build_target"
   BUILD_TREE="$stage/source"
-  git -C "$SOURCE_DIR" worktree add --detach "$BUILD_TREE" "$build_target" >/dev/null
-  log "source-stage: $TARGET_REF_LABEL@$build_target"
+  git -C "$SOURCE_DIR" worktree add --detach "$BUILD_TREE" "$local_ref" >/dev/null
+  TARGET_COMMIT="$(git -C "$BUILD_TREE" rev-parse HEAD)"
+  log "source-stage: $TARGET_REF_LABEL@$TARGET_COMMIT"
 }
 
 cleanup_build_tree() {
@@ -744,11 +587,6 @@ cleanup_build_tree() {
 
 cleanup_update_workspace() {
   local exit_code=$?
-  if [ -n "$CANDIDATE_UNIT" ]; then
-    systemctl kill --kill-whom=all --signal=TERM "$CANDIDATE_UNIT" >/dev/null 2>&1 || true
-    systemctl stop "$CANDIDATE_UNIT" >/dev/null 2>&1 || true
-    CANDIDATE_UNIT=""
-  fi
   if [ "$DEPLOY_MUTATED" -eq 1 ] && [ -n "$DEPLOY_BACKUP" ] && [ -n "$DEPLOY_STAMP" ]; then
     warn "update interrupted after package mutation; rolling back"
     rollback_update "$DEPLOY_BACKUP" "$DEPLOY_STAMP" || true
@@ -895,112 +733,75 @@ apply_patch_series() {
   done < <(patch_metadata_files)
 }
 
-verify_artifact_freshness() {
-  [ "$ALLOW_ANCESTOR_TARGET" -eq 1 ] || return 0
-  local request_file="$1"
-  local created_at created_epoch now_epoch age_seconds
-  created_at="$(jq -r '.createdAt // empty' "$request_file")"
-  [ -n "$created_at" ] || die "artifact request createdAt is missing"
-  created_epoch="$(date -u -d "$created_at" +%s 2>/dev/null)" \
-    || die "artifact request createdAt is invalid"
-  now_epoch="$(date -u +%s)"
-  age_seconds=$((now_epoch - created_epoch))
-  [ "$age_seconds" -ge 0 ] || die "artifact request createdAt is in the future"
-  [ "$age_seconds" -le 3600 ] || die "artifact request is older than 60 minutes"
+build_patched_source() {
+  [ "$SOURCE_BUILD_REQUIRED" -eq 1 ] || return 0
+  cd "$BUILD_TREE"
+  if ! git diff --quiet -- package.json package-lock.json; then
+    die "a local patch changes package dependencies; add an explicit dependency migration before update"
+  fi
+
+  rm -rf coverage .build dist
+  log "installing source dependencies"
+  npm ci --no-audit --no-fund
+  log "validating source candidate (build scope + core typecheck; lint/tests/coverage stay in PR validation)"
+  npm run check:build-scope
+  npm run typecheck:core
+  if ! git diff --quiet -- src/i18n/messages; then
+    node --import tsx/esm --test tests/unit/i18n-vi-completeness.test.ts
+  fi
+  log "building source candidate once with webpack"
+  OMNIROUTE_USE_TURBOPACK=0 \
+    OMNIROUTE_BUILD_MEMORY_MB="$BUILD_MEMORY_MB" \
+    NEXT_TELEMETRY_DISABLED=1 \
+    npm run build:release
+  OMNIROUTE_BUILD_SHA="source-${TARGET_COMMIT:0:12}-patch-${PATCH_SET_HASH:0:12}" \
+    node scripts/build/write-build-sha.mjs
+  repair_known_runtime_timeout_sidecar
+  [ -f dist/server.js ] || die "patched build did not produce dist/server.js"
 }
 
-verify_artifact_to_stage() {
-  local extraction_root="$1"
-  local fingerprint_file="$extraction_root/runtime-fingerprint.json"
-  local artifact_directory request_file bundle_file run_file result
-  artifact_directory="$(dirname -- "$ARTIFACT_FILE")"
-  request_file="$artifact_directory/local-request.json"
-  bundle_file="$artifact_directory/attestation-bundle.jsonl"
-  run_file="$artifact_directory/run.json"
-  require_expected_artifact
-  [ -f "$request_file" ] \
-    || die "local reviewed request is missing next to response: $request_file"
-  verify_artifact_freshness "$request_file"
-  [ -f "$bundle_file" ] || die "GitHub attestation bundle is missing next to response"
-  [ -f "$run_file" ] || die "GitHub workflow run identity is missing next to response"
-  jq -e \
-    --arg repo "$ARTIFACT_REPOSITORY" --arg workflow "$ARTIFACT_WORKFLOW" \
-    --arg ref "$EXPECTED_ARTIFACT_REF" --arg source "$EXPECTED_ARTIFACT_SOURCE" \
-    --argjson runId "$EXPECTED_ARTIFACT_RUN_ID" --argjson attempt "$EXPECTED_ARTIFACT_RUN_ATTEMPT" \
-    '.repository==$repo and .workflow==$workflow and .ref==$ref and .sourceDigest==$source and .runId==$runId and .runAttempt==$attempt and .runnerEnvironment=="github-hosted"' \
-    "$run_file" >/dev/null || die "GitHub workflow run identity does not match reviewed pins"
+repair_known_runtime_timeout_sidecar() {
+  local wrapper="$BUILD_TREE/dist/server-ws.mjs"
+  local source_import='from "../../src/shared/utils/runtimeTimeouts.ts"'
+  local bundled_import='from "./runtime-timeouts.mjs"'
+  [ -f "$wrapper" ] || return 0
+  if ! grep -Fq "$source_import" "$wrapper"; then
+    return 0
+  fi
 
-  mkdir -p "$extraction_root"
-  ARTIFACT_ATTESTATION_VERIFICATION="$extraction_root/attestation-verification.json"
-  gh attestation verify "$ARTIFACT_FILE" \
-    --repo "$ARTIFACT_REPOSITORY" \
-    --bundle "$bundle_file" \
-    --signer-workflow "$ARTIFACT_REPOSITORY/$ARTIFACT_WORKFLOW" \
-    --source-ref "$EXPECTED_ARTIFACT_REF" \
-    --source-digest "$EXPECTED_ARTIFACT_SOURCE" \
-    --deny-self-hosted-runners \
-    --format json >"$ARTIFACT_ATTESTATION_VERIFICATION" \
-    || die "GitHub artifact attestation verification failed; production was not touched"
-  jq -e 'type=="array" and length>0' "$ARTIFACT_ATTESTATION_VERIFICATION" >/dev/null \
-    || die "GitHub artifact attestation returned no verified statement"
-
-  "$ARTIFACT_TOOL" fingerprint --npm-version "$(npm --version)" >"$fingerprint_file"
-  ARTIFACT_RUNTIME_DIR="$extraction_root/verified"
-  result="$($ARTIFACT_TOOL verify-response \
-    --archive "$ARTIFACT_FILE" \
-    --request "$request_file" \
-    --expect-artifact "$EXPECTED_ARTIFACT_ID" \
-    --expect-manifest "$EXPECTED_MANIFEST_ID" \
-    --expect-target "$EXPECTED_TARGET_COMMIT" \
-    --expect-target-ref "$TARGET_REF_LABEL" \
-    --expect-patch-set "$EXPECTED_PATCH_SET_HASH" \
-    --expect-version "$LATEST_VERSION" \
-    --expect-builder-repository "$ARTIFACT_REPOSITORY" \
-    --expect-workflow "$ARTIFACT_WORKFLOW" \
-    --expect-source-ref "$EXPECTED_ARTIFACT_REF" \
-    --expect-source-digest "$EXPECTED_ARTIFACT_SOURCE" \
-    --expect-run-id "$EXPECTED_ARTIFACT_RUN_ID" \
-    --expect-run-attempt "$EXPECTED_ARTIFACT_RUN_ATTEMPT" \
-    --fingerprint "$fingerprint_file" \
-    --installed-package "$INSTALL_DIR/package.json" \
-    --destination "$ARTIFACT_RUNTIME_DIR")" \
-    || die "attested artifact content verification failed; production was not touched"
-  ARTIFACT_MANIFEST_JSON="$(jq -c '.manifest' <<<"$result")"
-  ARTIFACT_REQUEST_SHA="$(jq -r '.manifest.requestSha256' <<<"$result")"
-  ARTIFACT_ID="$(jq -r '.artifactId' <<<"$result")"
-  ARTIFACT_MANIFEST_SHA="$(jq -r '.manifestSha256' <<<"$result")"
-  ARTIFACT_MODE="$(jq -r '.artifactMode' <<<"$result")"
-  ARTIFACT_TYPE="$(jq -r '.artifactType' <<<"$result")"
-  ARTIFACT_POLICY_HASH="$(jq -r '.manifest.artifactPolicyHash' <<<"$result")"
-  ARTIFACT_SOURCE_PACKAGE_SHA="$(jq -r '.manifest.sourcePackageSha256' <<<"$result")"
-  ARTIFACT_SOURCE_LOCK_SHA="$(jq -r '.manifest.sourceLockSha256' <<<"$result")"
-  ARTIFACT_PAYLOAD_SHA="$(jq -r '.manifest.payloadSha256' <<<"$result")"
-  ARTIFACT_FILE_INDEX_SHA="$(jq -r '.manifest.fileIndexSha256' <<<"$result")"
-  ARTIFACT_LINK_INDEX_SHA="$(jq -r '.manifest.linkIndexSha256' <<<"$result")"
-  ARTIFACT_PRODUCTION_TREE_SHA="$(jq -r '.manifest.productionTreeSha256' <<<"$result")"
-  ARTIFACT_NATIVE_INDEX_SHA="$(jq -r '.manifest.nativeIndexSha256' <<<"$result")"
-  ARTIFACT_DEPENDENCY_FINGERPRINT="$(jq -c '.manifest.dependencyFingerprint' <<<"$result")"
-  case "$ARTIFACT_MODE:$ARTIFACT_TYPE" in
-    overlay:omniroute-runtime-overlay|full-package:omniroute-full-package) ;;
-    *) die "verified artifact returned an unsupported mode/type: $ARTIFACT_MODE/$ARTIFACT_TYPE" ;;
-  esac
-  mapfile -t APPLIED_PATCHES < <(jq -r '.manifest.appliedPatches[]' <<<"$result")
-  mapfile -t SKIPPED_PATCHES < <(jq -r '.manifest.skippedUpstreamedPatches[]' <<<"$result")
-  [ "$ARTIFACT_ID" = "$EXPECTED_ARTIFACT_ID" ] || die "verified artifact ID drifted"
-  [ "$ARTIFACT_MANIFEST_SHA" = "$EXPECTED_MANIFEST_ID" ] || die "verified manifest ID drifted"
+  log "repairing known v3.8.49 runtime-timeout sidecar packaging defect"
+  "$BUILD_TREE/node_modules/.bin/esbuild" \
+    "$BUILD_TREE/src/shared/utils/runtimeTimeouts.ts" \
+    --bundle \
+    --platform=node \
+    --format=esm \
+    --outfile="$BUILD_TREE/dist/runtime-timeouts.mjs"
+  node --input-type=module - "$wrapper" "$source_import" "$bundled_import" <<'NODE'
+import fs from "node:fs";
+const [file, sourceImport, bundledImport] = process.argv.slice(2);
+const source = fs.readFileSync(file, "utf8");
+if (!source.includes(sourceImport)) process.exit(2);
+fs.writeFileSync(file, source.replace(sourceImport, bundledImport));
+NODE
 }
 
-overlay_verified_artifact() {
+overlay_built_runtime() {
   local candidate_package="$1"
   local source destination
-  [ "$ARTIFACT_MODE" = "overlay" ] || die "overlay staging requires an overlay artifact"
-  [ -d "$ARTIFACT_RUNTIME_DIR" ] || die "verified artifact overlay is unavailable"
+  [ "$SOURCE_BUILD_REQUIRED" -eq 1 ] || return 0
 
-  for source in dist bin @omniroute open-sse src/domain src/lib src/models src/mitm src/server src/shared src/sse src/types; do
-    rm -rf -- "$candidate_package/$source"
-    [ -e "$ARTIFACT_RUNTIME_DIR/$source" ] || continue
-    mkdir -p "$(dirname "$candidate_package/$source")"
-    cp -a "$ARTIFACT_RUNTIME_DIR/$source" "$candidate_package/$source"
+  rm -rf "$candidate_package/dist"
+  cp -a "$BUILD_TREE/dist" "$candidate_package/dist"
+
+  for source in bin @omniroute open-sse src/domain src/lib src/models src/mitm src/server src/shared src/sse src/types; do
+    destination="$candidate_package/$source"
+    rm -rf "$destination"
+    mkdir -p "$(dirname "$destination")"
+    rsync -a \
+      --exclude='__tests__/' \
+      --exclude='*.test.*' \
+      --exclude='*.spec.*' \
+      "$BUILD_TREE/$source/" "$destination/"
   done
 
   for source in \
@@ -1012,45 +813,59 @@ overlay_verified_artifact() {
     scripts/build/sync-env.mjs \
     scripts/build/native-binary-compat.mjs \
     scripts/build/build-next-isolated.mjs \
-    scripts/build/fixTlsClientNodeBinary.mjs \
     scripts/postinstall.mjs \
     scripts/dev/responses-ws-proxy.mjs \
     scripts/dev/tls-options.mjs \
     scripts/dev/sync-env.mjs \
     scripts/check/check-supported-node-runtime.ts; do
+    [ -e "$BUILD_TREE/$source" ] || continue
     destination="$candidate_package/$source"
-    rm -rf -- "$destination"
-    [ -e "$ARTIFACT_RUNTIME_DIR/$source" ] || continue
     mkdir -p "$(dirname "$destination")"
-    cp -a "$ARTIFACT_RUNTIME_DIR/$source" "$destination"
+    rm -rf "$destination"
+    cp -a "$BUILD_TREE/$source" "$destination"
   done
+}
+
+dependency_fingerprint() {
+  local package_file="$1"
+  node - "$package_file" <<'NODE'
+const pkg = require(process.argv[2]);
+const selected = {
+  dependencies: pkg.dependencies || {},
+  optionalDependencies: pkg.optionalDependencies || {},
+  engines: pkg.engines || {},
+};
+process.stdout.write(JSON.stringify(selected));
+NODE
+}
+
+require_source_dependencies_compatible() {
+  local installed_fingerprint source_fingerprint
+  installed_fingerprint="$(dependency_fingerprint "$INSTALL_DIR/package.json")"
+  source_fingerprint="$(dependency_fingerprint "$BUILD_TREE/package.json")"
+  [ "$installed_fingerprint" = "$source_fingerprint" ] \
+    || die "release branch dependencies changed before npm publication; refusing an unsafe source-only dependency migration"
 }
 
 stage_runtime() {
   local stage="$1"
   RUNTIME_PREFIX="$stage/runtime"
   local candidate_package="$RUNTIME_PREFIX/lib/node_modules/omniroute"
-  local verified_package="$ARTIFACT_RUNTIME_DIR/package"
-  if [ "$TARGET_KIND" = "stable" ] && [ "$SOURCE_BUILD_REQUIRED" -eq 0 ]; then
-    die "stable full-package artifact deployment is not implemented; npm install fallback on Tiny is disabled"
+  if [ "$TARGET_KIND" = "stable" ]; then
+    log "staging official omniroute@$LATEST_VERSION in an isolated global prefix"
+    npm install -g \
+      --prefix "$RUNTIME_PREFIX" \
+      "omniroute@$LATEST_VERSION" \
+      --include=optional \
+      --no-audit \
+      --no-fund
+  else
+    require_source_dependencies_compatible
+    log "staging release-branch runtime from the current independent package"
+    mkdir -p "$RUNTIME_PREFIX/lib/node_modules" "$RUNTIME_PREFIX/bin"
+    cp -a "$INSTALL_DIR" "$candidate_package"
   fi
-  mkdir -p "$RUNTIME_PREFIX/lib/node_modules" "$RUNTIME_PREFIX/bin"
-  case "$ARTIFACT_MODE" in
-    overlay)
-      log "staging release runtime from the installed package and verified overlay"
-      cp -a "$INSTALL_DIR" "$candidate_package"
-      overlay_verified_artifact "$candidate_package"
-      ;;
-    full-package)
-      log "staging release runtime directly from the verified independent full package"
-      [ -d "$verified_package" ] || die "verified full package is unavailable"
-      [ ! -L "$verified_package" ] || die "verified full package root must not be a link"
-      cp -a "$verified_package" "$candidate_package"
-      ;;
-    *)
-      die "verified artifact mode is unavailable for staging: ${ARTIFACT_MODE:-missing}"
-      ;;
-  esac
+  overlay_built_runtime "$candidate_package"
   rm -f "$candidate_package/.env"
   ln -sfn ../lib/node_modules/omniroute/bin/omniroute.mjs "$RUNTIME_PREFIX/bin/omniroute"
   [ -x "$RUNTIME_PREFIX/bin/omniroute" ] || die "staged CLI is missing"
@@ -1064,7 +879,6 @@ candidate_smoke() {
   local candidate_package="$runtime_prefix/lib/node_modules/omniroute"
   local candidate_data="$stage/smoke-data"
   local unit="omniroute-candidate-$$.service"
-  CANDIDATE_UNIT="$unit"
   local candidate_password candidate_api_port candidate_ws_port candidate_port
 
   [ -x "$candidate" ] || return 1
@@ -1110,7 +924,6 @@ candidate_smoke() {
         | jq -e '.data | type == "array"' >/dev/null 2>&1 \
       && port_is_listening "$candidate_ws_port"; then
       systemctl stop "$unit" >/dev/null 2>&1 || true
-      CANDIDATE_UNIT=""
       log "candidate-smoke: dashboard, API bridge, and live WebSocket listener healthy"
       return 0
     fi
@@ -1122,7 +935,6 @@ candidate_smoke() {
 
   journalctl -u "$unit" -n 100 --no-pager >&2 || true
   systemctl stop "$unit" >/dev/null 2>&1 || true
-  CANDIDATE_UNIT=""
   return 1
 }
 
@@ -1137,7 +949,7 @@ rollback_update() {
     mv "$INSTALL_DIR" "$failed_package"
   fi
   mv "$backup/package" "$INSTALL_DIR"
-  ln -sfn "$CLI_LINK_TARGET" "$CLI_LINK"
+  ln -sfn ../lib/node_modules/omniroute/bin/omniroute.mjs /usr/bin/omniroute
 
   if [ -d "$DATA_DIR" ]; then
     mv "$DATA_DIR" "$ROOT_DIR/failed-data-$failed_stamp"
@@ -1166,12 +978,15 @@ record_current_state() {
   local stamp="$3"
   local build_sha="$4"
   local backup="$5"
-  local method="github-attested-$ARTIFACT_MODE"
+  local method="native-npm"
   local upstream_tag=""
   local applied_json skipped_json tmp
-  if [ "$TARGET_KIND" != "release" ]; then
+  if [ "$TARGET_KIND" = "release" ]; then
+    method="native-source-release"
+  else
     upstream_tag="v$version"
   fi
+  [ "${#APPLIED_PATCHES[@]}" -eq 0 ] || method="native-patched-source"
   applied_json="$(printf '%s\n' "${APPLIED_PATCHES[@]}" | jq -Rsc 'split("\n") | map(select(length > 0))')"
   skipped_json="$(printf '%s\n' "${SKIPPED_PATCHES[@]}" | jq -Rsc 'split("\n") | map(select(length > 0))')"
   tmp="$STATE_DIR/current.json.tmp"
@@ -1184,34 +999,13 @@ record_current_state() {
     --arg stableVersion "$STABLE_VERSION" \
     --arg upstreamTag "$upstream_tag" \
     --arg sourceRef "$TARGET_REF_LABEL" \
-    --arg sourceCommit "$EXPECTED_TARGET_COMMIT" \
-    --arg confirmedReleaseHead "${EXPECTED_CURRENT_HEAD:-$TARGET_COMMIT}" \
+    --arg sourceCommit "$TARGET_COMMIT" \
     --arg buildSha "$build_sha" \
     --arg patchSetHash "$PATCH_SET_HASH" \
-    --arg artifactId "$ARTIFACT_ID" \
-    --arg artifactManifestSha256 "$ARTIFACT_MANIFEST_SHA" \
-    --arg artifactRequestSha256 "$ARTIFACT_REQUEST_SHA" \
-    --arg artifactMode "$ARTIFACT_MODE" \
-    --arg artifactType "$ARTIFACT_TYPE" \
-    --arg artifactPolicyHash "$ARTIFACT_POLICY_HASH" \
-    --arg artifactSourcePackageSha256 "$ARTIFACT_SOURCE_PACKAGE_SHA" \
-    --arg artifactSourceLockSha256 "$ARTIFACT_SOURCE_LOCK_SHA" \
-    --arg artifactPayloadSha256 "$ARTIFACT_PAYLOAD_SHA" \
-    --arg artifactFileIndexSha256 "$ARTIFACT_FILE_INDEX_SHA" \
-    --arg artifactLinkIndexSha256 "$ARTIFACT_LINK_INDEX_SHA" \
-    --arg artifactProductionTreeSha256 "$ARTIFACT_PRODUCTION_TREE_SHA" \
-    --arg artifactNativeIndexSha256 "$ARTIFACT_NATIVE_INDEX_SHA" \
-    --argjson artifactDependencyFingerprint "$ARTIFACT_DEPENDENCY_FINGERPRINT" \
-    --arg artifactRepository "$ARTIFACT_REPOSITORY" \
-    --arg artifactWorkflow "$ARTIFACT_WORKFLOW" \
-    --arg artifactRef "$EXPECTED_ARTIFACT_REF" \
-    --arg artifactSourceDigest "$EXPECTED_ARTIFACT_SOURCE" \
-    --argjson artifactRunId "$EXPECTED_ARTIFACT_RUN_ID" \
-    --argjson artifactRunAttempt "$EXPECTED_ARTIFACT_RUN_ATTEMPT" \
     --arg backup "$backup" \
     --argjson appliedPatches "$applied_json" \
     --argjson skippedUpstreamedPatches "$skipped_json" \
-    '{version:$version,previousVersion:$previousVersion,installedAt:$installedAt,method:$method,updateChannel:$updateChannel,stableVersion:$stableVersion,upstreamTag:(if $upstreamTag=="" then null else $upstreamTag end),sourceRef:$sourceRef,sourceCommit:$sourceCommit,confirmedReleaseHead:$confirmedReleaseHead,buildSha:$buildSha,patchSetHash:$patchSetHash,artifactId:$artifactId,artifactManifestSha256:$artifactManifestSha256,artifactRequestSha256:$artifactRequestSha256,artifactMode:$artifactMode,artifactType:$artifactType,artifactPolicyHash:$artifactPolicyHash,artifactSourcePackageSha256:$artifactSourcePackageSha256,artifactSourceLockSha256:$artifactSourceLockSha256,artifactPayloadSha256:$artifactPayloadSha256,artifactFileIndexSha256:$artifactFileIndexSha256,artifactLinkIndexSha256:$artifactLinkIndexSha256,artifactProductionTreeSha256:$artifactProductionTreeSha256,artifactNativeIndexSha256:$artifactNativeIndexSha256,artifactDependencyFingerprint:$artifactDependencyFingerprint,artifactRepository:$artifactRepository,artifactWorkflow:$artifactWorkflow,artifactRef:$artifactRef,artifactSourceDigest:$artifactSourceDigest,artifactRunId:$artifactRunId,artifactRunAttempt:$artifactRunAttempt,appliedPatches:$appliedPatches,skippedUpstreamedPatches:$skippedUpstreamedPatches,backup:$backup}' \
+    '{version:$version,previousVersion:$previousVersion,installedAt:$installedAt,method:$method,updateChannel:$updateChannel,stableVersion:$stableVersion,upstreamTag:(if $upstreamTag=="" then null else $upstreamTag end),sourceRef:$sourceRef,sourceCommit:$sourceCommit,buildSha:$buildSha,patchSetHash:$patchSetHash,appliedPatches:$appliedPatches,skippedUpstreamedPatches:$skippedUpstreamedPatches,backup:$backup}' \
     >"$tmp"
   mv "$tmp" "$STATE_DIR/current.json"
   printf '%s update %s -> %s build=%s patches=%s healthy\n' \
@@ -1245,7 +1039,6 @@ run_update() {
   fi
 
   local free_kb stamp stage backup runtime_prefix candidate_package candidate_version builtin_backup build_sha expected_build_sha
-  require_expected_artifact
   free_kb="$(df -Pk "$ROOT_DIR" | awk 'NR==2 {print $4}')"
   [ "$free_kb" -ge 15728640 ] || die "less than 15 GiB free"
   stamp="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -1267,11 +1060,17 @@ run_update() {
     snapshot_active_patches
   fi
   verify_expected_state "post-snapshot"
-  if [ "$SOURCE_BUILD_REQUIRED" -ne 1 ]; then
-    die "stable full-package artifact deployment is not implemented; local npm install is disabled"
+  if [ "$SOURCE_BUILD_REQUIRED" -eq 1 ]; then
+    prepare_build_tree "$stage"
+    verify_expected_state "post-fetch"
+    if [ "$ACTIVE_PATCH_COUNT" -gt 0 ]; then
+      apply_patch_series
+    else
+      APPLIED_PATCHES=()
+      SKIPPED_PATCHES=()
+    fi
+    build_patched_source
   fi
-  verify_artifact_to_stage "$stage/artifact"
-  log "artifact verified: response=$ARTIFACT_ID manifest=$ARTIFACT_MANIFEST_SHA request=$ARTIFACT_REQUEST_SHA"
 
   stage_runtime "$stage"
   runtime_prefix="$RUNTIME_PREFIX"
@@ -1285,7 +1084,7 @@ run_update() {
   runuser -u "$APP_USER" -- env \
     HOME="$ROOT_DIR/home" \
     DATA_DIR="$DATA_DIR" \
-    "$CLI" backup create --name "$builtin_backup" --retention 10
+    /usr/bin/omniroute backup create --name "$builtin_backup" --retention 10
 
   log "stopping $SERVICE_NAME for a consistent filesystem snapshot"
   systemctl stop "$SERVICE_NAME"
@@ -1307,7 +1106,7 @@ run_update() {
     DEPLOY_MUTATED=0
     die "could not move the candidate package into production"
   fi
-  if ! ln -sfn "$CLI_LINK_TARGET" "$CLI_LINK"; then
+  if ! ln -sfn ../lib/node_modules/omniroute/bin/omniroute.mjs /usr/bin/omniroute; then
     rollback_update "$backup" "$stamp" || true
     DEPLOY_MUTATED=0
     return 20
@@ -1347,6 +1146,10 @@ run_update() {
   fi
   DEPLOY_MUTATED=0
 
+  if [ -x "$ROOT_DIR/ops/patch.sh" ]; then
+    "$ROOT_DIR/ops/patch.sh" cleanup-merged --installed-version "$LATEST_VERSION" \
+      || warn "merged-patch cleanup reported a warning; runtime update remains successful"
+  fi
   refresh_patch_state || die "runtime is healthy but post-update patch state is invalid"
   record_current_state "$LATEST_VERSION" "$CURRENT_VERSION" "$(date -Is)" "$build_sha" "$backup"
   UPDATE_ATTEMPT_ACTIVE=0
@@ -1367,9 +1170,6 @@ case "$MODE" in
   --preflight|preflight)
     run_preflight
     ;;
-  --build-artifact|build-artifact)
-    run_build_artifact
-    ;;
   --verify-runtime|verify-runtime)
     run_verify_runtime
     ;;
@@ -1380,16 +1180,13 @@ case "$MODE" in
     printf '%s\n' \
       'Usage:' \
       '  update-omniroute --check' \
-      '  update-omniroute --preflight --expect-target <sha40> --expect-patch-set <sha256|none> [--allow-ancestor-target --expect-current-head <sha40>] [GitHub-attested artifact pins]' \
-      '  update-omniroute --build-artifact --expect-target <sha40> --expect-patch-set <sha256|none>' \
+      '  update-omniroute --preflight --expect-target <40-char-sha> --expect-patch-set <sha256|none>' \
       '  update-omniroute --verify-runtime' \
-      '  update-omniroute --update --expect-target <sha40> --expect-patch-set <sha256|none> [--allow-ancestor-target --expect-current-head <sha40>] --artifact <response.tar.gz> --expect-artifact <response-sha256> --expect-manifest <manifest-sha256> --expect-artifact-source <sha40> --expect-artifact-ref <ref> --expect-artifact-run <id> --expect-artifact-attempt <n>' \
+      '  update-omniroute --update --expect-target <40-char-sha> --expect-patch-set <sha256|none>' \
       '  --check      read-only health, upstream, and active-patch assessment' \
-      '  --preflight  verify reviewed pins, patches, and optional GitHub-attested artifact without deploying' \
-      '  --allow-ancestor-target  explicitly accept a <=60-minute artifact for the same release when its target is an ancestor of --expect-current-head' \
-      '  --build-artifact  build the pinned candidate on GitHub-hosted ubuntu-24.04; never build on Tiny' \
+      '  --preflight  require reviewed target/patch pins and verify them without deploying' \
       '  --verify-runtime  check DB, dashboard, bridge, and listeners without deploying' \
-      '  --update     verify attestation and artifact, smoke, backup, deploy, and rollback on gate failure'
+      '  --update     verify pins again, build once, smoke, backup, deploy, and rollback on gate failure'
     ;;
   *)
     printf 'Usage: update-omniroute [--check|--preflight|--verify-runtime|--update] [pin options]\n' >&2

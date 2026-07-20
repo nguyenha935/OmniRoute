@@ -6,9 +6,10 @@ readonly FORMAT_TOOL="${OMNIROUTE_ARTIFACT_FORMAT_TOOL:-${GITHUB_WORKSPACE:-}/.o
 readonly WORK_ROOT="${OMNIROUTE_BUILDER_WORK_ROOT:-${RUNNER_TEMP:-}/omniroute-builder}"
 readonly REPOSITORY_URL="${OMNIROUTE_REPOSITORY_URL:-https://github.com/diegosouzapw/OmniRoute.git}"
 # GitHub-hosted ubuntu-24.04 public runners have 16 GB RAM. `--max-old-space-size`
-# bounds only V8's JS heap, not webpack's native/worker allocations. Use 10 GiB for
-# the release build while retaining roughly 6 GiB for native allocations and the OS.
-readonly BUILD_MEMORY_MB="${OMNIROUTE_BUILD_MEMORY_MB:-10240}"
+# bounds only V8's JS heap, not Turbopack's native/worker allocations. Keep V8 at
+# 6 GiB so the Rust graph, workers, npm and the OS retain real headroom; a 10 GiB
+# heap allowed the entire hosted VM to be OOM-killed before diagnostics could run.
+readonly BUILD_MEMORY_MB="${OMNIROUTE_BUILD_MEMORY_MB:-6144}"
 readonly BUILDER_REPOSITORY="${GITHUB_REPOSITORY:-}"
 readonly BUILDER_WORKFLOW="${OMNIROUTE_GITHUB_WORKFLOW:-.github/workflows/omniroute-patch-artifact.yml}"
 readonly BUILDER_REF="${GITHUB_REF:-}"
@@ -29,16 +30,18 @@ cleanup() {
 
 restore_next_cache() {
   [ -n "$NEXT_CACHE_DIR" ] && [ -d "$NEXT_CACHE_DIR" ] || return 0
-  mkdir -p "$SOURCE_TREE/.next/cache"
-  cp -a -- "$NEXT_CACHE_DIR/." "$SOURCE_TREE/.next/cache/"
+  local source_cache="$SOURCE_TREE/.build/next/cache"
+  mkdir -p "$source_cache"
+  cp -a -- "$NEXT_CACHE_DIR/." "$source_cache/"
   log "restored Turbopack cache"
 }
 
 save_next_cache() {
-  [ -n "$NEXT_CACHE_DIR" ] && [ -d "$SOURCE_TREE/.next/cache" ] || return 0
+  local source_cache="$SOURCE_TREE/.build/next/cache"
+  [ -n "$NEXT_CACHE_DIR" ] && [ -d "$source_cache" ] || return 0
   rm -rf -- "$NEXT_CACHE_DIR"
   mkdir -p "$NEXT_CACHE_DIR"
-  cp -a -- "$SOURCE_TREE/.next/cache/." "$NEXT_CACHE_DIR/"
+  cp -a -- "$source_cache/." "$NEXT_CACHE_DIR/"
   log "saved Turbopack cache"
 }
 

@@ -12,6 +12,7 @@ bash -n "$DEPLOY" || fail "deploy syntax"
   || fail "automatic deploy contains a Tiny build"
 grep -Fq 'candidate_args' "$DEPLOY" || fail "automatic deploy does not resolve candidate pins"
 grep -Fq -- '--allow-ancestor-target' "$DEPLOY" || fail "moving release head is not handled"
+grep -Fq 'published_resume_target' "$DEPLOY" || fail "published candidate cannot resume"
 pass "automatic deploy is artifact-only and pin-aware"
 
 fixture="$(mktemp -d "${TMPDIR:-/tmp}/omniroute-auto-deploy.XXXXXX")"

@@ -169,7 +169,7 @@ Không push/open/update PR trước deploy và người dùng test nếu chưa c
   worktree và staging khó kiểm soát.
 - Release head có thể tiến lên trong lúc GitHub build, khiến người vận hành tưởng
   phải build lại dù artifact vẫn là ancestor mới và còn trong cửa sổ an toàn.
-- npm cache đã có nhưng `.next/cache` chưa được giữ; candidate đúng cùng identity
+- npm cache đã có nhưng `.build/next/cache` chưa được giữ; candidate đúng cùng identity
   cũng không được tự tái sử dụng.
 
 ### Khắc phục bắt buộc
@@ -180,9 +180,12 @@ Không push/open/update PR trước deploy và người dùng test nếu chưa c
   `state/candidate.json`, preflight, deploy và verify; không nhập pin thủ công.
 - Dùng một nhánh fast-forward cố định `deploy/integration`; commit SHA và
   attestation vẫn là provenance bất biến.
-- Cache cả npm và Turbopack `.next/cache` trên GitHub-hosted runner.
+- Cache cả npm và Turbopack `.build/next/cache` trên GitHub-hosted runner.
 - Release head đổi trong lúc build phải đi qua bounded-ancestor gate sẵn có,
   không tự khởi động lại build.
+- Caller timeout hoặc mất SSH phải đọc lại request trên `deploy/integration`,
+  so sánh semantic identity và tiếp tục đúng commit/run; timestamp/nonce mới
+  không được tạo build trùng.
 - Tiny vẫn tuyệt đối không chạy `npm ci`, production build, lifecycle hoặc native
   rebuild. Attestation, archive validation, candidate smoke, backup, atomic swap
   và rollback vẫn là cổng bắt buộc.

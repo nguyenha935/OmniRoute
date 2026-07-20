@@ -15,6 +15,9 @@ grep -Fq 'gh attestation verify' "$ORCHESTRATOR" || fail "download path does not
 grep -Fq -- '--deny-self-hosted-runners' "$ORCHESTRATOR" || fail "attestation accepts self-hosted runners"
 grep -Fq 'deploy/integration' "$ORCHESTRATOR" || fail "persistent integration branch is missing"
 grep -Fq 'Restore Turbopack cache' "$ORCHESTRATOR" || fail "workflow omits Turbopack cache"
+grep -Fq 'monitor_resources' "$ORCHESTRATOR" || fail "workflow omits hosted-runner resource telemetry"
+grep -Fq 'trap cleanup_monitor EXIT INT TERM HUP' "$ORCHESTRATOR" \
+  || fail "workflow resource monitor is not cleaned up safely"
 grep -Fq 'cp -a .omniroute-deploy/input/patches/.' "$ORCHESTRATOR" || fail "workflow does not support an empty patch set"
 grep -Fq 'name: Upload builder diagnostics' "$ORCHESTRATOR" || fail "workflow omits failure diagnostics upload"
 grep -Fq 'if: ${{ always() }}' "$ORCHESTRATOR" || fail "builder diagnostics are skipped on failure"
@@ -328,8 +331,8 @@ final_branch="deploy/integration"
 final_sha="$(git --git-dir="$remote" rev-parse "refs/heads/$final_branch")"
 [ -f "$artifact_root/$target-none/$final_sha/response.tar.gz" ] || fail "content-addressed response was not preserved"
 [ -f "$artifact_root/$target-none/$final_sha/local-request.json" ] || fail "local reviewed request was not preserved"
-grep -Fq 'integration candidate already exists' "$fixture/success.log" \
-  || fail "same request did not reuse the integration commit"
+grep -Fq 'resuming published integration request' "$fixture/success.log" \
+  || fail "same request did not resume the integration commit"
 [ -f "$state/candidate.json" ] || fail "successful build did not persist candidate metadata"
 pass "integration commit is reused and exact attested candidate is preserved"
 

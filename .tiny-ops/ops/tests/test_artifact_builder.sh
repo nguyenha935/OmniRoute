@@ -13,6 +13,12 @@ grep -Fq 'builder requires a GitHub-hosted runner' "$BUILDER" || fail "builder l
 grep -Fq 'OMNIROUTE_USE_TURBOPACK=1' "$BUILDER" || fail "builder does not force Turbopack"
 grep -Fq 'restore_next_cache' "$BUILDER" || fail "builder does not restore Turbopack cache"
 grep -Fq 'save_next_cache' "$BUILDER" || fail "builder does not preserve Turbopack cache"
+grep -Fq 'readonly BUILD_MEMORY_MB="${OMNIROUTE_BUILD_MEMORY_MB:-6144}"' "$BUILDER" \
+  || fail "builder does not reserve hosted-runner memory for native Turbopack work"
+grep -Fq '$SOURCE_TREE/.build/next/cache' "$BUILDER" \
+  || fail "builder cache path does not match OmniRoute NEXT_DIST_DIR"
+! grep -Fq '$SOURCE_TREE/.next/cache' "$BUILDER" \
+  || fail "builder retains the unused default Next.js cache path"
 grep -Fq 'npm run check:dashboard-typecheck' "$BUILDER" || fail "builder omits dashboard typecheck gate"
 grep -Fq 'npm ci --omit=dev --ignore-scripts --no-audit --no-fund' "$BUILDER" \
   || fail "full-package production install is not hosted, pruned, and script-disabled"

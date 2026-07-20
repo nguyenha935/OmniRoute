@@ -52,14 +52,15 @@ Quy tắc bắt buộc:
 3. Mã thoát của `--check`: `0` là khỏe và mới nhất, `10` là có bản mới, `20` là có blocker.
 4. `--update` là lệnh tự động duy nhất: tự khóa target/patch-set từ `--check`, dry-run patch, build hoặc tái sử dụng candidate, đọc toàn bộ pin từ `state/candidate.json`, chạy artifact-aware preflight, deploy và `--verify-runtime`. Không nhập pin thủ công trong luồng thường.
 5. Candidate luôn được publish nối tiếp trên một nhánh cố định `deploy/integration`; không tạo một nhánh tạm cho mỗi lần build. Mỗi GitHub commit vẫn là danh tính bất biến của request và artifact.
-6. Workflow phải cache npm và `.next/cache`, nhưng cache không được thay cổng typecheck/test/build. Candidate có cùng target, ordered patch identity, lane, runtime và dependency fingerprint phải được tái sử dụng thay vì build lại.
+6. Workflow phải cache npm và cache Turbopack thực tế ở `.build/next/cache` (không phải `.next/cache`), nhưng cache không được thay cổng typecheck/test/build. Candidate có cùng target, ordered patch identity, lane, runtime và dependency fingerprint phải được tái sử dụng thay vì build lại.
 7. Nếu release head tiến lên trong lúc build, orchestration tự dùng bounded-ancestor gate có exact current-head và thời hạn tối đa 60 phút; không được bắt đầu lại build chỉ vì cùng release branch vừa có commit mới.
-8. Kênh update mặc định là `release`: ưu tiên nhánh `release/v*` cao nhất của upstream; chỉ dùng npm stable khi không có nhánh release hoặc khi đặt rõ `OMNIROUTE_UPDATE_CHANNEL=stable`. Tuyệt đối không hạ phiên bản source-release xuống npm stable cũ hơn.
-9. Khi có patch local, `--preflight` phải dry-run patch trên target đã pin; builder phải dùng đúng ordered snapshots, bỏ qua patch đã có upstream, apply patch còn lại và dừng nếu conflict.
-10. Source candidate chỉ build một lần trên GitHub-hosted `ubuntu-24.04`; workflow không chạy coverage và không dùng `npm pack`. Lane full-package phải production-prune, materialize workspace closure và validate native/runtime closure hoàn toàn trên hosted runner; Tiny không được chạy lifecycle/postinstall hay native rebuild. Tiny vẫn phải xác minh GitHub attestation, exact commit/ref/run, mode/type/policy, target/patch, package/lock, platform/ABI, dependency, production-tree, native/file/link indexes và mọi payload hash trước candidate smoke.
-11. `--update` phải backup package, data và config; package được đổi nguyên tử; health check lỗi hoặc tiến trình bị ngắt sau khi package thay đổi phải rollback.
-12. Không chạy `npm install -g omniroute` thủ công để bỏ qua luồng update an toàn.
-13. Không dùng `git stash` trong bất kỳ luồng OmniRoute nào.
+8. Nếu caller/SSH bị ngắt, lần `--update` sau phải resume đúng request/commit/run đã publish trên `deploy/integration` khi semantic identity khớp; không tạo build trùng chỉ vì timestamp hoặc nonce khác.
+9. Kênh update mặc định là `release`: ưu tiên nhánh `release/v*` cao nhất của upstream; chỉ dùng npm stable khi không có nhánh release hoặc khi đặt rõ `OMNIROUTE_UPDATE_CHANNEL=stable`. Tuyệt đối không hạ phiên bản source-release xuống npm stable cũ hơn.
+10. Khi có patch local, `--preflight` phải dry-run patch trên target đã pin; builder phải dùng đúng ordered snapshots, bỏ qua patch đã có upstream, apply patch còn lại và dừng nếu conflict.
+11. Source candidate chỉ build một lần trên GitHub-hosted `ubuntu-24.04`; workflow không chạy coverage và không dùng `npm pack`. Lane full-package phải production-prune, materialize workspace closure và validate native/runtime closure hoàn toàn trên hosted runner; Tiny không được chạy lifecycle/postinstall hay native rebuild. Tiny vẫn phải xác minh GitHub attestation, exact commit/ref/run, mode/type/policy, target/patch, package/lock, platform/ABI, dependency, production-tree, native/file/link indexes và mọi payload hash trước candidate smoke.
+12. `--update` phải backup package, data và config; package được đổi nguyên tử; health check lỗi hoặc tiến trình bị ngắt sau khi package thay đổi phải rollback.
+13. Không chạy `npm install -g omniroute` thủ công để bỏ qua luồng update an toàn.
+14. Không dùng `git stash` trong bất kỳ luồng OmniRoute nào.
 
 ## Luồng bản vá và PR
 
