@@ -237,7 +237,10 @@ assemble_full_package() {
 
   (
     cd "$PACKAGE_STAGE"
-    npm ci --omit=dev --ignore-scripts --no-audit --no-fund >&2
+    # The upstream lockfile is generated with legacy-peer-deps=true in .npmrc.
+    # Keep that resolver contract explicitly without copying repository npm config
+    # (registry/auth settings must never leak into the production payload).
+    npm ci --omit=dev --ignore-scripts --legacy-peer-deps --no-audit --no-fund >&2
   )
   materialize_workspace
   assemble_native_assets

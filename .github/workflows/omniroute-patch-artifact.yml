@@ -57,6 +57,9 @@ jobs:
           key: omniroute-next-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-${{ github.sha }}
           restore-keys: |
             omniroute-next-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-
+          # artifact-builder only publishes this directory after a successful
+          # Next.js build. Preserve it even if later packaging/attestation fails.
+          save-always: true
 
       - name: Validate and pack reviewed request
         shell: bash

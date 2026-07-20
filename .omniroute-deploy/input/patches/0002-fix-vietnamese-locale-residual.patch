@@ -8647,7 +8647,7 @@ index 7024cf1d4..7a8571e01 100644
            )}
          </>
 diff --git a/src/app/(dashboard)/dashboard/media-providers/[kind]/[id]/MediaProviderPageClient.tsx b/src/app/(dashboard)/dashboard/media-providers/[kind]/[id]/MediaProviderPageClient.tsx
-index c1eed94d7..4d8a6a565 100644
+index 125c631f9..f2430c68d 100644
 --- a/src/app/(dashboard)/dashboard/media-providers/[kind]/[id]/MediaProviderPageClient.tsx
 +++ b/src/app/(dashboard)/dashboard/media-providers/[kind]/[id]/MediaProviderPageClient.tsx
 @@ -36,7 +36,11 @@ interface MediaProviderPageClientProps {
@@ -8681,7 +8681,7 @@ index c1eed94d7..4d8a6a565 100644
          </div>
        );
      default:
-@@ -179,7 +177,7 @@ export default function MediaProviderPageClient({
+@@ -188,7 +186,7 @@ export default function MediaProviderPageClient({
                  <span className="text-sm font-medium flex-1 truncate">{conn.name ?? conn.id}</span>
                  {conn.isActive === false && (
                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-bg-subtle border border-border text-text-muted">
@@ -8690,7 +8690,7 @@ index c1eed94d7..4d8a6a565 100644
                    </span>
                  )}
                </div>
-@@ -189,7 +187,12 @@ export default function MediaProviderPageClient({
+@@ -198,7 +196,12 @@ export default function MediaProviderPageClient({
        </div>
  
        {/* Playground */}
@@ -9023,10 +9023,10 @@ index f5a675b03..4c2e0dab9 100644
            type="text"
            value={documentUrl}
 diff --git a/src/app/(dashboard)/dashboard/media-providers/components/SttExampleCard.tsx b/src/app/(dashboard)/dashboard/media-providers/components/SttExampleCard.tsx
-index f5569f3b2..eb6301914 100644
+index 949c7ded4..188af4b0e 100644
 --- a/src/app/(dashboard)/dashboard/media-providers/components/SttExampleCard.tsx
 +++ b/src/app/(dashboard)/dashboard/media-providers/components/SttExampleCard.tsx
-@@ -71,7 +71,7 @@ export function SttExampleCard({ providerId }: Props) {
+@@ -84,7 +84,7 @@ export function SttExampleCard({ providerId }: Props) {
      const selected = e.target.files?.[0] ?? null;
      setFileError(null);
      if (selected && selected.size > MAX_FILE_SIZE_BYTES) {
@@ -9035,7 +9035,7 @@ index f5569f3b2..eb6301914 100644
        setFile(null);
        return;
      }
-@@ -80,7 +80,7 @@ export function SttExampleCard({ providerId }: Props) {
+@@ -93,7 +93,7 @@ export function SttExampleCard({ providerId }: Props) {
  
    const handleRun = async () => {
      if (!file) {
@@ -9044,7 +9044,7 @@ index f5569f3b2..eb6301914 100644
        return;
      }
      setRunning(true);
-@@ -109,7 +109,7 @@ export function SttExampleCard({ providerId }: Props) {
+@@ -122,7 +122,7 @@ export function SttExampleCard({ providerId }: Props) {
          setResult({ data, latencyMs });
        }
      } catch (err) {
@@ -9053,7 +9053,7 @@ index f5569f3b2..eb6301914 100644
      } finally {
        setRunning(false);
      }
-@@ -119,7 +119,7 @@ export function SttExampleCard({ providerId }: Props) {
+@@ -132,7 +132,7 @@ export function SttExampleCard({ providerId }: Props) {
  
    return (
      <PlaygroundCard
@@ -9062,7 +9062,7 @@ index f5569f3b2..eb6301914 100644
        apiEndpoint={ENDPOINT_PATH}
        onRun={handleRun}
        curlSnippet={curlSnippet}
-@@ -153,7 +153,7 @@ export function SttExampleCard({ providerId }: Props) {
+@@ -166,7 +166,7 @@ export function SttExampleCard({ providerId }: Props) {
              className="inline-flex items-center gap-1.5 text-xs rounded-md border border-border bg-bg-subtle px-3 py-1.5 text-text-main hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
            >
              <span className="material-symbols-outlined text-[14px]">upload_file</span>
@@ -9071,7 +9071,7 @@ index f5569f3b2..eb6301914 100644
            </button>
            {file && (
              <span className="text-xs text-text-muted">{Math.round(file.size / 1024)}KB</span>
-@@ -167,7 +167,7 @@ export function SttExampleCard({ providerId }: Props) {
+@@ -180,7 +180,7 @@ export function SttExampleCard({ providerId }: Props) {
            onChange={handleFileChange}
          />
          {fileError && <p className="text-xs text-red-400 mt-1">{fileError}</p>}
@@ -16225,10 +16225,10 @@ index 9a4cdc78a..17a31288a 100644
                  </div>
                ))}
 diff --git a/src/app/(dashboard)/dashboard/tools/agent-bridge/AgentBridgePageClient.tsx b/src/app/(dashboard)/dashboard/tools/agent-bridge/AgentBridgePageClient.tsx
-index 99f520478..6d23fedfc 100644
+index 5c0d32e56..ab096e8c9 100644
 --- a/src/app/(dashboard)/dashboard/tools/agent-bridge/AgentBridgePageClient.tsx
 +++ b/src/app/(dashboard)/dashboard/tools/agent-bridge/AgentBridgePageClient.tsx
-@@ -68,6 +68,7 @@ export default function AgentBridgePageClient({
+@@ -74,6 +74,7 @@ export default function AgentBridgePageClient({
    hasProviders,
  }: AgentBridgePageClientProps) {
    const t = useTranslations("agentBridge");
@@ -16236,7 +16236,7 @@ index 99f520478..6d23fedfc 100644
    const { data, refresh } = useAgentBridgeState({ initialData });
    const [actionError, setActionError] = useState<string | null>(null);
    const [certGuide, setCertGuide] = useState<CertManualGuide | null>(null);
-@@ -100,45 +101,51 @@ export default function AgentBridgePageClient({
+@@ -106,45 +107,51 @@ export default function AgentBridgePageClient({
          }
          await refresh();
        } catch (err) {
@@ -16318,7 +16318,7 @@ index 99f520478..6d23fedfc 100644
  
    // ── DNS toggle ────────────────────────────────────────────────────────────
  
-@@ -154,10 +161,10 @@ export default function AgentBridgePageClient({
+@@ -160,10 +167,10 @@ export default function AgentBridgePageClient({
          if (!res.ok) throw new Error(`HTTP ${res.status}`);
          await refresh();
        } catch (err) {
@@ -16331,7 +16331,7 @@ index 99f520478..6d23fedfc 100644
    );
  
    // ── Mappings save ─────────────────────────────────────────────────────────
-@@ -174,10 +181,10 @@ export default function AgentBridgePageClient({
+@@ -180,10 +187,10 @@ export default function AgentBridgePageClient({
          if (!res.ok) throw new Error(`HTTP ${res.status}`);
          await refresh();
        } catch (err) {
@@ -16344,7 +16344,7 @@ index 99f520478..6d23fedfc 100644
    );
  
    // ── Render ────────────────────────────────────────────────────────────────
-@@ -199,7 +206,7 @@ export default function AgentBridgePageClient({
+@@ -205,7 +212,7 @@ export default function AgentBridgePageClient({
              type="button"
              onClick={() => setActionError(null)}
              className="ml-auto text-red-500 hover:text-red-400"
@@ -16353,7 +16353,7 @@ index 99f520478..6d23fedfc 100644
            >
              <span className="material-symbols-outlined text-[16px]">close</span>
            </button>
-@@ -214,13 +221,12 @@ export default function AgentBridgePageClient({
+@@ -220,13 +227,12 @@ export default function AgentBridgePageClient({
          >
            <div className="flex items-center gap-2 font-medium">
              <span className="material-symbols-outlined text-[16px]">info</span>
@@ -16369,7 +16369,7 @@ index 99f520478..6d23fedfc 100644
              >
                <span className="material-symbols-outlined text-[16px]">close</span>
              </button>
-@@ -238,7 +244,7 @@ export default function AgentBridgePageClient({
+@@ -244,7 +250,7 @@ export default function AgentBridgePageClient({
              className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium underline hover:no-underline"
            >
              <span className="material-symbols-outlined text-[14px]">download</span>
@@ -16378,7 +16378,7 @@ index 99f520478..6d23fedfc 100644
            </a>
          </div>
        )}
-@@ -278,7 +284,7 @@ export default function AgentBridgePageClient({
+@@ -287,7 +293,7 @@ export default function AgentBridgePageClient({
            {/* Quick links */}
            <div className="rounded-xl border border-border/40 bg-card px-5 py-4">
              <h3 className="text-xs font-semibold text-text-muted mb-2 uppercase tracking-wide">
@@ -16387,7 +16387,7 @@ index 99f520478..6d23fedfc 100644
              </h3>
              <div className="flex flex-wrap gap-3">
                <Link
-@@ -286,14 +292,14 @@ export default function AgentBridgePageClient({
+@@ -295,14 +301,14 @@ export default function AgentBridgePageClient({
                  className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
                >
                  <span className="material-symbols-outlined text-[14px]">dns</span>
@@ -18718,10 +18718,10 @@ index b5c911a0f..36cc6b3d7 100644
                            </div>
                          </div>
 diff --git a/src/app/(dashboard)/dashboard/usage/components/ProviderLimits/parts/QuotaCardExpanded.tsx b/src/app/(dashboard)/dashboard/usage/components/ProviderLimits/parts/QuotaCardExpanded.tsx
-index ae3885e03..82ea0cc54 100644
+index a51ea35c2..77fadc7f2 100644
 --- a/src/app/(dashboard)/dashboard/usage/components/ProviderLimits/parts/QuotaCardExpanded.tsx
 +++ b/src/app/(dashboard)/dashboard/usage/components/ProviderLimits/parts/QuotaCardExpanded.tsx
-@@ -154,7 +154,9 @@ function QuotaDetailRow({
+@@ -162,7 +162,9 @@ function QuotaDetailRow({
                paid
              </span>
            </span>
@@ -18732,7 +18732,7 @@ index ae3885e03..82ea0cc54 100644
          </span>
          <span
            className="inline-flex h-6 shrink-0 items-center text-[12px] font-bold leading-none tabular-nums"
-@@ -197,9 +199,11 @@ function QuotaDetailRow({
+@@ -221,9 +223,11 @@ function QuotaDetailRow({
            )}
          </span>
          {q.staleAfterReset ? (
@@ -18746,7 +18746,7 @@ index ae3885e03..82ea0cc54 100644
          ) : null}
        </div>
      </div>
-@@ -358,7 +362,7 @@ export default function QuotaCardExpanded({
+@@ -407,7 +411,7 @@ export default function QuotaCardExpanded({
              className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md border border-border bg-bg-subtle hover:bg-black/[0.04] dark:hover:bg-white/[0.04] cursor-pointer"
            >
              <span className="material-symbols-outlined text-[12px]">bar_chart</span>
@@ -18799,7 +18799,7 @@ index 27886bc7d..b5e048b6a 100644
          <NextIntlClientProvider locale={locale} messages={messages}>
            <PwaRegister />
 diff --git a/src/i18n/messages/en.json b/src/i18n/messages/en.json
-index f7cbe053d..28ec17c0e 100644
+index 4c76bf020..703c53a5a 100644
 --- a/src/i18n/messages/en.json
 +++ b/src/i18n/messages/en.json
 @@ -4,11 +4,19 @@
@@ -20743,7 +20743,7 @@ index f7cbe053d..28ec17c0e 100644
    },
    "usage": {
      "title": "Usage",
-@@ -6954,6 +8512,7 @@
+@@ -6958,6 +8516,7 @@
      "unlimitedLabel": "Unlimited",
      "refreshing": "Refreshing",
      "resetsIn": "Resets in",
@@ -20751,7 +20751,7 @@ index f7cbe053d..28ec17c0e 100644
      "editCutoffs": "Edit cutoffs",
      "forceRefresh": "Refresh now",
      "resetCreditsLabel": "Reset credits",
-@@ -7105,6 +8664,38 @@
+@@ -7109,6 +8668,38 @@
      "budgetKpiBlocked": "Blocked",
      "budgetKpiAtRisk": "At risk",
      "budgetKpiActiveKeys": "Active keys",
@@ -20790,7 +20790,7 @@ index f7cbe053d..28ec17c0e 100644
      "budgetSearchKeysPlaceholder": "Search keys...",
      "budgetSortPctUsed": "Sort: % Used ↓",
      "budgetSortTodayDollar": "Sort: Today $ ↓",
-@@ -7120,6 +8711,16 @@
+@@ -7124,6 +8715,16 @@
      "budgetThisMonthSoFar": "This month so far",
      "budgetProjectedEndOfMonth": "Projected end of month",
      "budgetByProvider": "by provider",
@@ -20807,7 +20807,7 @@ index f7cbe053d..28ec17c0e 100644
      "budgetDailyDollar": "Daily $",
      "budgetWeeklyDollar": "Weekly $",
      "budgetMonthlyDollar": "Monthly $",
-@@ -7754,7 +9355,21 @@
+@@ -7758,7 +9359,21 @@
      "statusCancelled": "Cancelled",
      "repositoryName": "Repository name",
      "repositoryUrl": "Repository URL",
@@ -20830,7 +20830,7 @@ index f7cbe053d..28ec17c0e 100644
    },
    "templateNames": {
      "simple-chat": "Simple Chat",
-@@ -8040,6 +9655,8 @@
+@@ -8044,6 +9659,8 @@
      "errorResetFailed": "Failed to reset pricing"
    },
    "proxyRegistry": {
@@ -20839,7 +20839,7 @@ index f7cbe053d..28ec17c0e 100644
      "title": "Proxy Registry",
      "description": "Store reusable proxies and track assignments.",
      "importLegacy": "Import Legacy",
-@@ -8199,14 +9816,17 @@
+@@ -8203,14 +9820,17 @@
      "endpointOptions": {
        "chat": "Chat completions",
        "responses": "Responses",
@@ -20858,7 +20858,7 @@ index f7cbe053d..28ec17c0e 100644
      },
      "conversationalChat": "Conversational Chat",
      "clearChat": "Clear chat",
-@@ -8245,6 +9865,11 @@
+@@ -8249,6 +9869,11 @@
      "improvingPrompt": "Improving…",
      "improvePromptTitle": "Improve your prompt with AI",
      "setModelFirst": "Set a model first",
@@ -20870,7 +20870,7 @@ index f7cbe053d..28ec17c0e 100644
      "improveQuotaWarning": "This will consume quota from the model configured in Config.",
      "improveConfirm": "Improve",
      "exportCode": "Export code",
-@@ -8266,21 +9891,82 @@
+@@ -8270,21 +9895,82 @@
      "cancelAll": "Cancel all",
      "maxColumnsReached": "Maximum {max} columns",
      "modelPlaceholderCompare": "Model (Cmd+K)…",
@@ -20953,7 +20953,7 @@ index f7cbe053d..28ec17c0e 100644
      "running": "Running…",
      "runLabel": "Run",
      "enterToolResult": "Enter tool result…",
-@@ -8337,10 +10023,42 @@
+@@ -8341,10 +10027,42 @@
      "duration": "Duration",
      "question": "Question",
      "audioFile": "Audio file",
@@ -20997,7 +20997,7 @@ index f7cbe053d..28ec17c0e 100644
    },
    "requestLogger": {
      "recording": "Recording",
-@@ -8535,6 +10253,7 @@
+@@ -8539,6 +10257,7 @@
      "moreSuffix": "+{count} more"
    },
    "quotaShare": {
@@ -21005,7 +21005,7 @@ index f7cbe053d..28ec17c0e 100644
      "title": "Quota Sharing",
      "description": "Share provider quotas across API keys with % limits",
      "newPool": "New pool",
-@@ -8557,6 +10276,9 @@
+@@ -8561,6 +10280,9 @@
      "capLabel": "cap {value}",
      "notTrackedYet": "(not tracked yet)",
      "policy": "Policy",
@@ -21015,7 +21015,7 @@ index f7cbe053d..28ec17c0e 100644
      "policyHard": "hard",
      "policySoft": "soft",
      "policyBurst": "burst",
-@@ -8761,6 +10483,12 @@
+@@ -8765,6 +10487,12 @@
      "filterQuota": "Quota",
      "filterAuth": "Auth",
      "filterSystem": "System",
@@ -21028,7 +21028,7 @@ index f7cbe053d..28ec17c0e 100644
      "relative": {
        "justNow": "just now",
        "minutesAgo": "{n} min ago",
-@@ -8909,6 +10637,7 @@
+@@ -8913,6 +10641,7 @@
      "quickLinks": "Quick links",
      "quickLinkProviders": "Configure providers",
      "quickLinkInspector": "View traffic in Traffic Inspector",
@@ -21036,7 +21036,7 @@ index f7cbe053d..28ec17c0e 100644
      "maintenanceTitle": "Maintenance & Diagnostics",
      "maintenanceSubtitle": "Self-test the capture pipeline, undo leftover system state, and move your setup between machines.",
      "orphanedStateWarning": "A previous session left system state behind (DNS spoof, CA, or system proxy). Run Repair to clean it up.",
-@@ -8946,6 +10675,67 @@
+@@ -8950,6 +10679,67 @@
        "title": "This page has moved"
      }
    },
@@ -21104,7 +21104,7 @@ index f7cbe053d..28ec17c0e 100644
    "trafficInspector": {
      "title": "Traffic Inspector",
      "subtitle": "Monitor LLM calls and debug any application's HTTPS traffic",
-@@ -9041,7 +10831,40 @@
+@@ -9045,7 +10835,40 @@
      "timingRequestSize": "Request size",
      "timingResponseSize": "Response size",
      "pausedNewBadge": "{count} new",
@@ -21146,7 +21146,7 @@ index f7cbe053d..28ec17c0e 100644
    },
    "cliCommon": {
      "concept": {
-@@ -9094,6 +10917,7 @@
+@@ -9098,6 +10921,7 @@
        "notConfigured": "Not configured",
        "configure": "Configure →",
        "howToInstall": "How to install →",
@@ -21154,7 +21154,7 @@ index f7cbe053d..28ec17c0e 100644
        "manualConfig": "Manual config",
        "installGuide": "Install guide",
        "endpointLabel": "Endpoint",
-@@ -9179,8 +11003,190 @@
+@@ -9183,8 +11007,190 @@
      "cliCodeRedirectCta": "Open CLI Code"
    },
    "agentSkills": {
@@ -21346,7 +21346,7 @@ index f7cbe053d..28ec17c0e 100644
      "conceptCard": {
        "agent": {
          "title": "Agent Skills — Outbound",
-@@ -9234,6 +11240,9 @@
+@@ -9238,6 +11244,9 @@
      "coverageLabel": "Coverage",
      "mcpUrl": "MCP URL",
      "a2aLink": "A2A",
@@ -21356,7 +21356,7 @@ index f7cbe053d..28ec17c0e 100644
      "copyUrl": "Copy URL",
      "viewOnGithub": "View on GitHub",
      "previewLoading": "Loading skill documentation…",
-@@ -9310,6 +11319,592 @@
+@@ -9314,6 +11323,592 @@
      "feasibility": "Feasibility",
      "models": "Models"
    },
@@ -21949,7 +21949,7 @@ index f7cbe053d..28ec17c0e 100644
    "reasoningRouting": {
      "title": "Reasoning routing policies",
      "apiKeyTitle": "Reasoning routing for this API key",
-@@ -9415,6 +12010,17 @@
+@@ -9419,6 +12014,17 @@
      "keyPermissionDesc": "Allow this API key to use Chaos Mode (multi-model parallel execution)",
      "testButton": "Test Chaos Mode",
      "testTask": "Write a short poem about artificial intelligence",
@@ -21969,7 +21969,7 @@ index f7cbe053d..28ec17c0e 100644
    }
  }
 diff --git a/src/i18n/messages/vi.json b/src/i18n/messages/vi.json
-index 3ea2b92f3..3df21fe9c 100644
+index 731dfc932..76c1dc12d 100644
 --- a/src/i18n/messages/vi.json
 +++ b/src/i18n/messages/vi.json
 @@ -4,11 +4,19 @@
@@ -24569,197 +24569,10 @@ index 3ea2b92f3..3df21fe9c 100644
      "addProviderWebTokenTitle": "Thêm token web {provider}",
      "addProviderConnectionTitle": "Thêm kết nối {provider}",
      "webTokenCredentialLabel": "Token phiên web",
-@@ -4777,209 +5925,24 @@
-     "webSessionCredentialValidationFailed": "Xác thực thông tin xác thực phiên thất bại. Hãy đăng nhập lại, sao chép thông tin xác thực mới và thử lại.",
-     "checkCookie": "Kiểm tra cookie",
-     "checkWebToken": "Kiểm tra token",
--    "filterAll": "Tất cả",
--    "filterActive": "Hoạt động",
--    "filterError": "Lỗi",
--    "filterBanned": "Bị cấm",
--    "filterCreditsExhausted": "Hết tín dụng",
--    "contextWindowOverrideLabel": "Ghi đè cửa sổ ngữ cảnh",
--    "contextWindowOverridePlaceholder": "Ví dụ: 131072",
--    "contextWindowOverrideHint": "Đặt thủ công cửa sổ ngữ cảnh thực tế của mô hình (token) khi nhà cung cấp báo sai. Giá trị này được ưu tiên hơn giá trị tự động phát hiện hoặc danh mục và ngăn định tuyến combo loại bỏ mô hình.",
--    "contextWindowOverrideInvalid": "Giá trị ghi đè cửa sổ ngữ cảnh phải là số token nguyên dương",
--    "visionCapableLabel": "Hỗ trợ thị giác",
--    "visionCapableHint": "Đánh dấu thủ công mô hình là có khả năng thị giác khi metadata khám phá của nhà cung cấp không báo phương thức đầu vào hình ảnh (thường gặp ở backend tự lưu trữ hoặc cục bộ).",
--    "kimiOfficialSupporterBadge": "Official Supporter",
--    "kimiOfficialSupporterTooltip": "Kimi (Moonshot AI) is an official OmniRoute launch partner",
--    "Account Deactivated": "Account Deactivated",
--    "importFromFile": "Import from file",
--    "importFromFileTitle": "Import providers from file",
--    "importFromFileDescription": "Upload a CSV or JSON file listing multiple providers (each row can be a different provider type). Review the parsed rows below and pick which ones to import.",
--    "importFromFileChoose": "Choose file",
--    "importFromFileSelectHint": "{count} of {total} selected",
--    "importFromFileColProvider": "Provider",
--    "importFromFileColName": "Name",
--    "importFromFileColBaseUrl": "Base URL",
--    "importFromFileErrorLine": "Row {line}: {reason}",
--    "importErrorMissingProvider": "missing provider",
--    "importErrorMissingName": "missing name",
--    "importErrorMissingApiKey": "missing API key",
--    "importErrorInvalidPriority": "invalid priority (must be 1-100)",
--    "importErrorMalformedRow": "malformed row",
--    "importErrorNotArray": "file must contain a JSON array",
--    "importFromFileImporting": "Importing…",
--    "importFromFileImport": "Import {count} providers",
--    "importFromFileResult": "Imported {success} providers ({failed} failed)",
--    "adaptaTutorial": {
--      "title": "How to connect Adapta Web",
--      "introPrefix": "Adapta authenticates through Clerk. The token",
--      "introSuffix": "is a long-lived JWT that lets OmniRoute refresh sessions automatically.",
--      "or": "or",
--      "step1Title": "Open Adapta chat",
--      "step1DescPrefix": "Open",
--      "step1DescSuffix": "and sign in with your Gold or Business account.",
--      "step2Title": "Open DevTools",
--      "step2DescPrefix": "Press",
--      "step2DescSuffix": "to open Developer Tools.",
--      "step3Title": "Go to Application → Cookies",
--      "step3DescPrefix": "In the",
--      "step3DescMiddle": "expand",
--      "step3DescSuffix": "and click",
--      "step4Title": "Copy the cookie value for",
--      "step4DescPrefix": "Find the cookie named",
--      "step4DescMiddle": "in the list. Click it and copy the content from the",
--      "step4DescSuffix": "column. It starts with",
--      "step5Title": "Paste it here and save",
--      "step5DescPrefix": "Click",
--      "step5DescMiddle": "paste the",
--      "step5DescSuffix": "value into the API Key field, then save. OmniRoute will refresh the session automatically.",
--      "tipLabel": "Tip:",
--      "tipPrefix": "The",
--      "tipSuffix": "cookie is long-lived, usually for months. You only need to renew it if you sign out or Adapta invalidates the session."
--    },
--    "distributeProxies": "Distribute Proxies",
--    "distributing": "Distributing...",
--    "selectedCount": "{count, plural, one {# selected} other {# selected}}",
--    "accountsCount": "{count, plural, one {# account} other {# accounts}}",
--    "testAllModels": "Test all models",
--    "testAllModelsConfirm": "Test all visible models? Failed models will be hidden if auto-hide is enabled.",
--    "testingAllModels": "Testing {done}/{total}...",
--    "testAllResults": "{ok} of {total} models working",
--    "noModelsToTest": "No models match the current filter",
--    "showAllModels": "All",
--    "showVisibleOnly": "Visible only",
--    "freeFilterAll": "All",
--    "freeFilterFreeOnly": "Free only",
--    "freeFilterPaidOnly": "Paid only",
--    "sortFreeFirst": "Free first",
--    "showHiddenOnly": "Hidden only",
--    "filterByVisibility": "Filter by visibility",
--    "autoHideFailed": "Auto-hide failed models",
--    "autoHideFailedHint": "When enabled, Test all hides non-transient failures from public catalogs such as /v1/models. Single-model tests never auto-hide.",
--    "testAllCompleted": "Tested {total} models: {ok} OK, {failed} failed",
--    "modelAutoHidden": "Model {model} auto-hidden (test failed)",
--    "filterVisible": "Visible only",
--    "filterHidden": "Hidden only",
--    "modelsHiddenCount": "{count} hidden",
--    "iconUrlLabel": "Icon URL",
--    "iconUrlHint": "Optional. Image URL shown as this provider's icon.",
--    "batchDeleteConfirmTitle": "Delete connections",
--    "batchDeleteConfirmButton": "Delete",
--    "noFilteredConnections": "No connections match the current filter.",
--    "setAliasSuccess": "Alias {alias} set",
--    "deleteAliasSuccess": "Alias {alias} deleted",
--    "noFreeModelsFound": "No free models found for this provider — nothing imported.",
--    "fetchModelsSuccess": "Found {count} new models",
--    "fetchModelsFailed": "Could not auto-fetch models (you can retry from settings)",
--    "testAllRateLimited": "Rate limit reached, stopped early",
--    "hideFailedAuto": "Auto-hide failed models",
--    "hideAllModels": "Hide all",
--    "providerQuotaShort": "Quota",
--    "hideConnectionFromProviderQuota": "Hide this account from Provider Quota",
--    "showConnectionInProviderQuota": "Show this account in Provider Quota",
--    "quotaVisibilityUpdateFailed": "Failed to update Provider Quota visibility",
--    "testAllProgress": "Tested {done}/{total}",
--    "testAllFailedHidden": "{count} failed models hidden",
--    "testAllDone": "All models tested",
--    "compatibleDefaultModelLabel": "Default Model",
--    "compatibleDefaultModelHint": "Enter the model ID exactly as your compatible endpoint expects it. This model will be saved as the connection default.",
--    "errorTypeCreditsExhausted": "No credits",
--    "errorTypeBanned": "403 Banned",
--    "proxyOn": "Proxy On",
--    "proxyOff": "Direct (bypass proxy)",
--    "proxyEnabledTitle": "Proxy is enabled for this connection",
--    "proxyDisabledTitle": "Direct connection — bypasses every proxy (including the global proxy) for this connection",
--    "perKeyProxyOn": "Per-key",
--    "perKeyProxyOff": "Connection",
--    "perKeyProxyEnabledTitle": "Per-key proxy assignment enabled for this provider",
--    "perKeyProxyDisabledTitle": "Per-key proxy assignment disabled for this provider",
--    "targetFormatLabel": "Target Format",
--    "targetFormatHint": "Override the upstream wire format. Use 'Anthropic Messages' to route OpenAI-compatible providers (e.g. opencode-go) through the /v1/messages endpoint.",
--    "targetFormatAuto": "Default (auto)",
--    "targetFormatGemini": "Gemini",
--    "targetFormatAntigravity": "Antigravity",
--    "compatParamFiltersLabel": "Param Filters",
--    "compatBlockedParamsHint": "Blocked params (stripped from requests)",
--    "compatAllowedParamsHint": "Allowed params (re-added after deny)",
--    "paramFiltersSectionTitle": "Param Filters",
--    "paramFiltersSectionHint": "Strip or re-add request parameters before sending to this provider. Used to avoid 400 errors from providers that reject certain params (e.g. NVIDIA NIM rejects <code>thinking</code>).",
--    "paramFiltersBlockedLabel": "Blocked parameters",
--    "paramFiltersBlockedHint": "These params are stripped from outgoing requests (denylist).",
--    "paramFiltersAllowedLabel": "Allowed parameters",
--    "paramFiltersAllowedHint": "These params are re-added after denylist stripping (only if the client sent them).",
--    "paramFiltersAutoLearnLabel": "Auto-learn from 400 errors",
--    "paramFiltersAutoLearnHint": "When enabled, if the upstream returns a 400 with \"Unsupported parameter: X\", the param is automatically added to the block list and the request retried.",
--    "paramFiltersSaving": "Saving…",
--    "paramFiltersSaveChanges": "Save Changes",
--    "paramFiltersResetToDefault": "Reset to Default",
--    "paramFiltersLoadError": "Failed to load param filter config: {error}",
--    "paramFiltersSaveSuccess": "Param filter config saved",
--    "paramFiltersSaveError": "Failed to save param filter config: {error}",
--    "paramFiltersResetSuccess": "Param filter config reset to defaults",
--    "paramFiltersResetError": "Failed to reset param filter config: {error}",
--    "interceptionSectionTitle": "Web Tool Interception",
--    "interceptionSectionHint": "Route this provider's native web_search / web_fetch tool calls through OmniRoute's own search and fetch endpoints instead of letting the provider run them natively. Off by default — existing behavior is unchanged.",
--    "interceptSearchLabel": "Intercept web_search",
--    "interceptSearchHint": "Rewrite native web_search tool calls to OmniRoute's /v1/search.",
--    "interceptFetchLabel": "Intercept web_fetch",
--    "interceptFetchHint": "Rewrite native web_fetch tool calls to OmniRoute's /v1/web/fetch.",
--    "interceptionLoadError": "Failed to load interception settings: {error}",
--    "interceptionSaveError": "Failed to save interception settings: {error}",
--    "importFreeModelsOnlyLabel": "Import only free models",
--    "importFreeModelsOnlyHint": "When enabled, only this provider's free models are imported. Paid models are skipped.",
--    "testModelIdLabel": "Model ID (optional)",
--    "testModelIdPlaceholder": "e.g. my-model-id",
--    "testModelIdHint": "If the provider lacks a /models endpoint, enter a model ID to validate via /chat/completions instead.",
--    "codexCliGuideButton": "Codex CLI Guide",
--    "codexCliGuideTitle": "Codex CLI Guide",
--    "codexCliGuideLoading": "Loading guide...",
--    "codexCliGuideLoadFailed": "Could not load the guide.",
--    "codexExternalLinkButton": "External Codex link",
--    "codexExternalLinkModalTitle": "External Codex link",
--    "codexExternalLinkModalDescription": "Share this single-use link with the person who will authenticate the Codex account. They open it in their own browser, complete the OpenAI login, and the connection is registered here. The link expires in 15 minutes.",
--    "codexExternalLinkGenerating": "Generating link...",
--    "codexExternalLinkWaiting": "Waiting for browser authentication. This window refreshes automatically.",
--    "codexExternalLinkCreateFailed": "Failed to generate the link.",
--    "codexExternalLinkNetworkError": "Could not contact the server.",
--    "codexExternalLinkConnected": "Codex account connected through the external link.",
--    "codexExternalLinkExpired": "The link expired before completion.",
--    "clientIdentityLabel": "Client Identity",
--    "clientIdentityHint": "Optional. Adds client fingerprint headers (e.g. User-Agent) matching a known CLI for compatible gateways that expect one.",
--    "disableCoolingDescription": "Skip the transient cooldown so this connection stays eligible even after recoverable errors (terminal states like banned/expired still apply).",
--    "disableCoolingLabel": "Disable cooldown for this connection",
--    "m365TierLabel": "Copilot tier",
--    "m365TierHint": "Choose which Microsoft 365 Copilot surface this connection uses. Individual is the default consumer BizChat; Education and Enterprise (work) opt into their tenant surfaces.",
--    "m365TierIndividualOption": "Individual (default)",
--    "m365TierEduOption": "Education",
--    "m365TierEnterpriseOption": "Enterprise / Work",
--    "rateLimitOverridesSection": "Rate Limit Overrides",
--    "rateLimitOverridesMaxConcurrentHint": "Max concurrent requests override for this connection. Overrides the account-level cap.",
--    "rateLimitOverridesMaxConcurrentLabel": "Max Concurrent (Rate Limit)",
--    "rateLimitOverridesMinTimeHint": "Minimum time (ms) between requests. Overrides the default rate limiter delay.",
--    "rateLimitOverridesMinTimeLabel": "Min Interval (ms)",
--    "rateLimitOverridesRpmHint": "Max requests per minute for this connection. Overrides the provider default.",
--    "rateLimitOverridesRpmLabel": "RPM (Requests/min)",
--    "rateLimitOverridesTpdHint": "Max tokens per day for this connection. Overrides the provider default.",
--    "rateLimitOverridesTpdLabel": "TPD (Tokens/day)",
--    "rateLimitOverridesTpmHint": "Max tokens per minute for this connection. Overrides the provider default.",
--    "rateLimitOverridesTpmLabel": "TPM (Tokens/min)",
--    "searchByModel": "Search by model…",
--    "openWebProviderSite": "Open {host}",
+@@ -4970,22 +6118,24 @@
+     "rateLimitOverridesTpmLabel": "TPM (Tokens/min)",
+     "searchByModel": "Search by model…",
+     "openWebProviderSite": "Open {host}",
 -    "huggingchatLabel": "HuggingChat (Free)",
 -    "huggingchatDesc": "Free LLM chat via huggingface.co/chat",
 +    "huggingchatLabel": "HuggingChat (Miễn phí)",
@@ -24792,7 +24605,7 @@ index 3ea2b92f3..3df21fe9c 100644
    },
    "settings": {
      "title": "Cài đặt",
-@@ -4989,6 +5952,10 @@
+@@ -4995,6 +6145,10 @@
      "routing": "Định tuyến",
      "cache": "Cache",
      "resilience": "Khả năng phục hồi",
@@ -24803,7 +24616,7 @@ index 3ea2b92f3..3df21fe9c 100644
      "routingSettingsIntro": "Kiểm soát cách các yêu cầu của bạn được định tuyến, chuyển đổi và gửi đến các nhà cung cấp AI.",
      "routingOpDropParagraphContainsLabel": "Loại bỏ đoạn văn (chứa)",
      "routingOpDropParagraphStartsWithLabel": "Loại bỏ đoạn văn (bắt đầu bằng)",
-@@ -5085,6 +6052,7 @@
+@@ -5091,6 +6245,7 @@
      "memoryDesc": "Bộ nhớ hội thoại liên tục qua các phiên",
      "memoryEnabled": "Bật bộ nhớ",
      "memoryEnabledDesc": "Khi được bật, OmniRoute sẽ chèn ngữ cảnh trước đây có liên quan.",
@@ -24811,7 +24624,7 @@ index 3ea2b92f3..3df21fe9c 100644
      "maxTokens": "Token tối đa",
      "retentionDays": "Thời gian lưu trữ",
      "recent": "Gần đây",
-@@ -5123,6 +6091,31 @@
+@@ -5129,6 +6284,31 @@
      "modelsDevInfoOrder": "Ghi đè của người dùng → models.dev → LiteLLM → Mặc định mã hóa cứng",
      "systemTheme": "Chủ đề hệ thống",
      "debugToggle": "Bật chế độ gỡ lỗi",
@@ -24843,7 +24656,7 @@ index 3ea2b92f3..3df21fe9c 100644
      "sidebarVisibilityToggle": "Hiển thị các mục trên thanh bên",
      "enableCache": "Bật cache",
      "cacheTTL": "Cache TTL",
-@@ -5156,11 +6149,17 @@
+@@ -5162,11 +6342,17 @@
      "autoDisableDescription": "Đánh dấu vĩnh viễn các kết nối nhà cung cấp là đã vô hiệu hóa nếu chúng trả về các tín hiệu cấm không thể khắc phục cụ thể (ví dụ: HTTP 403 'verify your account'). Điều này sẽ loại bỏ chúng khỏi vòng xoay combo.",
      "autoDisableThreshold": "Ngưỡng cấm",
      "autoDisableThresholdDesc": "Số lượng tín hiệu cấm liên tiếp cần thiết trước khi hủy kích hoạt vĩnh viễn.",
@@ -24861,7 +24674,7 @@ index 3ea2b92f3..3df21fe9c 100644
      "proxyUrl": "Proxy URL",
      "pricingRates": "Định dạng mức giá",
      "currentPricing": "Tổng quan về giá hiện tại",
-@@ -5231,6 +6230,13 @@
+@@ -5237,6 +6423,13 @@
      "uploadFavicon": "Tải lên favicon",
      "resetFavicon": "Đặt lại favicon",
      "faviconPreview": "Xem trước favicon",
@@ -24875,7 +24688,7 @@ index 3ea2b92f3..3df21fe9c 100644
      "flushCache": "Xóa cache",
      "flushing": "Đang xóa cache…",
      "size": "Kích thước",
-@@ -5240,6 +6246,13 @@
+@@ -5246,6 +6439,13 @@
      "globalProxy": "Proxy toàn cầu",
      "globalProxyDesc": "Định cấu hình proxy gửi đi toàn cầu cho tất cả các lệnh gọi API. Các nhà cung cấp, tổ hợp và khóa riêng lẻ có thể ghi đè cài đặt này.",
      "noGlobalProxy": "Chưa định cấu hình proxy toàn cầu",
@@ -24889,7 +24702,7 @@ index 3ea2b92f3..3df21fe9c 100644
      "bulkHealthcheck": "Kiểm tra tình trạng hàng loạt",
      "bulkHealthcheckDesc": "Kiểm tra tất cả proxy đã cấu hình với một URL đích để xác định proxy nào hoạt động.",
      "healthcheckTesting": "Đang kiểm tra...",
-@@ -5252,6 +6265,64 @@
+@@ -5258,6 +6458,64 @@
      "healthcheckStatus": "Trạng thái",
      "healthcheckProxyUrl": "URL proxy",
      "healthcheckLatency": "Độ trễ",
@@ -24954,7 +24767,7 @@ index 3ea2b92f3..3df21fe9c 100644
      "globalLabel": "Toàn cục",
      "configure": "Cấu hình",
      "globalSystemPrompt": "Prompt hệ thống toàn cục",
-@@ -5348,6 +6419,22 @@
+@@ -5354,6 +6612,22 @@
      "strictRandomDesc": "Trộn bộ bài — sử dụng mỗi tài khoản một lần trước khi trộn lại",
      "stickyLimit": "Sticky Limit",
      "stickyLimitDesc": "Số cuộc gọi trên mỗi tài khoản trước khi chuyển sang tài khoản khác khi cơ chế dự phòng tài khoản toàn cầu sử dụng luân phiên",
@@ -24977,7 +24790,7 @@ index 3ea2b92f3..3df21fe9c 100644
      "modelAliases": "Bí danh mô hình",
      "modelAliasesTitle": "Bí danh mô hình",
      "modelAliasesDesc": "Ánh xạ lại tên mô hình bằng cách khớp chính xác hoặc mẫu ký tự đại diện.",
-@@ -5430,6 +6517,10 @@
+@@ -5436,6 +6710,10 @@
      "comboDefaultsGuideHint1": "Giữ số lần thử lại ở mức thấp trong các luồng có độ trễ thấp; chỉ tăng thời gian chờ cho các tác vụ tạo nội dung dài.",
      "comboDefaultsGuideHint2": "Sử dụng ghi đè nhà cung cấp khi một nhà cung cấp cần hành vi hết thời gian chờ/thử lại khác với mặc định chung.",
      "globalComboConfig": "Cấu hình tổ hợp toàn cục",
@@ -24988,7 +24801,7 @@ index 3ea2b92f3..3df21fe9c 100644
      "defaultStrategy": "Chiến lược mặc định",
      "defaultStrategyDesc": "Áp dụng cho các tổ hợp mới chưa được chỉ định chiến lược và đồng bộ với định tuyến dự phòng toàn cục của tài khoản",
      "comboStrategyAria": "Chiến lược tổ hợp",
-@@ -5449,6 +6540,9 @@
+@@ -5455,6 +6733,9 @@
      "providerMaxRetriesAria": "Số lần thử lại tối đa của {provider}",
      "providerTimeoutAria": "Thời gian chờ của {provider} (ms)",
      "removeProviderOverrideAria": "Xóa ghi đè của {provider}",
@@ -24998,7 +24811,7 @@ index 3ea2b92f3..3df21fe9c 100644
      "newProviderNamePlaceholder": "ví dụ: google, openai...",
      "newProviderNameAria": "Tên nhà cung cấp mới",
      "retries": "lần thử lại",
-@@ -5457,6 +6551,7 @@
+@@ -5463,6 +6744,7 @@
      "maxNestingDepth": "Độ sâu lồng nhau tối đa",
      "concurrencyPerModel": "Đồng thời trên mỗi mô hình",
      "queueTimeout": "Thời gian chờ hàng đợi (ms)",
@@ -25006,7 +24819,7 @@ index 3ea2b92f3..3df21fe9c 100644
      "contextRelayHandoffThreshold": "Ngưỡng chuyển giao",
      "contextRelayMaxMessages": "Số lượng tin nhắn tối đa để tóm tắt",
      "contextRelaySummaryModel": "Mô hình tóm tắt",
-@@ -5508,6 +6603,7 @@
+@@ -5514,6 +6796,7 @@
      "systemStorage": "Lưu trữ",
      "allDataLocal": "Tất cả dữ liệu được lưu trữ cục bộ trên máy của bạn",
      "databasePath": "Đường dẫn cơ sở dữ liệu",
@@ -25014,7 +24827,7 @@ index 3ea2b92f3..3df21fe9c 100644
      "exportDatabase": "Xuất cơ sở dữ liệu",
      "exportAll": "Xuất tất cả (.tar.gz)",
      "importDatabase": "Nhập cơ sở dữ liệu",
-@@ -5550,6 +6646,34 @@
+@@ -5556,6 +6839,34 @@
      "errorDuringImport": "Đã xảy ra lỗi trong quá trình nhập",
      "modelPricing": "Giá mô hình",
      "modelPricingDesc": "Định cấu hình mức chi phí cho mỗi mô hình • Tất cả mức giá tính theo $/1M token",
@@ -25049,7 +24862,7 @@ index 3ea2b92f3..3df21fe9c 100644
      "registry": "Danh mục",
      "priced": "Đã định giá",
      "searchProvidersModels": "Tìm kiếm nhà cung cấp hoặc mô hình...",
-@@ -5595,6 +6719,12 @@
+@@ -5601,6 +6912,12 @@
      "adaptiveVolumeRoutingDesc": "Tự động điều chỉnh số lượng kết nối dựa trên khối lượng dữ liệu tải và áp lực thông lượng.",
      "lkgpToggleTitle": "Nhà cung cấp hoạt động tốt gần đây nhất (LKGP)",
      "lkgpToggleDesc": "Khi được bật, bộ định tuyến sẽ ghi nhớ nhà cung cấp nào đã phản hồi thành công gần nhất và thử nhà cung cấp đó trước tiên trong các yêu cầu tiếp theo.",
@@ -25062,7 +24875,7 @@ index 3ea2b92f3..3df21fe9c 100644
      "clearLkgpCache": "Xóa cache LKGP",
      "lkgpCacheCleared": "Đã xóa cache LKGP thành công",
      "lkgpCacheClearFailed": "Không thể xóa cache LKGP",
-@@ -5604,6 +6734,22 @@
+@@ -5610,6 +6927,22 @@
      "maintenance": "Bảo trì",
      "purgeExpiredLogs": "Dọn sạch log đã hết hạn",
      "purgeLogsFailed": "Không thể dọn sạch log",
@@ -25085,7 +24898,7 @@ index 3ea2b92f3..3df21fe9c 100644
      "contextOpt": "Tối ưu hóa ngữ cảnh",
      "contextOptDesc": "Định tuyến dựa trên yêu cầu cửa sổ ngữ cảnh và độ dài hội thoại",
      "priorityDesc": "Dự phòng tuần tự - thử nhà cung cấp 1 trước, sau đó là nhà cung cấp 2, v.v.",
-@@ -5659,6 +6805,21 @@
+@@ -5665,6 +6998,21 @@
      "clearSyncedPricing": "Xóa giá đã đồng bộ hóa",
      "compressionTitle": "Nén prompt",
      "compressionDesc": "Giảm mức sử dụng token bằng cách nén các prompt trước khi gửi đến các nhà cung cấp",
@@ -25107,7 +24920,7 @@ index 3ea2b92f3..3df21fe9c 100644
      "compressionMode": "Chế độ nén",
      "compressionModeOff": "Tắt",
      "compressionModeOffDesc": "Không áp dụng nén",
-@@ -5678,6 +6839,11 @@
+@@ -5684,6 +7032,11 @@
      "compressionUltraMinScore": "Ngưỡng điểm tối thiểu",
      "compressionUltraSlmFallback": "Dự phòng sang Mạnh",
      "compressionUltraModelPath": "Đường dẫn mô hình SLM",
@@ -25119,7 +24932,7 @@ index 3ea2b92f3..3df21fe9c 100644
      "compressionSummarizerEnabled": "Bật trình tóm tắt",
      "compressionMaxTokensPerMessage": "Token tối đa cho mỗi tin nhắn",
      "compressionMinSavings": "Ngưỡng tiết kiệm tối thiểu",
-@@ -5689,8 +6855,14 @@
+@@ -5695,8 +7048,14 @@
      "compressionAutoTrigger": "Ngưỡng tự động kích hoạt",
      "compressionCacheTTL": "Cache TTL",
      "compressionPreserveSystem": "Giữ lại prompt hệ thống",
@@ -25134,7 +24947,7 @@ index 3ea2b92f3..3df21fe9c 100644
      "compressionRoles": "Nén vai trò tin nhắn",
      "compressionRoleUser": "Người dùng",
      "compressionRoleAssistant": "Trợ lý",
-@@ -5865,17 +7037,81 @@
+@@ -5871,17 +7230,81 @@
      "resilienceNo": "Không",
      "resilienceDefault": "Mặc định",
      "storageDatabaseBackupRetention": "Thời gian lưu trữ bản sao lưu cơ sở dữ liệu",
@@ -25216,7 +25029,7 @@ index 3ea2b92f3..3df21fe9c 100644
      "storageDatabaseSize": "Kích thước cơ sở dữ liệu",
      "storagePageCount": "Số lượng trang",
      "storageFreelistCount": "Số trang trống",
-@@ -5885,12 +7121,107 @@
+@@ -5891,12 +7314,107 @@
      "storageIntegrityOk": "✓ OK",
      "storageIntegrityError": "✗ Lỗi",
      "storageUsageTokenBuffer": "Bộ đệm token cho mức sử dụng",
@@ -25324,7 +25137,7 @@ index 3ea2b92f3..3df21fe9c 100644
      "resilienceWaitForCooldown": "Chờ thời gian hồi",
      "resilienceEnableServerSideWait": "Bật tính năng chờ phía máy chủ",
      "resilienceMaximumRetries": "Số lần thử lại tối đa",
-@@ -5904,6 +7235,9 @@
+@@ -5910,6 +7428,9 @@
      "cliproxyapiUrl": "URL CLIProxyAPI",
      "cliproxyapiStatus": "Trạng thái CLIProxyAPI",
      "cliproxyapiNotDetected": "Không phát hiện thấy",
@@ -25334,7 +25147,7 @@ index 3ea2b92f3..3df21fe9c 100644
      "payloadRulesTitle": "Quy tắc payload",
      "payloadRulesDesc": "Cấu hình việc biến đổi payload yêu cầu theo mô hình và giao thức. Các thay đổi được lưu trong cài đặt và được tải lại nóng vào môi trường chạy ngay sau khi lưu.",
      "payloadRuleDefaultTitle": "default",
-@@ -5936,10 +7270,32 @@
+@@ -5942,10 +7463,32 @@
      "maxResponseTokensDesc": "Tổng số token tối đa được phép trong một phản hồi đơn lẻ.",
      "modelCooldownsTitle": "Các mô hình đang trong thời gian chờ",
      "modelCooldownsEmpty": "Hiện không có mô hình nào đang trong thời gian chờ.",
@@ -25367,7 +25180,7 @@ index 3ea2b92f3..3df21fe9c 100644
      "codexFastTierTierLabel": "Cấp dịch vụ",
      "codexFastTierTierPriority": "Ưu tiên (Priority)",
      "codexFastTierTierFlex": "Linh hoạt (Flex)",
-@@ -5954,6 +7310,12 @@
+@@ -5960,6 +7503,12 @@
      "claudeFastModeModelCheckbox": "Bật Fast Mode cho {model}",
      "claudeFastModeSaveError": "Không thể cập nhật cài đặt Claude Fast Mode",
      "authz": {
@@ -25380,7 +25193,7 @@ index 3ea2b92f3..3df21fe9c 100644
        "title": "Danh mục ủy quyền",
        "description": "Phân loại định tuyến theo 5 cấp với chính sách bỏ qua đang áp dụng. Chế độ đọc hiển thị toàn bộ hệ thống phân loại; các thay đổi sẽ yêu cầu nhập lại mật khẩu quản lý.",
        "loading": "Đang tải danh mục…",
-@@ -6006,12 +7368,6 @@
+@@ -6012,12 +7561,6 @@
          "INSUFFICIENT_SCOPE": "Khóa API không có phạm vi quản lý.",
          "BYPASS_PREFIX_NOT_ALLOWED": "Một hoặc nhiều tiền tố nhắm đến các tuyến có khả năng tạo tiến trình và không thể bỏ qua.",
          "GENERIC": "Không thể cập nhật cài đặt phân quyền."
@@ -25393,7 +25206,7 @@ index 3ea2b92f3..3df21fe9c 100644
        }
      },
      "resilienceBaseCooldownLabel": "Thời gian hồi cơ bản",
-@@ -6048,8 +7404,28 @@
+@@ -6054,8 +7597,28 @@
      "resilienceEnableServerWaitDesc": "Khi được bật, OmniRoute sẽ đợi thời gian chờ đầu tiên kết thúc và tự động thử lại.",
      "resilienceMaxAttempts": "Số lần thử tối đa",
      "resilienceMaxWaitPerAttempt": "Thời gian chờ tối đa cho mỗi lần thử",
@@ -25422,7 +25235,7 @@ index 3ea2b92f3..3df21fe9c 100644
      "resetAwareQuotaCacheTitle": "Bộ nhớ đệm hạn ngạch theo thời điểm đặt lại",
      "resetAwareQuotaCacheDesc": "Chỉ lưu vào bộ nhớ đệm dữ liệu đo từ xa về hạn ngạch để sắp xếp theo thời điểm đặt lại. Việc kiểm tra trước hạn ngạch vẫn bảo vệ các yêu cầu. 0/0 sẽ tiếp tục tìm nạp theo thời gian thực.",
      "resetAwareQuotaCacheTtl": "Thời gian dữ liệu được coi là mới (giây)",
-@@ -6066,275 +7442,58 @@
+@@ -6072,275 +7635,58 @@
      "vercelRelayFreeTierNote": "Relay là các endpoint proxy gọn nhẹ được triển khai trên gói miễn phí của Vercel để vượt qua các hạn chế về mạng hoặc khu vực cục bộ.",
      "vercelRelayDeploying": "Đang triển khai...",
      "vercelRelayDeploy": "Triển khai",
@@ -25750,7 +25563,7 @@ index 3ea2b92f3..3df21fe9c 100644
      "credentialRedaction": "Credential Redaction",
      "credentialRedactionDesc": "Redact API keys, tokens, and secrets from context sent to providers and from responses.",
      "enableCredentialRedaction": "Enable credential redaction",
-@@ -6390,39 +7549,184 @@
+@@ -6396,39 +7742,184 @@
      "tooltipDedup": "Mức độ triệt để khi loại bỏ các dòng lặp lại.",
      "tooltipMaxChars": "Số ký tự tối đa trên mỗi khối đầu ra.",
      "tooltipMaxLines": "Số dòng tối đa cần giữ lại từ đầu ra của lệnh. Phần thừa sẽ bị cắt bớt.",
@@ -25968,7 +25781,7 @@ index 3ea2b92f3..3df21fe9c 100644
    },
    "contextCombos": {
      "title": "Tổ hợp nén",
-@@ -6444,7 +7748,244 @@
+@@ -6450,7 +7941,244 @@
      "setAsDefault": "Đặt làm mặc định",
      "save": "Lưu",
      "cancel": "Hủy",
@@ -26214,7 +26027,7 @@ index 3ea2b92f3..3df21fe9c 100644
    },
    "contextCaveman": {
      "title": "Công cụ Caveman",
-@@ -6471,6 +8012,7 @@
+@@ -6477,6 +8205,7 @@
      "inputCompressionDesc": "Viết lại lịch sử trò chuyện với từ ngữ ngắn gọn hơn. Giảm khoảng 50% lượng token đầu vào.",
      "analyticsTitle": "Phân tích nén",
      "noAnalytics": "Chưa có phân tích nén nào.",
@@ -26222,7 +26035,7 @@ index 3ea2b92f3..3df21fe9c 100644
      "outputMode": "Chế độ đầu ra",
      "outputModeDesc": "Kiểm soát cách hiển thị của đầu ra đã nén",
      "outputModeTitle": "Chế độ đầu ra",
-@@ -6648,6 +8190,14 @@
+@@ -6654,6 +8383,14 @@
      "translationFailed": "Không thể dịch: {error}",
      "pipelineDebugger": "Trình gỡ lỗi quy trình",
      "translationPipeline": "Quy trình dịch thuật",
@@ -26237,7 +26050,7 @@ index 3ea2b92f3..3df21fe9c 100644
      "pipelineVisualization": "Trực quan hóa quy trình",
      "pipelineVisualizationHint": "Gửi tin nhắn để xem yêu cầu của bạn đi qua quá trình phát hiện → dịch thuật → gọi nhà cung cấp như thế nào.",
      "chatTesterDescription": "Gửi tin nhắn theo một định dạng ứng dụng khách cụ thể và kiểm tra từng bước của quy trình dịch thuật.",
-@@ -6713,79 +8263,87 @@
+@@ -6719,79 +8456,87 @@
      "scenarioVision": "Vision (hiểu hình ảnh)",
      "scenarioSchemaCoercion": "Ép kiểu lược đồ (đầu ra có cấu trúc)",
      "techniques": "Kỹ thuật:",
@@ -26394,7 +26207,7 @@ index 3ea2b92f3..3df21fe9c 100644
    },
    "usage": {
      "title": "Mức sử dụng",
-@@ -6930,6 +8488,8 @@
+@@ -6936,6 +8681,8 @@
      "autoRefresh": "Tự động làm mới",
      "refreshAll": "Làm mới tất cả",
      "loadingQuotas": "Đang tải...",
@@ -26403,7 +26216,7 @@ index 3ea2b92f3..3df21fe9c 100644
      "account": "Tài khoản",
      "modelQuotas": "Hạn ngạch mô hình",
      "lastUsed": "Lần làm mới cuối",
-@@ -6942,6 +8502,8 @@
+@@ -6948,6 +8695,8 @@
      "notApplicable": "N/A",
      "rawPlanWithValue": "Gói gốc: {plan}",
      "noPlanFromProvider": "Không có gói dịch vụ từ nhà cung cấp",
@@ -26412,7 +26225,7 @@ index 3ea2b92f3..3df21fe9c 100644
      "noQuotaData": "Không có dữ liệu hạn ngạch",
      "cardExpand": "Mở rộng",
      "cardCollapse": "Thu gọn",
-@@ -6976,8 +8538,28 @@
+@@ -6982,8 +8731,28 @@
      "unlimitedLabel": "Không giới hạn",
      "refreshing": "Đang làm mới",
      "resetsIn": "Đặt lại sau",
@@ -26441,7 +26254,7 @@ index 3ea2b92f3..3df21fe9c 100644
      "suiteBuilderSaveFailed": "Không thể lưu bộ đánh giá",
      "clone": "Nhân bản",
      "exportSuite": "Xuất",
-@@ -7091,6 +8673,11 @@
+@@ -7097,6 +8866,11 @@
      "quotaCutoffsButtonDefault": "Mặc định",
      "quotaCutoffsButtonHelp": "Chỉnh sửa các giới hạn hạn ngạch còn lại tối thiểu cho tài khoản này.",
      "quotaCutoffsButtonDisabled": "Chưa có khoảng thời gian hạn ngạch nào khả dụng cho tài khoản này.",
@@ -26453,7 +26266,7 @@ index 3ea2b92f3..3df21fe9c 100644
      "quotaCutoffsTitle": "Giới hạn hạn ngạch cho {name} ({provider})",
      "quotaCutoffsExplainer": "Ghi đè phần trăm hạn ngạch còn lại tối thiểu mà tại đó tài khoản này ngừng được chọn cho mỗi khoảng thời gian hạn ngạch. Để trống để kế thừa mặc định của nhà cung cấp.",
      "quotaCutoffsDefaultHint": "Hạn ngạch còn lại tối thiểu mặc định: {default}%",
-@@ -7103,6 +8690,38 @@
+@@ -7109,6 +8883,38 @@
      "budgetKpiBlocked": "Bị chặn",
      "budgetKpiAtRisk": "Có rủi ro",
      "budgetKpiActiveKeys": "Khóa hoạt động",
@@ -26492,7 +26305,7 @@ index 3ea2b92f3..3df21fe9c 100644
      "budgetSearchKeysPlaceholder": "Tìm kiếm khóa...",
      "budgetSortPctUsed": "Sắp xếp: % đã dùng ↓",
      "budgetSortTodayDollar": "Sắp xếp: $ hôm nay ↓",
-@@ -7111,12 +8730,23 @@
+@@ -7117,12 +8923,23 @@
      "budgetColDailyLim": "Hạn mức hằng ngày",
      "budgetColMonthlyLim": "Hạn mức hằng tháng",
      "budgetColUsedPct": "% đã dùng",
@@ -26516,45 +26329,7 @@ index 3ea2b92f3..3df21fe9c 100644
      "budgetDailyDollar": "$ hằng ngày",
      "budgetWeeklyDollar": "$ hằng tuần",
      "budgetMonthlyDollar": "$ hằng tháng",
-@@ -7127,36 +8757,7 @@
-     "updatedShort": "Đã cập nhật",
-     "lastRefreshed": "Cập nhật lần cuối",
-     "providerQuota": "Hạn ngạch nhà cung cấp",
--    "providerQuotaHomeHint": "Trạng thái theo thời gian thực của các tài khoản đã kết nối",
--    "showMoreQuotas": "Show {count} more",
--    "showLessQuotas": "Show less",
--    "tokenExpiresIn": "Token expires in {time}",
--    "tokenExpired": "Token expired",
--    "resetCreditsLabel": "Reset credits",
--    "redeemResetCredit": "Redeem reset",
--    "manageResetCredits": "View credits",
--    "viewResetCredits": "View reset credits",
--    "resetCreditsModalTitle": "Codex reset credits",
--    "resetCreditsModalExplainer": "Credits are ordered by expiration. Automatic redemption always uses the credit that expires first.",
--    "resetCreditsLoadFailed": "Failed to load reset credits",
--    "resetCreditsDetailsUnavailable": "Credit details are currently unavailable. Refresh and try again.",
--    "noResetCreditsAvailable": "No reset credits are available.",
--    "resetCreditDefaultTitle": "Full reset",
--    "resetCreditExpiresFirst": "Expires first",
--    "resetCreditExpiresAt": "Expires {date}",
--    "resetCreditNoExpiry": "No expiration date",
--    "redeemThisResetCredit": "Redeem",
--    "confirmRedeemResetCreditTitle": "Redeem this reset credit?",
--    "confirmRedeemResetCredit": "Redeeming immediately resets the eligible Codex usage windows and permanently consumes this credit.",
--    "confirmRedeemResetCreditButton": "Redeem credit",
--    "resetCreditRedeemed": "Reset redeemed",
--    "resetCreditRedeemFailed": "Failed to redeem reset credit",
--    "deactivateAccount": "Deactivate account (stop routing)",
--    "activateAccount": "Activate account (resume routing)",
--    "accountActivated": "Account activated",
--    "accountDeactivated": "Account deactivated",
--    "toggleActiveFailed": "Failed to update account status",
--    "percentUsed": "{pct}% used"
-+    "providerQuotaHomeHint": "Trạng thái theo thời gian thực của các tài khoản đã kết nối"
-   },
-   "modals": {
-     "waitingAuth": "Đang chờ ủy quyền",
-@@ -7780,7 +9381,21 @@
+@@ -7790,7 +9607,21 @@
      "statusCancelled": "Đã hủy",
      "repositoryName": "Tên kho lưu trữ",
      "repositoryUrl": "URL kho lưu trữ",
@@ -26577,7 +26352,7 @@ index 3ea2b92f3..3df21fe9c 100644
    },
    "templateNames": {
      "simple-chat": "Trò chuyện đơn giản",
-@@ -8066,6 +9681,8 @@
+@@ -8076,6 +9907,8 @@
      "errorResetFailed": "Không thể đặt lại giá"
    },
    "proxyRegistry": {
@@ -26586,7 +26361,7 @@ index 3ea2b92f3..3df21fe9c 100644
      "title": "Sổ đăng ký proxy",
      "description": "Lưu trữ các proxy có thể tái sử dụng và theo dõi việc gán chúng.",
      "importLegacy": "Nhập dữ liệu cũ",
-@@ -8086,6 +9703,11 @@
+@@ -8096,6 +9929,11 @@
      "modalEditTitle": "Chỉnh sửa proxy",
      "labelName": "Tên",
      "labelType": "Loại",
@@ -26598,7 +26373,7 @@ index 3ea2b92f3..3df21fe9c 100644
      "labelHost": "Máy chủ",
      "labelPort": "Cổng",
      "labelUsername": "Tên đăng nhập",
-@@ -8134,6 +9756,13 @@
+@@ -8144,6 +9982,13 @@
      "testSuccess": "✓ {ip}",
      "testLatency": "{latency}ms",
      "testFailure": "✗ {error}",
@@ -26612,7 +26387,7 @@ index 3ea2b92f3..3df21fe9c 100644
      "bulkImport": "Nhập proxy hàng loạt",
      "bulkImportTitle": "Nhập proxy hàng loạt",
      "bulkImportDescription": "Dán hồ sơ proxy, mỗi hồ sơ trên một dòng. Các định dạng được hỗ trợ: phân tách bằng dấu gạch đứng (NAME|HOST|PORT|…), dạng viết tắt (ip:port, ip:port:user:pass, user:pass@ip:port, user:pass:ip:port, protocol://ip:port, protocol://user:pass@ip:port), hoặc chế độ tiêu đề giao thức (giao thức đơn thuần ở dòng đầu tiên sẽ áp dụng cho các dòng dạng viết tắt tiếp theo). Các proxy hiện có (cùng host + port) sẽ được cập nhật.",
-@@ -8150,49 +9779,37 @@
+@@ -8160,49 +10005,37 @@
      "bulkImportPreview": "Xem trước",
      "clearAssignment": "(xóa gán)",
      "bulkProxyAssignment": "Gán proxy hàng loạt",
@@ -26690,7 +26465,7 @@ index 3ea2b92f3..3df21fe9c 100644
    },
    "playground": {
      "title": "Khu thử nghiệm mô hình",
-@@ -8225,14 +9842,17 @@
+@@ -8235,14 +10068,17 @@
      "endpointOptions": {
        "chat": "Chat completions",
        "responses": "Phản hồi",
@@ -26709,7 +26484,7 @@ index 3ea2b92f3..3df21fe9c 100644
      },
      "conversationalChat": "Trò chuyện đa lượt",
      "clearChat": "Xóa cuộc trò chuyện",
-@@ -8254,6 +9874,10 @@
+@@ -8264,6 +10100,10 @@
      "topP": "Top-p",
      "presencePenalty": "Mức phạt hiện diện",
      "frequencyPenalty": "Mức phạt tần suất",
@@ -26720,7 +26495,7 @@ index 3ea2b92f3..3df21fe9c 100644
      "seedPlaceholder": "Ngẫu nhiên (để trống)",
      "presetsLabel": "Cài đặt sẵn",
      "loadPreset": "Tải cài đặt sẵn",
-@@ -8267,11 +9891,25 @@
+@@ -8277,11 +10117,25 @@
      "improvingPrompt": "Đang cải thiện…",
      "improvePromptTitle": "Cải thiện prompt của bạn bằng AI",
      "setModelFirst": "Hãy thiết lập một mô hình trước",
@@ -26746,7 +26521,7 @@ index 3ea2b92f3..3df21fe9c 100644
      "copyCode": "Sao chép",
      "copiedCode": "Đã sao chép!",
      "addModel": "+ Thêm mô hình",
-@@ -8279,56 +9917,104 @@
+@@ -8289,56 +10143,104 @@
      "cancelAll": "Hủy tất cả",
      "maxColumnsReached": "Tối đa {max} cột",
      "modelPlaceholderCompare": "Mô hình (Cmd+K)…",
@@ -26881,7 +26656,7 @@ index 3ea2b92f3..3df21fe9c 100644
      }
    },
    "miniPlayground": {
-@@ -8363,10 +10049,42 @@
+@@ -8373,10 +10275,42 @@
      "duration": "Thời lượng",
      "question": "Câu hỏi",
      "audioFile": "Tệp âm thanh",
@@ -26925,7 +26700,7 @@ index 3ea2b92f3..3df21fe9c 100644
    },
    "requestLogger": {
      "recording": "Đang ghi",
-@@ -8434,8 +10152,8 @@
+@@ -8444,8 +10378,8 @@
      "noLogs": "Chưa có nhật ký nào. Hãy thực hiện một số cuộc gọi API để xem chúng ở đây.",
      "noMatchingLogs": "Không có nhật ký nào khớp với các bộ lọc hiện tại.",
      "callLogsInfo": "Nhật ký cuộc gọi cũng được lưu dưới dạng tệp JSON tại {dataDir} và được luân chuyển dựa trên {retentionDays} và {maxEntries}.",
@@ -26936,7 +26711,7 @@ index 3ea2b92f3..3df21fe9c 100644
    },
    "proxyLogger": {
      "filterAll": "Tất cả",
-@@ -8473,7 +10191,7 @@
+@@ -8483,7 +10417,7 @@
      "noProxyLogs": "Chưa có nhật ký proxy. Cấu hình proxy và thực hiện các cuộc gọi API để xem chúng ở đây.",
      "noMatchingLogs": "Không có nhật ký nào khớp với bộ lọc hiện tại.",
      "tlsFingerprint": "Dấu vân tay TLS Chrome 124",
@@ -26945,7 +26720,7 @@ index 3ea2b92f3..3df21fe9c 100644
    },
    "endpointOptions": {
      "speech": "Giọng nói",
-@@ -8561,6 +10279,7 @@
+@@ -8571,6 +10505,7 @@
      "moreSuffix": "+{count} nữa"
    },
    "quotaShare": {
@@ -26953,7 +26728,7 @@ index 3ea2b92f3..3df21fe9c 100644
      "title": "Chia sẻ hạn ngạch",
      "description": "Chia sẻ hạn ngạch của nhà cung cấp giữa các khóa API với giới hạn %",
      "newPool": "Nhóm mới",
-@@ -8583,6 +10302,9 @@
+@@ -8593,6 +10528,9 @@
      "capLabel": "giới hạn {value}",
      "notTrackedYet": "(chưa được theo dõi)",
      "policy": "Chính sách",
@@ -26963,7 +26738,7 @@ index 3ea2b92f3..3df21fe9c 100644
      "policyHard": "cứng",
      "policySoft": "mềm",
      "policyBurst": "bùng phát",
-@@ -8614,85 +10336,85 @@
+@@ -8624,85 +10562,85 @@
      "policyLabel": "Chính sách:",
      "resetIn": "đặt lại sau",
      "quotaTotal": "tổng cộng",
@@ -27125,7 +26900,7 @@ index 3ea2b92f3..3df21fe9c 100644
    },
    "plugins": {
      "title": "Plugin",
-@@ -8728,722 +10450,1617 @@
+@@ -8738,722 +10676,1617 @@
      "status": "Trạng thái",
      "enabled": "Đã bật",
      "disabled": "Đã tắt",
