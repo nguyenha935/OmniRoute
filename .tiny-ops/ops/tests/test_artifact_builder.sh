@@ -28,6 +28,10 @@ grep -Fq 'npm ci --omit=dev --ignore-scripts --legacy-peer-deps --no-audit --no-
   || fail "full-package production install does not preserve the reviewed lockfile resolver contract"
 grep -Fq 'materialize_workspace' "$BUILDER" || fail "builder does not materialize workspace packages"
 grep -Fq 'validate_dlopen' "$BUILDER" || fail "builder does not explicitly validate native binaries"
+grep -Fq 'wreq-js.linux-x64-gnu.node' "$BUILDER" \
+  || fail "builder does not recognize the current wreq-js Linux GNU binary name"
+grep -Fq 'wreq-js.linux-x64.node' "$BUILDER" \
+  || fail "builder dropped compatibility with the legacy wreq-js binary name"
 for forbidden in OMNIROUTE_BUILDER_CGROUP SIGN_HELPER 'sudo -n' artifact-manifest.json.sig \
   'npm rebuild' 'node-pre-gyp install'; do
   ! grep -Fq "$forbidden" "$BUILDER" || fail "builder retains forbidden VM/signing/fallback path: $forbidden"

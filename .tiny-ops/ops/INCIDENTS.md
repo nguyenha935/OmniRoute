@@ -230,3 +230,11 @@ Không push/open/update PR trước deploy và người dùng test nếu chưa c
 - Hosted builder chạy cùng `typecheck:core` trên exact target nguyên bản và cây
   đã áp patch, chuẩn hóa/sắp xếp diagnostics rồi dùng phép tập hợp để phát hiện
   lỗi mới. Candidate chỉ được qua khi không thêm diagnostic so với target.
+
+### Tên native binary của wreq-js thay đổi
+
+- `wreq-js@2.3.1` đóng gói Linux glibc dưới tên
+  `rust/wreq-js.linux-x64-gnu.node`; builder cũ chỉ tìm
+  `wreq-js.linux-x64.node` nên báo thiếu dù package đã cài đúng.
+- Builder chọn tên GNU hiện tại trước, giữ fallback tên cũ, chép nguyên basename
+  vào package/standalone và vẫn bắt buộc `dlopen` thành công.
