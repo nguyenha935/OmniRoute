@@ -838,8 +838,8 @@ def verify_manifest_shape(manifest: dict[str, Any]) -> str:
         raise ArtifactError("manifest payload count/size exceeds hard limit")
     if manifest["payloadLinkCount"] > MAX_LINKS:
         raise ArtifactError("manifest link count exceeds hard limit")
-    if manifest.get("buildBundler") != "turbopack":
-        raise ArtifactError("artifact was not built with Turbopack")
+    if manifest.get("buildBundler") != "webpack":
+        raise ArtifactError("artifact was not built with the reviewed Webpack lane")
     runtime = manifest.get("runtime")
     if not isinstance(runtime, dict) or not runtime:
         raise ArtifactError("artifact runtime/platform fingerprint is missing")
