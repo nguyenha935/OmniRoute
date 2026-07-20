@@ -252,3 +252,9 @@ Không push/open/update PR trước deploy và người dùng test nếu chưa c
 - Fixture bắt buộc phải chứng minh plugin còn `dist/index.js` và metadata, đồng thời
   `@omniroute/*/tests/**`, `src/**/__tests__/**` và `open-sse/**/__tests__/**`
   không xuất hiện trong full-package.
+- Run kế tiếp `29785947448` vượt qua lỗi test nhưng phát hiện
+  `dist/node_modules/@asamuzakjp/css-color` là dev-only theo source lock. Đây là
+  cây dependency Next standalone chép từ dev install, trùng với `node_modules`
+  production-pruned ở package root. Full-package phải bỏ toàn bộ cây trùng này;
+  Node resolve dependency từ `dist/server.js` lên production root. Fixture phải
+  xác nhận cả việc không còn `dist/node_modules` lẫn khả năng resolve runtime đó.

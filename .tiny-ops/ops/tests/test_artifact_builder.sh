@@ -31,6 +31,8 @@ grep -Fq 'copy_scoped_runtime_packages' "$BUILDER" \
   || fail "builder does not constrain scoped packages to declared runtime files"
 grep -Fq 'prune_full_package_development_residue' "$BUILDER" \
   || fail "builder does not prune root-package test residue"
+grep -Fq 'remove_standalone_dependency_duplicates' "$BUILDER" \
+  || fail "builder retains the development standalone dependency duplicate"
 grep -Fq 'validate_dlopen' "$BUILDER" || fail "builder does not explicitly validate native binaries"
 grep -Fq 'wreq-js.linux-x64-gnu.node' "$BUILDER" \
   || fail "builder does not recognize the current wreq-js Linux GNU binary name"
@@ -197,8 +199,9 @@ case "${1:-}" in
     if [[ "$PWD" == */package-stage ]]; then
       mkdir -p node_modules/fixture node_modules/@omniroute node_modules/.bin
       cat >node_modules/fixture/package.json <<'JSON'
-{"name":"fixture","version":"1.0.0","bin":{"fixture":"cli.js"}}
+{"name":"fixture","version":"1.0.0","main":"index.js","bin":{"fixture":"cli.js"}}
 JSON
+      printf 'module.exports = "fixture runtime";\n' >node_modules/fixture/index.js
       printf '#!/usr/bin/env node\n' >node_modules/fixture/cli.js
       chmod 0755 node_modules/fixture/cli.js
       ln -s ../fixture/cli.js node_modules/.bin/fixture
@@ -209,8 +212,10 @@ JSON
     case "${2:-}" in
       check:build-scope|typecheck:core|check:dashboard-typecheck) ;;
       build:release)
-        mkdir -p dist bin/cli/runtime @omniroute/opencode-plugin/dist
+        mkdir -p dist/node_modules/dev-only bin/cli/runtime @omniroute/opencode-plugin/dist
         printf 'fixture server\n' >dist/server.js
+        printf '{"name":"dev-only","version":"1.0.0"}\n' \
+          >dist/node_modules/dev-only/package.json
         printf '#!/usr/bin/env node\n' >bin/omniroute.mjs
         printf 'fixture runtime\n' >bin/cli/runtime/entry.mjs
         printf 'fixture plugin runtime\n' >@omniroute/opencode-plugin/dist/index.js
@@ -297,6 +302,17 @@ grep -Fqx patched "$full_root/README.md" || fail "full package lacks applied pat
   || fail "open-sse test residue leaked into the full package"
 [ ! -e "$full_root/src/lib/__tests__/runtime.spec.ts" ] \
   || fail "root source test residue leaked into the full package"
+[ ! -e "$full_root/dist/node_modules" ] \
+  || fail "development standalone dependency duplicate leaked into the full package"
+resolved_fixture="$(node --input-type=commonjs - "$full_root" <<'NODE'
+const path = require("node:path");
+const { createRequire } = require("node:module");
+const root = process.argv[2];
+process.stdout.write(createRequire(path.join(root, "dist/server.js")).resolve("fixture"));
+NODE
+)"
+[ "$resolved_fixture" = "$full_root/node_modules/fixture/index.js" ] \
+  || fail "standalone runtime cannot resolve from the production root"
 [ ! -e "$full_root/node_modules/fumadocs-mdx" ] || fail "dev-only fumadocs-mdx leaked"
 [ ! -e "$full_root/package-lock.json" ] || fail "source lock leaked into runtime package"
 [ ! -e "$full_root/UNRELATED.md" ] || fail "unapproved root file leaked into runtime package"
