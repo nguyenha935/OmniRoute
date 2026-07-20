@@ -206,5 +206,7 @@ Không push/open/update PR trước deploy và người dùng test nếu chưa c
   fallback bộ nhớ thấp đã được mã nguồn OmniRoute hỗ trợ.
 - Manifest và verifier phải khóa `buildBundler=webpack`; không được âm thầm nhận
   artifact từ bundler khác.
+- Resume integration phải so byte builder, verifier và workflow hiện tại; request
+  ứng dụng giống nhau nhưng toolchain khác thì phải tạo commit mới.
 - Giữ heap Webpack ở 6 GiB, telemetry mỗi phút, cache `.build/next/cache` và mọi
   cổng attestation/provenance/smoke/rollback hiện có.

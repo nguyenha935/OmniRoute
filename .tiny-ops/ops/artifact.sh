@@ -527,6 +527,13 @@ request_identity() {
   }' "$1"
 }
 
+published_blob_matches() {
+  local commit="$1" repository_path="$2" expected_file="$3" destination="$4"
+  git -C "$SOURCE_DIR" show "$commit:$repository_path" >"$destination" 2>/dev/null \
+    || return 1
+  cmp -s "$expected_file" "$destination"
+}
+
 candidate_is_reusable() {
   local request_file="$1" artifact request candidate_request expected_artifact
   [ -f "$CANDIDATE_FILE" ] || return 1
@@ -545,6 +552,7 @@ candidate_is_reusable() {
 
 reuse_published_request() {
   local request_dir="$1" remote_commit published patch_count index patch_file
+  local expected_workflow published_workflow published_builder published_format
   remote_commit="$(git -C "$SOURCE_DIR" ls-remote origin "refs/heads/$INTEGRATION_BRANCH" 2>/dev/null | awk 'NR==1 {print $1}')"
   [ -n "$remote_commit" ] || return 1
   git -C "$SOURCE_DIR" fetch --no-tags origin \
@@ -556,6 +564,17 @@ reuse_published_request() {
     || return 1
   [ "$(request_identity "$request_dir/request.json")" = "$(request_identity "$published/request.json")" ] \
     || return 1
+  expected_workflow="$WORKSPACE/expected-workflow.yml"
+  published_workflow="$WORKSPACE/published-workflow.yml"
+  published_builder="$WORKSPACE/published-builder.sh"
+  published_format="$WORKSPACE/published-format.py"
+  write_workflow "$expected_workflow"
+  published_blob_matches "$remote_commit" ".omniroute-deploy/artifact-builder.sh" \
+    "$BUILDER_TOOL" "$published_builder" || return 1
+  published_blob_matches "$remote_commit" ".omniroute-deploy/artifact-format.py" \
+    "$FORMAT_TOOL" "$published_format" || return 1
+  published_blob_matches "$remote_commit" "$WORKFLOW_PATH" \
+    "$expected_workflow" "$published_workflow" || return 1
   git -C "$SOURCE_DIR" show \
     "$remote_commit:.omniroute-deploy/input/request-files.data" >"$published/request-files.json" \
     || die "published integration request file index is missing"

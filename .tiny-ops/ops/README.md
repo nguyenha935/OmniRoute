@@ -49,6 +49,10 @@ Candidate requests are published as fast-forward commits on the persistent
 the branch avoids one throwaway branch per build. npm downloads and Next.js's
 `.build/next/cache` are cached on GitHub-hosted runners. A candidate with the same
 target, patch identity, lane, runtime and dependency fingerprint is reused. If
+the hosted builder, verifier, or workflow changes, the integration request is
+republished as a new fast-forward commit even when the application request is
+otherwise identical.
+If
 the release branch advances while a fresh candidate is building, the automatic
 flow uses the existing bounded-ancestor verification instead of restarting the
 build loop.

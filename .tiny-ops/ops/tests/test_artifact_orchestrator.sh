@@ -17,6 +17,8 @@ grep -Fq 'deploy/integration' "$ORCHESTRATOR" || fail "persistent integration br
 grep -Fq 'Restore Next.js build cache' "$ORCHESTRATOR" || fail "workflow omits the Next.js build cache"
 grep -Fq 'Build one reviewed Webpack artifact' "$ORCHESTRATOR" \
   || fail "workflow does not identify the bounded-memory Webpack lane"
+grep -Fq 'published_blob_matches' "$ORCHESTRATOR" \
+  || fail "published request reuse is not bound to the exact hosted toolchain"
 grep -Fq 'monitor_resources' "$ORCHESTRATOR" || fail "workflow omits hosted-runner resource telemetry"
 grep -Fq 'trap cleanup_monitor EXIT INT TERM HUP' "$ORCHESTRATOR" \
   || fail "workflow resource monitor is not cleaned up safely"
@@ -338,6 +340,35 @@ grep -Fq 'resuming published integration request' "$fixture/success.log" \
 [ -f "$state/candidate.json" ] || fail "successful build did not persist candidate metadata"
 pass "integration commit is reused and exact attested candidate is preserved"
 
+# An identical request must not reuse a published commit whose builder changed.
+# The orchestrator must create a new fast-forward commit carrying the reviewed
+# builder, format verifier, and workflow before it selects a run.
+rm -f "$state/candidate.json"
+tamper="$fixture/tamper-integration"
+git clone -q "$remote" "$tamper"
+git -C "$tamper" config user.name fixture
+git -C "$tamper" config user.email fixture@example.invalid
+git -C "$tamper" checkout -q "$branch"
+printf '\n# stale hosted builder\n' >>"$tamper/.omniroute-deploy/artifact-builder.sh"
+git -C "$tamper" add .omniroute-deploy/artifact-builder.sh
+git -C "$tamper" commit -qm 'fixture: stale hosted toolchain'
+git -C "$tamper" push -q origin "$branch"
+tampered_sha="$(git --git-dir="$remote" rev-parse "refs/heads/$branch")"
+: >"$fixture/gh.log"
+if OMNIROUTE_FIXTURE_DUPLICATE_RUNS=1 run_orchestrator "$fixture/toolchain-refresh.log"; then
+  fail "toolchain-refresh duplicate-run fixture unexpectedly succeeded"
+fi
+grep -Fq 'more than one workflow run matched immutable deployment commit' "$fixture/toolchain-refresh.log" \
+  || { perl -ne 'print if $. <= 220' "$fixture/toolchain-refresh.log" >&2; fail "toolchain refresh did not reach exact-run gate"; }
+refreshed_sha="$(git --git-dir="$remote" rev-parse "refs/heads/$branch")"
+[ "$refreshed_sha" != "$tampered_sha" ] || fail "stale hosted toolchain was incorrectly reused"
+git --git-dir="$remote" show "$refreshed_sha:.omniroute-deploy/artifact-builder.sh" \
+  | cmp -s - "$OPS_DIR/artifact-builder.sh" \
+  || fail "refreshed integration commit does not contain the reviewed builder"
+grep -Fq 'publishing integration candidate' "$fixture/toolchain-refresh.log" \
+  || fail "toolchain drift did not publish a new integration commit"
+pass "integration reuse is bound to the exact hosted toolchain"
+
 # Dependency drift must create a distinct immutable full-package request. The
 # requestor selects this lane from exact target-versus-installed fingerprints;
 # neither the CLI nor the hosted builder gets a mode override.
@@ -377,4 +408,4 @@ git --git-dir="$remote" show "$full_branch:.omniroute-deploy/input/request-files
   || fail "full-package selection performed a local install or build"
 pass "dependency drift selects a distinct canonical full-package request without local heavy work"
 
-printf '1..6\n'
+printf '1..7\n'
