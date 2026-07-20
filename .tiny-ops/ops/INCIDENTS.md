@@ -1,0 +1,188 @@
+# OmniRoute trên Tiny — Nhật ký sự cố và bài học bắt buộc
+
+File này lưu những sự cố vận hành đã được xác nhận để agent không lặp lại cách
+làm gây gián đoạn hệ thống.
+
+## 2026-07-17 — Full test làm Tiny nghẽn
+
+### Tác nhân
+
+Đã chạy:
+
+```bash
+omniroute-patch test fix/provider-flow-consistency
+```
+
+Script `/opt/omniroute/ops/patch.sh` tự chạy `npm ci` khi thiếu dependency, sau
+đó chạy lint toàn dự án, unit suite, Vitest, coverage và production build. Tổng
+khối lượng hơn 15.000 test cộng build đã làm Tiny cạn tài nguyên/nghẽn, SSH và
+Tailscale host gián đoạn, đồng thời Termix trả 502.
+
+### Khôi phục đã xác nhận
+
+- Dừng các tiến trình test/build còn lại; không reboot Tiny.
+- Khôi phục riêng `tailscaled` của host qua đường quản trị Docker/Dockge khi SSH
+  chưa vào được.
+- Termix có Tailscale riêng. Sau khi `termix-tailscale` hoạt động lại, container
+  `termix` còn bám network namespace cũ; `docker restart termix` đã khôi phục
+  endpoint. Chi tiết nằm tại `/opt/termix/OPERATIONS.md`.
+- Sau khôi phục phải xác nhận tải hệ thống, RAM available, không còn tiến trình
+  test/build, `tailscaled` active, `omniroute` active và Termix trả HTTP 200.
+
+### Cách test bản vá đã xác nhận an toàn
+
+Bản vá `fix/provider-flow-consistency` được kiểm tra bằng đúng bốn test mục tiêu,
+Node heap 1536 MB và `--test-concurrency=1`; kết quả 41/41 pass. Lint chỉ chạy
+trên file thay đổi. Không chạy coverage hoặc production build trong pha test.
+
+Mẫu lệnh:
+
+```bash
+DISABLE_SQLITE_AUTO_BACKUP=true node --max-old-space-size=1536 \
+  --import tsx/esm \
+  --import ./open-sse/utils/setupPolyfill.ts \
+  --import ./tests/_setup/isolateDataDir.ts \
+  --test --test-concurrency=1 \
+  tests/unit/provider-connection-status.test.ts \
+  tests/unit/playground-model-qualify.test.ts \
+  tests/unit/providers-page-utils.test.ts \
+  tests/unit/opencode-noauth-models-route.test.ts
+```
+
+### Cách chuẩn bị và deploy đã được thực hiện kỹ
+
+1. Mỗi bản vá ở worktree riêng; đọc file liên quan, sửa theo pattern upstream,
+   chạy test mục tiêu, commit rồi tạo snapshot có checksum.
+2. Merge upstream mới vào từng worktree và giải quyết conflict tại chính branch
+   bản vá; không sửa production để né conflict.
+3. Chạy `update-omniroute --check` và duyệt target commit cùng patch-set hash.
+4. Chạy `--preflight` với đúng hai pin; production chưa bị đụng ở bước này.
+5. Sau sự cố build ngày 2026-07-18, không còn build candidate trên Tiny. Tạo
+   deployment-only branch bất biến từ request đã pin để GitHub-hosted
+   `ubuntu-24.04` build, duyệt response/manifest SHA cùng attestation và exact
+   run provenance, chạy artifact-aware preflight rồi mới `--update` với toàn bộ
+   pins. Tiny chỉ verify, smoke-test, backup, swap và rollback.
+6. Sau deploy dùng `--verify-runtime` và kiểm tra các dịch vụ liên quan.
+
+### Quy tắc không được lặp lại
+
+- Không chạy `omniroute-patch test` trên Tiny.
+- Không chạy full test, coverage hoặc build thủ công để test một thay đổi nhỏ.
+- Không chạy nhiều test/build song song.
+- Không deploy khi preflight còn conflict hoặc pin đã thay đổi.
+- Không chữa sự cố tải bằng reboot host, sửa DNS hoặc thay cấu hình ứng dụng
+  khác khi chưa xác định đúng nguyên nhân.
+
+## 2026-07-17 — Webpack hết heap trong cgroup build
+
+### Hiện tượng đã xác nhận
+
+- `update-omniroute --preflight` đã xanh, typecheck và kiểm tra i18n đều xanh.
+- Webpack thoát mã 1 tại bước `Creating an optimized production build`.
+- Cgroup build đạt đỉnh 8 GiB nhưng không bị kernel OOM hoặc cgroup kill.
+- Production không dùng swap và vẫn hoạt động; updater không thay runtime khi
+  candidate build thất bại.
+
+### Cách xử lý
+
+- Nâng riêng Node heap của candidate build từ 7168 lên 8192 MB.
+- Lần thử đầu giữ `MemoryHigh=8G` trong khi Node heap đã là 8192 MB. Phần
+  native/cache đẩy tổng RSS lên khoảng 8,8 GiB, khiến kernel giữ webpack tại
+  `mem_cgroup_handle_over_high`; build chạy 39 phút nhưng chỉ dùng 14 phút CPU.
+- Cấu hình sửa lại là `MemoryHigh=9G`, `MemoryMax=10G`,
+  `MemorySwapMax=512M`, `CPUQuota=300%` và `CIRCLE_NODE_TOTAL=1`. Khoảng 1 GiB
+  giữa ngưỡng mềm và trần cứng giữ đủ overhead mà vẫn bảo vệ host.
+- Không build thủ công để thử lại. Sự cố tiếp theo ngày 2026-07-18 xác nhận
+  ngay cả cgroup 10–11 GiB vẫn không phù hợp với Tiny; mọi build production đã
+  được chuyển sang GitHub-hosted runner như mục bên dưới.
+
+## 2026-07-18 — Updater build kéo dài và lần thử 11 GiB bị hủy do memory PSI
+
+### Hiện tượng đã xác nhận
+
+- Lần build trong cgroup 10 GiB chạy kéo dài, dùng gần trần bộ nhớ và tạo staging
+  nhiều GiB. Caller bên ngoài đã hết thời gian nhưng transient systemd unit vẫn
+  tiếp tục, nên tải không dừng cùng phiên gọi.
+- Unit được dừng trước candidate smoke, backup, package swap hoặc restart
+  production. Không có thay đổi runtime production.
+- Sau khi được phép thử đúng một lần với `MemoryHigh=10G`, `MemoryMax=11G`, Node
+  heap 8192 MB, giám sát phát hiện memory PSI full avg10 tăng ngay trong `npm ci`
+  và chủ động hủy. Không có kernel OOM, service loss hoặc package swap.
+- Không thử lần hai, không tăng lên 12 GiB và không reboot host.
+
+### Khắc phục bắt buộc
+
+- Wrapper giữ lock, theo dõi PID/unit, bắt INT/TERM/HUP và kill toàn control group
+  để caller chết không để lại updater/candidate mồ côi.
+- `npm ci`, npm install và Next production build bị loại khỏi Tiny updater.
+- Exact target + ordered immutable patch snapshots được build đúng một lần trên
+  GitHub-hosted `ubuntu-24.04` từ một deployment-only branch bất biến. Trước khi
+  tạo request, requestor so exact target với installed `dependencyFingerprint`:
+  khớp chọn `overlay`/`omniroute-runtime-overlay`, lệch chọn `full-package`/
+  `omniroute-full-package`. Mode, type, policy và package/lock identities nằm trong
+  canonical request; builder/updater không được silently đổi lane. GitHub attest
+  chính SHA-256 của response archive.
+- Overlay builder trả whitelist runtime roots. Full-package builder tạo package
+  độc lập và production-pruned `node_modules` trên hosted runner, materialize
+  workspace closure, validate lockfile/production/optional/native closure và loại
+  dev residue. Dev `npm ci`, production prune, lifecycle/native repair và
+  Turbopack đều không được chuyển về Tiny.
+- Tiny chỉ xác minh fail-closed GitHub attestation cho đúng repository/workflow/
+  ref/deployment SHA và hosted runner, rồi kiểm target/patch/response/manifest
+  pins, exact mode/type/policy, request, platform/ABI, dependency fingerprint,
+  package/lock, production-tree, native/file/link indexes và mọi file hash. Tar
+  link luôn bị cấm; `.bin` link chỉ được dựng sau regular-file extraction từ
+  canonical link index khi relative target nằm trong tree và trỏ vào file đã
+  verify.
+- Updater enforce đúng selection rule trước mutation: overlay chỉ khi deps khớp;
+  full-package chỉ khi deps lệch và phải stage trực tiếp từ verified independent
+  package, không copy installed package hay stale `node_modules`. Sau đó cả hai
+  lane mới smoke bằng fake secrets/data, backup, atomic swap, health-check và
+  rollback.
+- Builder unavailable, artifact thiếu/sai, wrong lane, dependency/tree/native/link
+  mismatch hoặc attestation lỗi là terminal failure. Tuyệt đối không fallback
+  sang local `npm ci`, npm install, lifecycle/postinstall, native rebuild, webpack
+  hoặc Turbopack.
+
+### Chuỗi deploy mới
+
+```text
+--check
+→ lightweight pinned --preflight
+→ --build-artifact trên GitHub-hosted ubuntu-24.04
+→ duyệt response/manifest SHA-256 + deployment ref/SHA + run ID/attempt
+→ artifact-aware pinned --preflight
+→ artifact-aware pinned --update
+→ --verify-runtime
+→ người dùng test bản đã deploy
+```
+
+Không push/open/update PR trước deploy và người dùng test nếu chưa có quyền riêng.
+
+## 2026-07-20 — Chuỗi pin thủ công gây vòng lặp build/deploy
+
+### Hiện tượng đã xác nhận
+
+- Một deploy yêu cầu người vận hành truyền lại target, patch-set, artifact,
+  manifest, ref, source SHA, run ID và attempt qua nhiều lệnh riêng.
+- Mỗi request tạo một nhánh `deploy/artifact/*`; các lần lỗi để lại nhiều nhánh,
+  worktree và staging khó kiểm soát.
+- Release head có thể tiến lên trong lúc GitHub build, khiến người vận hành tưởng
+  phải build lại dù artifact vẫn là ancestor mới và còn trong cửa sổ an toàn.
+- npm cache đã có nhưng `.next/cache` chưa được giữ; candidate đúng cùng identity
+  cũng không được tự tái sử dụng.
+
+### Khắc phục bắt buộc
+
+- Luồng thường chỉ dùng `update-omniroute --check` và
+  `update-omniroute --update`.
+- `--update` tự khóa target/patch-set, build hoặc reuse candidate, lấy pin từ
+  `state/candidate.json`, preflight, deploy và verify; không nhập pin thủ công.
+- Dùng một nhánh fast-forward cố định `deploy/integration`; commit SHA và
+  attestation vẫn là provenance bất biến.
+- Cache cả npm và Turbopack `.next/cache` trên GitHub-hosted runner.
+- Release head đổi trong lúc build phải đi qua bounded-ancestor gate sẵn có,
+  không tự khởi động lại build.
+- Tiny vẫn tuyệt đối không chạy `npm ci`, production build, lifecycle hoặc native
+  rebuild. Attestation, archive validation, candidate smoke, backup, atomic swap
+  và rollback vẫn là cổng bắt buộc.
