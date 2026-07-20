@@ -1,0 +1,142 @@
+diff --git a/src/app/(dashboard)/dashboard/tools/traffic-inspector/components/shared/AgentEmoji.tsx b/src/app/(dashboard)/dashboard/tools/traffic-inspector/components/shared/AgentEmoji.tsx
+index 8cadbfd3b..e81a188b8 100644
+--- a/src/app/(dashboard)/dashboard/tools/traffic-inspector/components/shared/AgentEmoji.tsx
++++ b/src/app/(dashboard)/dashboard/tools/traffic-inspector/components/shared/AgentEmoji.tsx
+@@ -12,6 +12,7 @@ const AGENT_COLORS: Record<AgentId, { emoji: string; label: string; color: strin
+   "claude-code": { emoji: "🟡", label: "CC", color: "text-yellow-300" },
+   "open-code": { emoji: "⚪", label: "OC", color: "text-gray-400" },
+   trae: { emoji: "⬛", label: "TR", color: "text-gray-500" },
++  "ghe-copilot": { emoji: "🟢", label: "GHE", color: "text-green-400" },
+ };
+ 
+ interface AgentEmojiProps {
+diff --git a/src/shared/components/oauthModal/GheConfigStep.tsx b/src/shared/components/oauthModal/GheConfigStep.tsx
+index a80570cd9..df27c5413 100644
+--- a/src/shared/components/oauthModal/GheConfigStep.tsx
++++ b/src/shared/components/oauthModal/GheConfigStep.tsx
+@@ -11,6 +11,19 @@ type GheConfigStepProps = {
+   startOAuthFlow: () => void;
+ };
+ 
++/**
++ * Narrow an unknown error into a plain string safe to render as a React child.
++ * A bare string is used as-is; an Error contributes only its message. Anything
++ * else (plain objects, numbers, null) yields "" so a raw object is never
++ * stringified into the DOM (which would throw "Objects are not valid as a
++ * React child" and crash the modal).
++ */
++function errorMessage(error: unknown): string {
++  if (typeof error === "string") return error;
++  if (error instanceof Error) return error.message;
++  return "";
++}
++
+ /** GHE Copilot: collect the GitHub Enterprise base URL before starting the OAuth flow. */
+ export default function GheConfigStep({
+   gheUrl,
+@@ -19,6 +32,7 @@ export default function GheConfigStep({
+   setError,
+   startOAuthFlow,
+ }: GheConfigStepProps) {
++  const errorText = errorMessage(error);
+   return (
+     <div className="flex flex-col gap-3">
+       <p className="text-sm text-text-muted">
+@@ -45,7 +59,7 @@ export default function GheConfigStep({
+       >
+         Connect
+       </Button>
+-      {error && <p className="text-sm text-red-500">{error}</p>}
++      {errorText && <p className="text-sm text-red-500">{errorText}</p>}
+     </div>
+   );
+ }
+diff --git a/tests/unit/dashboard/upstream-dashboard-type-regressions.test.ts b/tests/unit/dashboard/upstream-dashboard-type-regressions.test.ts
+new file mode 100644
+index 000000000..563030df9
+--- /dev/null
++++ b/tests/unit/dashboard/upstream-dashboard-type-regressions.test.ts
+@@ -0,0 +1,83 @@
++import test from "node:test";
++import assert from "node:assert/strict";
++import { renderToStaticMarkup } from "react-dom/server";
++import React from "react";
++
++// Regression guard for the two dashboard TypeScript regressions introduced by
++// upstream b3d3dd5954bf2ed0a11c31192d5e14c3add833ac ("feat(providers): Complete
++// GHE Copilot OAuth provider implementation (#7546)"), which added the
++// "ghe-copilot" AgentId without updating the two UI surfaces that consume it:
++//
++//   1. AgentEmoji.tsx — AGENT_COLORS is Record<AgentId, ...> but never gained a
++//      "ghe-copilot" entry (TS2741). At runtime a ghe-copilot agent silently
++//      falls back to the generic 🌐 globe instead of a dedicated badge.
++//   2. GheConfigStep.tsx — declares `error: unknown` and renders it directly as
++//      a React child (TS2322). A non-string error (Error/object) makes React
++//      throw "Objects are not valid as a React child", crashing the modal.
++//
++// These assertions exercise the public render surface (React server rendering);
++// they fail on the pre-fix tree and stay green afterwards, and the third case
++// locks in the "never render a raw object" boundary rule. Both components are
++// plain "use client" components with no next-intl usage, so no
++// NextIntlClientProvider is required.
++
++import { AgentEmoji } from "../../../src/app/(dashboard)/dashboard/tools/traffic-inspector/components/shared/AgentEmoji.tsx";
++import GheConfigStep from "../../../src/shared/components/oauthModal/GheConfigStep.tsx";
++
++const NOOP = () => {};
++
++function renderGheConfigStep(error: unknown): string {
++  return renderToStaticMarkup(
++    React.createElement(GheConfigStep, {
++      gheUrl: "https://ghe.example.com",
++      setGheUrl: NOOP,
++      error,
++      setError: NOOP,
++      startOAuthFlow: NOOP,
++    })
++  );
++}
++
++test("AgentEmoji renders a dedicated badge for the ghe-copilot agent, not the 🌐 fallback", () => {
++  const html = renderToStaticMarkup(React.createElement(AgentEmoji, { agentId: "ghe-copilot" }));
++
++  assert.doesNotMatch(
++    html,
++    /🌐/,
++    "ghe-copilot must map to a dedicated AGENT_COLORS entry, not the generic globe fallback"
++  );
++  assert.match(html, /GHE/, "ghe-copilot badge must carry its own short label");
++  assert.match(html, /title="ghe-copilot"/, "the badge title must still reflect the agent id");
++});
++
++test("AgentEmoji still renders the 🌐 fallback for an unknown agent id", () => {
++  const html = renderToStaticMarkup(
++    React.createElement(AgentEmoji, { agentId: "totally-unknown-agent" })
++  );
++  assert.match(html, /🌐/, "unknown agent ids must keep the globe fallback");
++});
++
++test("GheConfigStep renders a plain string error message", () => {
++  const html = renderGheConfigStep("GitHub Enterprise URL is required");
++  assert.match(html, /GitHub Enterprise URL is required/);
++});
++
++test("GheConfigStep does not crash and does not render a raw object for an Error value", () => {
++  let html = "";
++  assert.doesNotThrow(() => {
++    html = renderGheConfigStep(new Error("device authorization failed"));
++  }, "an Error error value must not throw 'Objects are not valid as a React child'");
++  // The known Error.message is safe to surface…
++  assert.match(html, /device authorization failed/);
++  // …but the raw object shape must never leak into the markup.
++  assert.doesNotMatch(html, /\[object Object\]/);
++});
++
++test("GheConfigStep does not crash and does not render a raw object for a plain object value", () => {
++  let html = "";
++  assert.doesNotThrow(() => {
++    html = renderGheConfigStep({ code: 500, message: "internal" } as unknown);
++  }, "a plain object error value must not throw or be rendered as a React child");
++  assert.doesNotMatch(html, /\[object Object\]/, "must not stringify a raw object into the markup");
++  assert.doesNotMatch(html, /"code"/, "must not leak raw object fields into the markup");
++});
