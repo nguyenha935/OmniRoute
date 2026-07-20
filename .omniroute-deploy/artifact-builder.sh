@@ -45,6 +45,58 @@ save_next_cache() {
   log "saved Next.js build cache"
 }
 
+prepare_typecheck_baseline() {
+  git -C "$SOURCE_TREE" worktree add --detach "$BASELINE_TREE" "$target" >/dev/null
+  if [ -d "$SOURCE_TREE/node_modules" ] && [ ! -e "$BASELINE_TREE/node_modules" ]; then
+    ln -s "$SOURCE_TREE/node_modules" "$BASELINE_TREE/node_modules"
+  fi
+}
+
+typecheck_signatures() {
+  local input="$1" output="$2"
+  sed -E \
+    -e "s#${SOURCE_TREE//\#/\\#}#<source>#g" \
+    -e "s#${BASELINE_TREE//\#/\\#}#<source>#g" \
+    -e 's/^([^(:]+)\([0-9]+,[0-9]+\): /\1: /' \
+    "$input" \
+    | grep -E 'error TS[0-9]+:' \
+    | LC_ALL=C sort -u >"$output" || true
+}
+
+run_typecheck_regression_gate() {
+  local baseline_log="$WORKSPACE/typecheck-baseline.log"
+  local candidate_log="$WORKSPACE/typecheck-candidate.log"
+  local baseline_signatures="$WORKSPACE/typecheck-baseline.signatures"
+  local candidate_signatures="$WORKSPACE/typecheck-candidate.signatures"
+  local new_signatures="$WORKSPACE/typecheck-new.signatures"
+  local baseline_status=0 candidate_status=0
+
+  prepare_typecheck_baseline
+  (cd "$BASELINE_TREE" && npm run typecheck:core >"$baseline_log" 2>&1) \
+    || baseline_status=$?
+  (cd "$SOURCE_TREE" && npm run typecheck:core >"$candidate_log" 2>&1) \
+    || candidate_status=$?
+
+  if [ "$candidate_status" -eq 0 ]; then
+    log "typecheck:core passed on patched candidate"
+    return 0
+  fi
+
+  typecheck_signatures "$baseline_log" "$baseline_signatures"
+  typecheck_signatures "$candidate_log" "$candidate_signatures"
+  [ "$baseline_status" -ne 0 ] && [ -s "$baseline_signatures" ] \
+    || { cat "$candidate_log" >&2; die "typecheck:core failed only on patched candidate"; }
+  [ -s "$candidate_signatures" ] \
+    || { cat "$candidate_log" >&2; die "candidate typecheck failed without comparable TypeScript diagnostics"; }
+  comm -13 "$baseline_signatures" "$candidate_signatures" >"$new_signatures"
+  if [ -s "$new_signatures" ]; then
+    log "new typecheck:core diagnostics introduced by patches:"
+    cat "$new_signatures" >&2
+    die "patched candidate regresses the target typecheck baseline"
+  fi
+  log "typecheck:core target baseline is red, but patches introduce no new diagnostics"
+}
+
 sha256_file() {
   sha256sum "$1" | cut -d ' ' -f 1
 }
@@ -280,6 +332,7 @@ chmod 0700 "$WORKSPACE"
 readonly REQUEST_ARCHIVE="$WORKSPACE/request.tar.gz"
 readonly REQUEST_DIR="$WORKSPACE/request"
 readonly SOURCE_TREE="$WORKSPACE/source"
+readonly BASELINE_TREE="$WORKSPACE/typecheck-baseline"
 readonly PACKAGE_STAGE="$WORKSPACE/package-stage"
 readonly PAYLOAD="$WORKSPACE/payload.tar.gz"
 readonly FILE_INDEX="$WORKSPACE/payload-files.json"
@@ -372,7 +425,7 @@ log "installing development dependencies on GitHub-hosted runner"
 npm ci --no-audit --no-fund >&2
 log "running focused release gates"
 npm run check:build-scope >&2
-npm run typecheck:core >&2
+run_typecheck_regression_gate
 npm run check:dashboard-typecheck >&2
 if ! git diff --quiet -- src/i18n/messages; then
   node --import tsx/esm --test tests/unit/i18n-vi-completeness.test.ts >&2
