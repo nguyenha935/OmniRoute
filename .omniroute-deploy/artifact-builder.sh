@@ -130,6 +130,63 @@ copy_runtime_path() {
   cp -a -- "$source" "$PACKAGE_STAGE/$relative"
 }
 
+copy_scoped_runtime_packages() {
+  local scope_source="$SOURCE_TREE/@omniroute"
+  [ -d "$scope_source" ] || return 0
+
+  local package_source package_name package_destination relative source destination
+  for package_source in "$scope_source"/*; do
+    [ -d "$package_source" ] || continue
+    [ ! -L "$package_source" ] || die "scoped runtime package is a link: $package_source"
+    package_name="${package_source##*/}"
+    [[ "$package_name" != *[!A-Za-z0-9._-]* ]] \
+      || die "scoped runtime package has an unsafe name: $package_name"
+    [ -f "$package_source/package.json" ] && [ ! -L "$package_source/package.json" ] \
+      || die "scoped runtime package metadata is missing or unsafe: $package_name"
+    jq -e '.files | type == "array" and length > 0 and all(.[]; type == "string")' \
+      "$package_source/package.json" >/dev/null \
+      || die "scoped runtime package must declare a non-empty files array: $package_name"
+
+    package_destination="$PACKAGE_STAGE/@omniroute/$package_name"
+    mkdir -p "$package_destination"
+    cp -- "$package_source/package.json" "$package_destination/package.json"
+    while IFS= read -r relative; do
+      relative="${relative%/}"
+      if [ -z "$relative" ] || [[ "$relative" = /* ]] || [[ "$relative" = *\\* ]] \
+        || [[ "$relative" = *"*"* ]] || [[ "$relative" = *"?"* ]] \
+        || [[ "$relative" = *"["* ]] || [[ "$relative" = ".." ]] \
+        || [[ "$relative" = ../* ]] || [[ "$relative" = */../* ]] \
+        || [[ "$relative" = */.. ]] || [[ "$relative" = "." ]] \
+        || [[ "$relative" = ./* ]] || [[ "$relative" = */./* ]] \
+        || [[ "$relative" = */. ]] || [[ "$relative" = *"//"* ]]; then
+        die "scoped runtime package declares an unsafe files entry: $package_name/$relative"
+      fi
+      source="$package_source/$relative"
+      [ -e "$source" ] || continue
+      [ ! -L "$source" ] || die "scoped runtime package entry is a link: $package_name/$relative"
+      destination="$package_destination/$relative"
+      mkdir -p "$(dirname "$destination")"
+      cp -a -- "$source" "$destination"
+    done < <(jq -r '.files[]' "$package_source/package.json")
+  done
+}
+
+prune_full_package_development_residue() {
+  local relative root
+  local runtime_roots=(bin dist @omniroute open-sse src)
+  for relative in "${runtime_roots[@]}"; do
+    root="$PACKAGE_STAGE/$relative"
+    [ -d "$root" ] || continue
+    find "$root" -type d \
+      \( -name __tests__ -o -name test -o -name tests -o -name coverage \) \
+      -prune -exec rm -rf -- {} +
+    find "$root" -type f \
+      \( -name '*.test.ts' -o -name '*.test.tsx' -o -name '*.test.js' \
+      -o -name '*.test.mjs' -o -name '*.spec.ts' -o -name '*.spec.tsx' \) \
+      -delete
+  done
+}
+
 copy_native_file() {
   local source="$1"
   local destination="$2"
@@ -273,7 +330,7 @@ assemble_full_package() {
   log "assembling independent production package on GitHub-hosted runner"
   mkdir -p "$PACKAGE_STAGE"
   local runtime_paths=(
-    bin dist @omniroute open-sse
+    bin dist open-sse
     src/domain src/lib src/models src/mitm src/server src/shared src/sse src/types
     .env.example README.md LICENSE
     scripts/build/postinstall.mjs
@@ -294,6 +351,7 @@ assemble_full_package() {
   for relative in "${runtime_paths[@]}"; do
     copy_runtime_path "$relative"
   done
+  copy_scoped_runtime_packages
   cp -- "$SOURCE_TREE/package.json" "$PACKAGE_STAGE/package.json"
   cp -- "$SOURCE_TREE/package-lock.json" "$PACKAGE_STAGE/package-lock.json"
 
@@ -307,6 +365,7 @@ assemble_full_package() {
   materialize_workspace
   assemble_native_assets
   colocate_optional_runtime_closure
+  prune_full_package_development_residue
   rm -- "$PACKAGE_STAGE/package-lock.json"
 
   [ -f "$PACKAGE_STAGE/dist/server.js" ] || die "full package is missing dist/server.js"
@@ -314,6 +373,8 @@ assemble_full_package() {
     || die "full-package BUILD_SHA mismatch"
   [ -f "$PACKAGE_STAGE/bin/omniroute.mjs" ] || die "full package is missing the CLI"
   [ -d "$PACKAGE_STAGE/bin/cli/runtime" ] || die "full package is missing bin/cli/runtime"
+  [ -f "$PACKAGE_STAGE/@omniroute/opencode-plugin/dist/index.js" ] \
+    || die "full package is missing the bundled OpenCode plugin runtime"
   if jq -e '.dependencies["smol-toml"] // .optionalDependencies["smol-toml"] | type == "string"' \
     "$SOURCE_TREE/package.json" >/dev/null \
     || jq -e '.packages["open-sse"].dependencies["smol-toml"] | type == "string"' \
