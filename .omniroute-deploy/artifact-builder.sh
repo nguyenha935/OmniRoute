@@ -173,8 +173,11 @@ copy_scoped_runtime_packages() {
 
 prune_full_package_development_residue() {
   local relative root
-  local runtime_roots=(bin dist @omniroute open-sse src)
-  for relative in "${runtime_roots[@]}"; do
+  # Never name-prune dist: Next.js production routes legitimately use path
+  # segments such as app/api/models/test. The built tree is validated against
+  # its app-paths manifest below instead of guessing from directory names.
+  local source_roots=(bin @omniroute open-sse src)
+  for relative in "${source_roots[@]}"; do
     root="$PACKAGE_STAGE/$relative"
     [ -d "$root" ] || continue
     find "$root" -type d \
@@ -185,6 +188,36 @@ prune_full_package_development_residue() {
       -o -name '*.test.mjs' -o -name '*.spec.ts' -o -name '*.spec.tsx' \) \
       -delete
   done
+}
+
+validate_next_app_route_completeness() {
+  local server_root="$PACKAGE_STAGE/dist/.build/next/server"
+  local manifest="$server_root/app-paths-manifest.json"
+  local relative route_file count=0
+  [ -f "$manifest" ] && [ ! -L "$manifest" ] \
+    || die "full package is missing a safe Next.js app-paths manifest"
+  jq -e 'type == "object" and length > 0 and all(.[]; type == "string")' \
+    "$manifest" >/dev/null \
+    || die "Next.js app-paths manifest is invalid"
+
+  while IFS= read -r relative; do
+    [ -n "$relative" ] || die "Next.js app-paths manifest contains an empty route path"
+    if [[ "$relative" = /* ]] || [[ "$relative" = *\\* ]] \
+      || [[ "$relative" = ".." ]] || [[ "$relative" = ../* ]] \
+      || [[ "$relative" = */../* ]] || [[ "$relative" = */.. ]] \
+      || [[ "$relative" = ./* ]] || [[ "$relative" = */./* ]] \
+      || [[ "$relative" = */. ]] || [[ "$relative" = *"//"* ]]; then
+      die "Next.js app-paths manifest contains an unsafe route path: $relative"
+    fi
+    route_file="$server_root/$relative"
+    [ -f "$route_file" ] && [ ! -L "$route_file" ] \
+      || die "Next.js app route declared by manifest is missing or unsafe: $relative"
+    count=$((count + 1))
+  done < <(jq -er 'to_entries | if length > 0 then .[].value else error("empty manifest") end | select(type == "string")' "$manifest") \
+    || die "Next.js app-paths manifest is invalid"
+
+  [ "$count" -gt 0 ] || die "Next.js app-paths manifest declares no routes"
+  log "validated $count compiled Next.js app routes"
 }
 
 remove_standalone_dependency_duplicates() {
@@ -376,6 +409,7 @@ assemble_full_package() {
   assemble_native_assets
   colocate_optional_runtime_closure
   prune_full_package_development_residue
+  validate_next_app_route_completeness
   rm -- "$PACKAGE_STAGE/package-lock.json"
 
   [ -f "$PACKAGE_STAGE/dist/server.js" ] || die "full package is missing dist/server.js"

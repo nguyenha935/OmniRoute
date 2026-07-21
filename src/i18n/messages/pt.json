@@ -2138,7 +2138,6 @@
       "antigravity": "Use quando o tráfego Antigravity/Kiro deve ser interceptado através do MITM e roteado para OmniRoute.",
       "copilot": "Use quando desejar UX no estilo de bate-papo do Copilot enquanto impõe chaves OmniRoute e regras de roteamento.",
       "amp": "Use when you want Amp CLI routed through OmniRoute with stable shorthand aliases and OpenAI-compatible setup.",
-      "qwen": "Use when you want Qwen Code CLI with OmniRoute-managed provider settings and multi-provider model access.",
       "hermes": "Use quando precisar de um assistente leve de IA nativo do terminal para tarefas rápidas.",
       "hermes-agent": "__MISSING__:Use when you need Hermes Agent (by Nousresearch) with default, delegation, vision and auxiliary models routed through OmniRoute.",
       "custom": "Use para implementações de ferramentas personalizadas ou configurações genéricas compatíveis com OpenAI."
@@ -2157,7 +2156,6 @@
       "kiro": "Amazon Kiro — AI-powered IDE",
       "windsurf": "Windsurf AI Code Editor",
       "copilot": "GitHub Copilot AI Assistant",
-      "qwen": "Alibaba Qwen Code CLI",
       "amp": "Sourcegraph Amp coding assistant CLI",
       "hermes": "Assistente de Terminal Hermes AI",
       "hermes-agent": "__MISSING__:Hermes Agent (by Nousresearch) - Advanced terminal AI with multi-model support (delegation, vision, compression, etc.)",
@@ -2817,7 +2815,10 @@
     "agentFeaturesContextLengthErrorInteger": "O comprimento do contexto precisa ser um número inteiro válido",
     "agentFeaturesContextLengthErrorRange": "O comprimento do contexto precisa estar entre 1.000 e 2.000.000",
     "compressionOverride": "Substituição de compactação",
-    "modePack": "Pacote de modos"
+    "modePack": "Pacote de modos",
+    "kimiPresetTitle": "Preset Kimi Coding",
+    "kimiPresetDescription": "Kimi K3 como modelo primário (Moonshot API), com fallback automático para suas conexões Kimi Code (kimi-coding, kimi-web) quando configuradas.",
+    "kimiPresetCta": "Adicionar preset"
   },
   "costs": {
     "title": "Custos",
@@ -4843,7 +4844,8 @@
     "visionCapableLabel": "__MISSING__:Vision capable",
     "visionCapableHint": "__MISSING__:Manually flag this model as vision-capable when the provider's discovery metadata doesn't report an image input modality (common for self-hosted/local backends).",
     "kimiOfficialSupporterBadge": "Apoiador Oficial",
-    "kimiOfficialSupporterTooltip": "A Kimi (Moonshot AI) é parceira oficial de lançamento do OmniRoute"
+    "kimiOfficialSupporterTooltip": "A Kimi (Moonshot AI) é parceira oficial de lançamento do OmniRoute",
+    "kimiPartnerLinkNote": "Link de parceria — apoia o OmniRoute sem custo extra para você"
   },
   "settings": {
     "title": "Configurações",
@@ -9061,5 +9063,12 @@
     "sortTypeFirst": "Easiest first",
     "sortTypeFirstHelp": "Group by signup effort (No Signup → OAuth Login → API Key), keeping quality order within each group",
     "typeLegend": "No Signup = zero setup · OAuth Login = sign in with your own account · API Key = bring your own key or that provider's free tier"
+  },
+  "kimiSponsorBanner": {
+    "title": "A Kimi (Moonshot AI) agora é patrocinadora oficial do OmniRoute",
+    "description": "A Kimi K3 traz uma janela de contexto de 1M de tokens e desempenho de ponta em programação ao OmniRoute por uma fração do custo.",
+    "cta": "Obter Kimi Code",
+    "partnerLinkNote": "Link de parceria",
+    "dismissAriaLabel": "Dispensar"
   }
 }

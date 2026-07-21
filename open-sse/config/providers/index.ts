@@ -83,8 +83,9 @@ import { snowflakeProvider } from "./registry/snowflake/index.ts";
 import { huggingfaceProvider } from "./registry/huggingface/index.ts";
 import { chipotleProvider } from "./registry/chipotle/index.ts";
 import { freeaiapikeyProvider } from "./registry/freeaiapikey/index.ts";
-import { qwenProvider } from "./registry/qwen/index.ts";
 import { qwen_webProvider } from "./registry/qwen/web/index.ts";
+import { qwen_cloudProvider } from "./registry/qwen-cloud/index.ts";
+import { qwen_cloud_token_planProvider } from "./registry/qwen-cloud-token-plan/index.ts";
 import { zai_webProvider } from "./registry/zai-web/index.ts";
 import { modalProvider } from "./registry/modal/index.ts";
 import { zenmuxProvider } from "./registry/zenmux/index.ts";
@@ -126,6 +127,8 @@ import { deepinfraProvider } from "./registry/deepinfra/index.ts";
 import { agyProvider } from "./registry/agy/index.ts";
 import { agnesProvider } from "./registry/agnes/index.ts";
 import { aihordeProvider } from "./registry/aihorde/index.ts";
+import { ainativeProvider } from "./registry/ainative/index.ts";
+import { aionProvider } from "./registry/aion/index.ts";
 import { udioProvider } from "./registry/udio/index.ts";
 import { longcatProvider } from "./registry/longcat/index.ts";
 import { vertex_partnerProvider } from "./registry/vertex/partner/index.ts";
@@ -198,9 +201,13 @@ import { sumopodProvider } from "./registry/sumopod/index.ts";
 import { x5labProvider } from "./registry/x5lab/index.ts";
 import { kenariProvider } from "./registry/kenari/index.ts";
 import { navyProvider } from "./registry/navy/index.ts";
+import { naraProvider } from "./registry/nara/index.ts";
 import { requestyProvider } from "./registry/requesty/index.ts";
+import { sealionProvider } from "./registry/sealion/index.ts";
+import { routewayProvider } from "./registry/routeway/index.ts";
 import { digitaloceanProvider } from "./registry/digitalocean/index.ts";
 import { hcnsecProvider } from "./registry/hcnsec/index.ts";
+import { promptqlProvider } from "./registry/promptql/index.ts";
 
 export const REGISTRY: Record<string, RegistryEntry> = {
   aimlapi: aimlapiProvider,
@@ -284,8 +291,9 @@ export const REGISTRY: Record<string, RegistryEntry> = {
   huggingface: huggingfaceProvider,
   chipotle: chipotleProvider,
   freeaiapikey: freeaiapikeyProvider,
-  qwen: qwenProvider,
   "qwen-web": qwen_webProvider,
+  "qwen-cloud": qwen_cloudProvider,
+  "qwen-cloud-token-plan": qwen_cloud_token_planProvider,
   "zai-web": zai_webProvider,
   modal: modalProvider,
   zenmux: zenmuxProvider,
@@ -327,6 +335,8 @@ export const REGISTRY: Record<string, RegistryEntry> = {
   agy: agyProvider,
   agnes: agnesProvider,
   aihorde: aihordeProvider,
+  ainative: ainativeProvider,
+  aion: aionProvider,
   udio: udioProvider,
   longcat: longcatProvider,
   "vertex-partner": vertex_partnerProvider,
@@ -401,7 +411,11 @@ export const REGISTRY: Record<string, RegistryEntry> = {
   x5lab: x5labProvider,
   kenari: kenariProvider,
   navy: navyProvider,
+  nara: naraProvider,
   requesty: requestyProvider,
+  sealion: sealionProvider,
+  routeway: routewayProvider,
   digitalocean: digitaloceanProvider,
   hcnsec: hcnsecProvider,
+  promptql: promptqlProvider,
 };

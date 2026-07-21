@@ -1,8 +1,8 @@
 diff --git a/.env.example b/.env.example
-index 032dabfd5..db71b73c4 100644
+index eca058fdc..9712beaa6 100644
 --- a/.env.example
 +++ b/.env.example
-@@ -834,10 +834,11 @@ PROVIDER_LIMITS_SYNC_SPACING_MS=1500
+@@ -838,10 +838,11 @@ PROVIDER_LIMITS_SYNC_SPACING_MS=1500
  # Used by: open-sse/executors/antigravity.ts — escape hatch for multi-project setups.
  # OMNIROUTE_ALLOW_BODY_PROJECT_OVERRIDE=0
  
@@ -35,10 +35,10 @@ index 000000000..1bca2c43f
 +- Make Antigravity safety and Google One AI credits explicit, with `off`, single `retry`, and credit-first `always` modes.
 +- Separate live runtime endpoints from discovery and project bootstrap, exclude sandbox from runtime fallback, and make project bootstrap token-safe, coalesced, and abort-aware.
 diff --git a/config/quality/eslint-suppressions.json b/config/quality/eslint-suppressions.json
-index 73daf5a47..62c6a3374 100644
+index 789ad579c..dfcca3adf 100644
 --- a/config/quality/eslint-suppressions.json
 +++ b/config/quality/eslint-suppressions.json
-@@ -527,11 +527,6 @@
+@@ -494,11 +494,6 @@
        "count": 3
      }
    },
@@ -50,7 +50,7 @@ index 73daf5a47..62c6a3374 100644
    "tests/unit/api-key-reveal-route.test.ts": {
      "@typescript-eslint/no-explicit-any": {
        "count": 8
-@@ -2164,7 +2159,7 @@
+@@ -2121,7 +2116,7 @@
    },
    "tests/unit/translator-openai-to-gemini.test.ts": {
      "@typescript-eslint/no-explicit-any": {
@@ -60,7 +60,7 @@ index 73daf5a47..62c6a3374 100644
    },
    "tests/unit/translator-openai-to-kiro.test.ts": {
 diff --git a/docs/architecture/ARCHITECTURE.md b/docs/architecture/ARCHITECTURE.md
-index 059b8db9c..b1f3c9fc8 100644
+index 53b11e7e8..b71bbc84a 100644
 --- a/docs/architecture/ARCHITECTURE.md
 +++ b/docs/architecture/ARCHITECTURE.md
 @@ -481,7 +481,7 @@ the global circuit breaker / connection cooldown / model lockout layers:
@@ -340,10 +340,10 @@ index 98d801e5a..59eb80dfb 100644
  ## 旁路处理器
  
 diff --git a/docs/reference/ENVIRONMENT.md b/docs/reference/ENVIRONMENT.md
-index 57f471a55..d0d3160b8 100644
+index 47814389c..1507f2087 100644
 --- a/docs/reference/ENVIRONMENT.md
 +++ b/docs/reference/ENVIRONMENT.md
-@@ -443,7 +443,7 @@ detection above).
+@@ -444,7 +444,7 @@ detection above).
  | `COMPRESSION_PREFIX_FREEZE_THRESHOLD`           | `3`                                                 | `open-sse/services/compression/prefixFreeze.ts`             | Observations of a system prompt before it is treated as a frozen stable prefix.                                                                                         |
  | `OMNIROUTE_BOOTSTRAPPED`                        | `false`                                             | `src/app/(dashboard)/dashboard/page.tsx`                    | Set `true` by bootstrap script after initial setup. Controls setup wizard visibility.                                                                                   |
  | `OMNIROUTE_ALLOW_BODY_PROJECT_OVERRIDE`         | `0`                                                 | `open-sse/executors/antigravity.ts`                         | Escape hatch: allow request body to override the Antigravity project field.                                                                                             |
@@ -353,7 +353,7 @@ index 57f471a55..d0d3160b8 100644
  
  ### OAuth CLI Bridge (Internal)
 diff --git a/docs/security/STEALTH_GUIDE.md b/docs/security/STEALTH_GUIDE.md
-index 9d60d7be5..1996a44f3 100644
+index 43043ce99..e4eb22ce4 100644
 --- a/docs/security/STEALTH_GUIDE.md
 +++ b/docs/security/STEALTH_GUIDE.md
 @@ -6,7 +6,7 @@ lastUpdated: 2026-06-28
@@ -472,7 +472,7 @@ index 48899ca75..74addaf81 100644
    authType: "oauth",
    authHeader: "bearer",
 diff --git a/open-sse/config/providers/shared.ts b/open-sse/config/providers/shared.ts
-index 6ab575c7e..366d682a2 100644
+index b5d7adbad..1ca2b7601 100644
 --- a/open-sse/config/providers/shared.ts
 +++ b/open-sse/config/providers/shared.ts
 @@ -6,7 +6,7 @@
@@ -484,7 +484,7 @@ index 6ab575c7e..366d682a2 100644
  import { ANTIGRAVITY_PUBLIC_MODELS } from "../antigravityModelAliases.ts";
  import { AGY_PUBLIC_MODELS } from "../agyModels.ts";
  import {
-@@ -667,7 +667,7 @@ export function mapStainlessArch() {
+@@ -653,7 +653,7 @@ export function mapStainlessArch() {
  // ── Registry ──────────────────────────────────────────────────────────────
  
  export {
@@ -1938,10 +1938,10 @@ index 84f01420e..96862c582 100644
          accessToken,
          accountId,
 diff --git a/open-sse/translator/request/openai-to-gemini.ts b/open-sse/translator/request/openai-to-gemini.ts
-index a45fb3232..2271abe02 100644
+index d96a1b838..91f4d553c 100644
 --- a/open-sse/translator/request/openai-to-gemini.ts
 +++ b/open-sse/translator/request/openai-to-gemini.ts
-@@ -68,7 +68,7 @@ type GeminiRequest = {
+@@ -69,7 +69,7 @@ type GeminiRequest = {
    contents?: GeminiContent[];
    [key: string]: unknown;
    generationConfig: GeminiGenerationConfig;
@@ -1950,7 +1950,7 @@ index a45fb3232..2271abe02 100644
    systemInstruction?: GeminiContent;
    tools?: Array<{
      functionDeclarations?: GeminiFunctionDeclaration[];
-@@ -600,12 +600,20 @@ export function openaiToCloudCodeGeminiRequest(
+@@ -611,12 +611,20 @@ export function openaiToCloudCodeGeminiRequest(
      signaturelessToolCallMode?: "native" | "text" | "context";
    } = {}
  ) {
@@ -1972,7 +1972,7 @@ index a45fb3232..2271abe02 100644
  }
  
  function wrapInCloudCodeEnvelope(model, cloudCodeRequest, credentials = null) {
-@@ -643,7 +651,6 @@ function wrapInCloudCodeEnvelope(model, cloudCodeRequest, credentials = null) {
+@@ -654,7 +662,6 @@ function wrapInCloudCodeEnvelope(model, cloudCodeRequest, credentials = null) {
      model: cleanModel,
      userAgent: getAntigravityEnvelopeUserAgent(credentials),
      requestType: "agent",
@@ -1981,7 +1981,7 @@ index a45fb3232..2271abe02 100644
    if (cloudCodeRequest._toolNameMap instanceof Map && cloudCodeRequest._toolNameMap.size > 0) {
      envelope._toolNameMap = cloudCodeRequest._toolNameMap;
 diff --git a/src/lib/oauth/constants/oauth.ts b/src/lib/oauth/constants/oauth.ts
-index bf0dee233..6e471d480 100644
+index e7dfe6df4..347a289ac 100644
 --- a/src/lib/oauth/constants/oauth.ts
 +++ b/src/lib/oauth/constants/oauth.ts
 @@ -1,5 +1,6 @@
@@ -1992,7 +1992,7 @@ index bf0dee233..6e471d480 100644
    getAntigravityFetchAvailableModelsUrls,
  } from "@omniroute/open-sse/config/antigravityUpstream.ts";
  import {
-@@ -186,15 +187,17 @@ export const ANTIGRAVITY_CONFIG = {
+@@ -184,15 +185,17 @@ export const ANTIGRAVITY_CONFIG = {
      "https://www.googleapis.com/auth/experimentsandconfigs",
    ],
    // Antigravity specific
@@ -2016,7 +2016,7 @@ index bf0dee233..6e471d480 100644
    loadCodeAssistUserAgent: ANTIGRAVITY_LOAD_CODE_ASSIST_USER_AGENT,
    loadCodeAssistApiClient: ANTIGRAVITY_LOAD_CODE_ASSIST_API_CLIENT,
 diff --git a/src/lib/usage/fetcher.ts b/src/lib/usage/fetcher.ts
-index 8a427d381..54d1a439a 100644
+index cdac5e819..3e663cb97 100644
 --- a/src/lib/usage/fetcher.ts
 +++ b/src/lib/usage/fetcher.ts
 @@ -10,7 +10,7 @@ import { applyAntigravityClientProfileHeaders } from "@omniroute/open-sse/servic
@@ -2028,7 +2028,7 @@ index 8a427d381..54d1a439a 100644
  } from "@omniroute/open-sse/config/antigravityUpstream.ts";
  import {
    getAntigravityRemainingCredits,
-@@ -151,7 +151,7 @@ async function probeAntigravityCreditBalance(
+@@ -149,7 +149,7 @@ async function probeAntigravityCreditBalance(
    try {
      if (!projectId) return null; // Can't call streamGenerateContent without a projectId
  
@@ -2037,7 +2037,7 @@ index 8a427d381..54d1a439a 100644
      const url = `${baseUrl}/v1internal:streamGenerateContent?alt=sse`;
  
      const body = {
-@@ -230,8 +230,8 @@ async function probeAntigravityCreditBalance(
+@@ -228,8 +228,8 @@ async function probeAntigravityCreditBalance(
   * Calls fetchAvailableModels to get per-model quota fractions.
   * Credit balance (GOOGLE_ONE_AI) is read from the executor's in-memory cache,
   * which is populated automatically after each successful credit-injected SSE call.
@@ -2048,7 +2048,7 @@ index 8a427d381..54d1a439a 100644
   */
  async function getAntigravityUsage(
    accessToken: string,
-@@ -246,9 +246,10 @@ async function getAntigravityUsage(
+@@ -244,9 +244,10 @@ async function getAntigravityUsage(
      // Read cached credit balance from executor module (populated from SSE remainingCredits)
      let creditBalance = getAntigravityRemainingCredits(accountId);
  
@@ -2062,12 +2062,12 @@ index 8a427d381..54d1a439a 100644
          accessToken,
          accountId,
 diff --git a/src/sse/handlers/chat.ts b/src/sse/handlers/chat.ts
-index cfb4196eb..27400ff9f 100644
+index d4818131d..caba2e9c9 100644
 --- a/src/sse/handlers/chat.ts
 +++ b/src/sse/handlers/chat.ts
-@@ -212,6 +212,18 @@ function intersectAllowedConnectionIds(primary: unknown, secondary: unknown): st
- const PROVIDER_BREAKER_FAILURE_STATUSES = new Set([408, 500, 502, 503, 504]);
- const comboPromoteDeps = { updateCombo, info: log.info, warn: log.warn };
+@@ -230,6 +230,18 @@ export function shouldTripProviderBreakerForResult(
+   );
+ }
  
 +function isAntigravityMissingProjectError(
 +  provider: string,
@@ -2084,7 +2084,7 @@ index cfb4196eb..27400ff9f 100644
  /**
   * Handle chat completion request
   * Supports: OpenAI, Claude, Gemini, OpenAI Responses API formats
-@@ -1419,6 +1431,14 @@ async function handleSingleModelChat(
+@@ -1454,6 +1466,14 @@ async function handleSingleModelChat(
          return result.response;
        }
  
@@ -2100,10 +2100,10 @@ index cfb4196eb..27400ff9f 100644
          provider === "antigravity" &&
          (result.errorCode === "STREAM_READINESS_TIMEOUT" ||
 diff --git a/src/sse/services/auth.ts b/src/sse/services/auth.ts
-index 67fa61330..7a859995b 100644
+index 1f685cc26..b7e8341cf 100644
 --- a/src/sse/services/auth.ts
 +++ b/src/sse/services/auth.ts
-@@ -16,6 +16,7 @@ import {
+@@ -24,6 +24,7 @@ import {
    isQuotaExhaustedForRequest,
  } from "@/domain/quotaCache";
  import { getQuotaScopeLabelForProvider } from "@omniroute/open-sse/services/antigravityQuotaFamily.ts";
@@ -2111,7 +2111,7 @@ index 67fa61330..7a859995b 100644
  import {
    isAccountUnavailable,
    getUnavailableUntil,
-@@ -1410,7 +1411,7 @@ export async function getProviderCredentials(
+@@ -1365,7 +1366,7 @@ export async function getProviderCredentials(
          return false;
        });
      } else if (availableConnections.length > 0) {
@@ -2120,7 +2120,7 @@ index 67fa61330..7a859995b 100644
      }
  
      if (blockedByPolicy.length > 0) {
-@@ -1701,13 +1702,22 @@ export async function getProviderCredentialsWithQuotaPreflight(
+@@ -1678,13 +1679,22 @@ export async function getProviderCredentialsWithQuotaPreflight(
    requestedModel: string | null = null,
    options: CredentialSelectionOptions = {}
  ) {
@@ -2846,7 +2846,7 @@ index 000000000..73dc955e7
 +
 +await main();
 diff --git a/tests/snapshots/provider/translate-path.json b/tests/snapshots/provider/translate-path.json
-index 6d401fc86..a47d6e7f1 100644
+index 2be52c889..a425843ae 100644
 --- a/tests/snapshots/provider/translate-path.json
 +++ b/tests/snapshots/provider/translate-path.json
 @@ -118,18 +118,18 @@
@@ -2871,7 +2871,7 @@ index 6d401fc86..a47d6e7f1 100644
        }
      },
      "url": {
-@@ -265,18 +265,18 @@
+@@ -288,18 +288,18 @@
          "Accept": "text/event-stream",
          "Authorization": "Bearer <TOK>",
          "Content-Type": "application/json",
@@ -4443,7 +4443,7 @@ index 9be3c9e9b..69b3e4503 100644
    assert.equal(result.request.systemInstruction.parts[1].text, "Project rules");
    assert.equal((result as any).request?.generationConfig.maxOutputTokens, undefined);
 diff --git a/tests/unit/usage-service-hardening.test.ts b/tests/unit/usage-service-hardening.test.ts
-index 150b99b28..142afbc7d 100644
+index dd9a537de..32abef413 100644
 --- a/tests/unit/usage-service-hardening.test.ts
 +++ b/tests/unit/usage-service-hardening.test.ts
 @@ -5,7 +5,7 @@ const usageService = await import("../../open-sse/services/usage.ts");
