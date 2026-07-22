@@ -87,7 +87,7 @@ index 24cec3140..0b9f66705 100644
    const { lastProvider, errorProvider } = providerTopology;
  
 diff --git a/src/app/(dashboard)/dashboard/HomeProviderTopologySection.tsx b/src/app/(dashboard)/dashboard/HomeProviderTopologySection.tsx
-index 034088e7b..bdb6ddc78 100644
+index 034088e7b..2670f54b7 100644
 --- a/src/app/(dashboard)/dashboard/HomeProviderTopologySection.tsx
 +++ b/src/app/(dashboard)/dashboard/HomeProviderTopologySection.tsx
 @@ -8,6 +8,7 @@ import { useLiveRequests } from "@/hooks/useLiveDashboard";
@@ -98,7 +98,20 @@ index 034088e7b..bdb6ddc78 100644
  
  type TopologyProvider = {
    id: string;
-@@ -62,12 +63,15 @@ export function HomeProviderTopologySection({
+@@ -39,7 +40,11 @@ export function HomeProviderTopologySection({
+   const activeProviderCount = new Set(activeRequests.map(({ provider }) => provider)).size;
+ 
+   return (
+-    <Card>
++    // Frameless section: no card surface/border/shadow so the diagram floats on the
++    // page's shared graph-paper wallpaper instead of a nested boxed panel (anh Hà:
++    // "dùng background chung với toàn trang"). Recent Requests keeps its own inner
++    // Card for legibility; only this outer wrapper goes transparent.
++    <Card className="bg-transparent border-0 shadow-none">
+       <div className="flex items-center justify-between mb-3">
+         <div>
+           <h2 className="text-base font-semibold">{t("providerTopology")}</h2>
+@@ -62,12 +67,15 @@ export function HomeProviderTopologySection({
            </span>
          </div>
        </div>
@@ -334,7 +347,7 @@ index 000000000..de028e1a1
 +  );
 +}
 diff --git a/src/app/(dashboard)/home/ProviderTopology.tsx b/src/app/(dashboard)/home/ProviderTopology.tsx
-index 313e2faad..58b7b5743 100644
+index 313e2faad..f470423eb 100644
 --- a/src/app/(dashboard)/home/ProviderTopology.tsx
 +++ b/src/app/(dashboard)/home/ProviderTopology.tsx
 @@ -2,11 +2,13 @@
@@ -369,7 +382,7 @@ index 313e2faad..58b7b5743 100644
    return (
      <div
 -      className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border-2 transition-all duration-300 bg-bg"
-+      className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border transition-all duration-300 bg-bg"
++      className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border transition-all duration-300"
        style={{
 -        borderColor: error ? RED : active ? color : healthy ? GREEN : "var(--color-border)",
 -        boxShadow: error
@@ -414,7 +427,7 @@ index 313e2faad..58b7b5743 100644
    return (
 -    <div className="flex items-center gap-2 px-5 py-3 rounded-xl border-2 border-primary bg-primary/8 shadow-lg min-w-[140px] justify-center">
 +    <div
-+      className={`relative flex items-center justify-center size-12 rounded-xl border border-primary/70 bg-primary/8 shadow-sm transition-all duration-300${
++      className={`relative flex items-center justify-center size-12 rounded-xl border border-primary/70 transition-all duration-300${
 +        active ? " topology-router-core" : ""
 +      }`}
 +    >
@@ -527,7 +540,22 @@ index 313e2faad..58b7b5743 100644
        });
      }
    }
-@@ -333,6 +336,7 @@ export default function ProviderTopology({
+@@ -314,8 +317,12 @@ export default function ProviderTopology({
+     [providers]
+   );
+ 
+-  const containerClass =
+-    "h-[300px] w-full min-w-0 rounded-xl border border-border bg-bg-subtle/20 overflow-hidden sm:h-[420px]";
++  // No background/border on the diagram itself: the page's shared graph-paper
++  // wallpaper (globals.css body::before) shows straight through the canvas, so the
++  // provider structure reads as part of the page instead of a nested boxed panel.
++  // Node fills are transparent too (see ProviderNode / RouterNode) — only the
++  // Recent Requests table keeps its own surface for legibility.
++  const containerClass = "h-[300px] w-full min-w-0 overflow-hidden sm:h-[420px]";
+ 
+   if (providers.length === 0) {
+     return (
+@@ -333,6 +340,7 @@ export default function ProviderTopology({
        nodes={nodes}
        edges={edges}
        nodeTypes={nodeTypes}

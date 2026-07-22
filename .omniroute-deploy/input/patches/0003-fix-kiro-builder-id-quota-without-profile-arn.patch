@@ -1,0 +1,115 @@
+diff --git a/open-sse/services/usage/kiro.ts b/open-sse/services/usage/kiro.ts
+index 6ed5f72ed..3862447f6 100644
+--- a/open-sse/services/usage/kiro.ts
++++ b/open-sse/services/usage/kiro.ts
+@@ -287,6 +287,10 @@ async function runKiroUsageAttempts(
+   return { sawAuthError, errors, lastHttpFailure };
+ }
+ 
++function supportsProfilelessKiroUsage(authMethod?: string): boolean {
++  return authMethod === "builder-id" || authMethod === "kiro-cli";
++}
++
+ /**
+  * Kiro (AWS CodeWhisperer) Usage
+  */
+@@ -297,6 +301,7 @@ export async function getKiroUsage(accessToken?: string, providerSpecificData?:
+         ? providerSpecificData.authMethod
+         : undefined;
+     const isApiKey = authMethod === "api_key";
++    const supportsProfilelessUsage = supportsProfilelessKiroUsage(authMethod);
+     let profileArn =
+       typeof providerSpecificData?.profileArn === "string"
+         ? providerSpecificData.profileArn
+@@ -313,11 +318,14 @@ export async function getKiroUsage(accessToken?: string, providerSpecificData?:
+     // exist); its profile lives in eu-central-1 (or us-east-1) and the SSO token works cross-region
+     // against it. Without this, the quota card previously showed nothing ("no limits") for such
+     // accounts because the single-region lookup at q.{idcRegion} always failed.
+-    if (!profileArn && accessToken) {
++    // Builder ID and kiro-cli sessions can call GetUsageLimits without a profile ARN. Their
++    // ListAvailableProfiles request may be denied even while profile-less quota requests work, so
++    // skip discovery for those auth methods and continue with the normal usage attempts.
++    if (!profileArn && accessToken && !supportsProfilelessUsage) {
+       profileArn = await discoverKiroProfileArnAcrossRegions(accessToken, storedRegion);
+     }
+ 
+-    if (!profileArn && !isApiKey) {
++    if (!profileArn && !isApiKey && !supportsProfilelessUsage) {
+       return { message: "Kiro connected. Profile ARN not available for quota tracking." };
+     }
+ 
+diff --git a/tests/unit/kiro-iam-profilearn-usage.test.ts b/tests/unit/kiro-iam-profilearn-usage.test.ts
+index 9bfc7f413..b8bb7fa2e 100644
+--- a/tests/unit/kiro-iam-profilearn-usage.test.ts
++++ b/tests/unit/kiro-iam-profilearn-usage.test.ts
+@@ -131,6 +131,52 @@ test("discoverKiroProfileArn returns undefined for empty profiles or non-ok resp
+   }
+ });
+ 
++test("getKiroUsage fetches Builder ID and kiro-cli quotas without a profile ARN", async () => {
++  const originalFetch = globalThis.fetch;
++  const authMethods = ["builder-id", "kiro-cli"];
++  const requests: Array<{ target: string; body: Record<string, unknown> }> = [];
++
++  globalThis.fetch = (async (_url: string, init?: RequestInit) => {
++    const headers = init?.headers as Record<string, string>;
++    const target = String(headers?.["x-amz-target"] || "");
++    const body = JSON.parse(String(init?.body || "{}")) as Record<string, unknown>;
++    requests.push({ target, body });
++    return new Response(
++      JSON.stringify({
++        subscriptionInfo: { subscriptionTitle: "Kiro Pro" },
++        usageBreakdownList: [
++          {
++            resourceType: "AGENTIC_REQUEST",
++            currentUsageWithPrecision: 3,
++            usageLimitWithPrecision: 10,
++          },
++        ],
++      }),
++      { status: 200, headers: { "Content-Type": "application/json" } }
++    );
++  }) as typeof fetch;
++
++  try {
++    for (const authMethod of authMethods) {
++      const result = (await getKiroUsage("profileless-token", {
++        authMethod,
++        region: "us-east-1",
++      })) as { plan?: string; quotas?: Record<string, { used: number; total: number }> };
++      assert.equal(result.plan, "Kiro Pro");
++      assert.equal(result.quotas?.agentic_request.used, 3);
++      assert.equal(result.quotas?.agentic_request.total, 10);
++    }
++
++    assert.equal(requests.length, authMethods.length);
++    for (const request of requests) {
++      assert.equal(request.target, "AmazonCodeWhispererService.GetUsageLimits");
++      assert.equal("profileArn" in request.body, false);
++    }
++  } finally {
++    globalThis.fetch = originalFetch;
++  }
++});
++
+ // Regression: when a Kiro account added via Google/GitHub social-auth (authMethod "imported"
+ // with provider "Google" or "Github" — set by /api/oauth/kiro/social-exchange/route.ts) has its
+ // token rejected by the AWS CodeWhisperer quota API (401/403), surface a clear "auth expired,
+diff --git a/tests/unit/usage-service-hardening.test.ts b/tests/unit/usage-service-hardening.test.ts
+index dd9a537de..c2b87fe85 100644
+--- a/tests/unit/usage-service-hardening.test.ts
++++ b/tests/unit/usage-service-hardening.test.ts
+@@ -740,9 +740,11 @@ test("usage service covers Codex, Kiro and Kimi usage parsing and error branches
+   const kiroNoArn: any = await usageService.getUsageForProvider({
+     provider: "kiro",
+     accessToken: "kiro-token",
+-    providerSpecificData: {},
++    providerSpecificData: { authMethod: "builder-id", region: "us-east-1" },
+   });
+-  assert.match(kiroNoArn.message, /Profile ARN not available/i);
++  assert.equal(kiroNoArn.plan, "Kiro Pro");
++  assert.equal(kiroNoArn.quotas.agentic_request.used, 12);
++  assert.equal(kiroNoArn.quotas.agentic_request_freetrial.remaining, 3);
+ 
+   const kiro: any = await usageService.getUsageForProvider({
+     provider: "kiro",
