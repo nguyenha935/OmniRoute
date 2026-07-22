@@ -516,9 +516,7 @@ export default function PricingTab() {
                     }`}
                   />
                   <span className="text-xs text-text-main font-medium">
-                    {syncStatus?.enabled
-                      ? t("pricingAutoSyncEnabled")
-                      : t("pricingAutoSyncDisabled")}
+                    {syncStatus?.enabled ? t("syncEnabled") : t("syncDisabled")}
                   </span>
                 </div>
               </div>

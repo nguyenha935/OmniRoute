@@ -588,24 +588,22 @@ export function recordModelLockoutFailure(
   const failureCount = withinWindow ? previous.failureCount + 1 : 1;
 
   const baseCooldownMs = getModelLockBaseCooldown(status, fallbackCooldownMs, profile);
-  // Cap both exponential backoff and exact cooldowns (e.g. daily-quota
-  // until-midnight) against maxCooldownMs so user-configured caps are honored.
+  // Cap exponential backoff so repeated failures cannot produce absurdly long
+  // lockouts; exact cooldowns (e.g. daily-quota until-midnight) are not capped.
   const maxCooldownMs =
     typeof options.maxCooldownMs === "number" && options.maxCooldownMs > 0
       ? options.maxCooldownMs
-      : null;
+      : BACKOFF_CONFIG.max;
   const cooldownMs =
     typeof options.exactCooldownMs === "number" && options.exactCooldownMs > 0
-      ? maxCooldownMs !== null
-        ? Math.min(options.exactCooldownMs, maxCooldownMs)
-        : options.exactCooldownMs
+      ? options.exactCooldownMs
       : Math.min(
           getScaledCooldown(
             baseCooldownMs,
             failureCount,
             profile?.maxBackoffSteps ?? BACKOFF_CONFIG.maxLevel
           ),
-          maxCooldownMs ?? BACKOFF_CONFIG.max
+          maxCooldownMs
         );
 
   modelFailureState.set(key, {
