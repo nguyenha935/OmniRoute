@@ -6,23 +6,85 @@ index 000000000..209ffe641
 @@ -0,0 +1 @@
 +- **feat(home):** the home Provider Topology now shows a logo-only router core with an electric "kame beam" on active links, a live **Recent Requests** panel (polls `/api/usage/call-logs` every ~3s, gated by the topology appearance toggle + page visibility), and only surfaces providers with a healthy connection or real traffic — untested/failing connections no longer clutter the map.
 diff --git a/src/app/(dashboard)/dashboard/HomePageClient.tsx b/src/app/(dashboard)/dashboard/HomePageClient.tsx
-index 24cec3140..bc472eaa9 100644
+index 24cec3140..0b9f66705 100644
 --- a/src/app/(dashboard)/dashboard/HomePageClient.tsx
 +++ b/src/app/(dashboard)/dashboard/HomePageClient.tsx
-@@ -506,8 +506,13 @@ export default function HomePageClient({ machineId }: HomePageClientProps) {
-       });
-     };
+@@ -471,48 +471,42 @@ export default function HomePageClient({ machineId }: HomePageClientProps) {
+     >();
+     const providerConfig = AI_PROVIDERS as Record<string, { name?: string }>;
  
-+    // Only surface a provider whose connection is genuinely healthy (≥1 connected).
-+    // A provider that merely has connection rows — untested, or failing their health
-+    // check — used to appear here (`total > 0`) and cluttered the map with nodes that
-+    // aren't actually reachable. Providers with real traffic still get added below via
-+    // `providerMetrics`, so a provider that errored *while serving requests* is not lost.
-     providerStats
+-    // Connection-health per provider, so the topology node reflects "what is connected"
+-    // at rest (green healthy / red error) instead of going blank between requests. A
+-    // provider with ≥1 healthy connection is "active"; if none are healthy but some are
+-    // errored it is "error"; otherwise "idle". Live/recent traffic still overrides this.
+-    const healthByProvider = new Map<string, ProviderHealth>();
++    // A topology node is drawn ONLY for a provider that has at least one *enabled*
++    // connection (`isActive !== false`), deduplicated to one node per provider — this
++    // mirrors 9Router (`UsageStats.js` provider filter) and is the source of truth for
++    // "what is connected". We deliberately do NOT seed nodes from `providerMetrics`:
++    // that aggregates all-time `call_logs` with no time window and no connection check,
++    // so a provider that was ever called once — or merely connection-tested — used to
++    // linger as a ghost node forever after its connection was disabled or removed.
++    // Connection health only affects the node's rest colour (green connected / red
++    // errored); live + recent traffic still overrides it downstream via active/last/error.
+     for (const stat of providerStats) {
+-      const canonical = normalizeProviderId(stat.id);
+-      if (!canonical) continue;
+-      healthByProvider.set(
+-        canonical,
+-        stat.connected > 0 ? "active" : stat.errors > 0 ? "error" : "idle"
+-      );
+-    }
+-
+-    const addProvider = (providerId?: string | null, name?: string) => {
+-      const rawProviderId = typeof providerId === "string" ? providerId.trim() : "";
+-      if (!rawProviderId) return;
++      // `connected` counts enabled connections whose test status is healthy/unknown;
++      // `errors` counts enabled connections that failed their test. Their sum is the
++      // number of enabled connections — disabled ones (isActive === false) are in
++      // neither, so a provider with only disabled connections is skipped here.
++      const enabled = stat.connected + stat.errors;
++      if (enabled <= 0) continue;
+ 
+-      const canonicalProviderId = normalizeProviderId(rawProviderId);
+-      if (!canonicalProviderId || byProvider.has(canonicalProviderId)) return;
++      const canonical = normalizeProviderId(stat.id);
++      if (!canonical || byProvider.has(canonical)) continue;
+ 
+       const resolvedName =
+-        getProviderDisplayLabel(rawProviderId, providerNodes) ||
+-        name ||
+-        providerConfig[canonicalProviderId]?.name ||
+-        rawProviderId;
+-
+-      byProvider.set(canonicalProviderId, {
+-        id: canonicalProviderId,
+-        provider: canonicalProviderId,
++        getProviderDisplayLabel(stat.id, providerNodes) ||
++        stat.provider?.name ||
++        providerConfig[canonical]?.name ||
++        stat.id;
++
++      byProvider.set(canonical, {
++        id: canonical,
++        provider: canonical,
+         name: resolvedName,
+-        status: healthByProvider.get(canonicalProviderId) ?? "idle",
++        status: stat.connected > 0 ? "active" : "error",
+       });
+-    };
+-
+-    providerStats
 -      .filter((provider) => provider.total > 0)
-+      .filter((provider) => provider.connected > 0)
-       .forEach((provider) => addProvider(provider.id, provider.provider.name));
-     Object.keys(providerMetrics).forEach((provider) => addProvider(provider));
+-      .forEach((provider) => addProvider(provider.id, provider.provider.name));
+-    Object.keys(providerMetrics).forEach((provider) => addProvider(provider));
++    }
+ 
+     return Array.from(byProvider.values());
+-  }, [providerStats, providerMetrics, providerNodes]);
++  }, [providerStats, providerNodes]);
+ 
+   const { lastProvider, errorProvider } = providerTopology;
  
 diff --git a/src/app/(dashboard)/dashboard/HomeProviderTopologySection.tsx b/src/app/(dashboard)/dashboard/HomeProviderTopologySection.tsx
 index 034088e7b..bdb6ddc78 100644
@@ -60,10 +122,10 @@ index 034088e7b..bdb6ddc78 100644
  }
 diff --git a/src/app/(dashboard)/home/HomeRecentRequests.tsx b/src/app/(dashboard)/home/HomeRecentRequests.tsx
 new file mode 100644
-index 000000000..575bea7b6
+index 000000000..de028e1a1
 --- /dev/null
 +++ b/src/app/(dashboard)/home/HomeRecentRequests.tsx
-@@ -0,0 +1,180 @@
+@@ -0,0 +1,207 @@
 +"use client";
 +
 +import { useCallback, useEffect, useState } from "react";
@@ -77,18 +139,23 @@ index 000000000..575bea7b6
 + *
 + * ## Data source
 + * Fed by POLLING `GET /api/usage/call-logs?limit=N` every ~3s, NOT by the live
-+ * WebSocket. OmniRoute's WS (EventBus) only emits `request.started`;
-+ * `request.completed`/`request.failed` are never emitted, so a WS-fed table would
-+ * only ever show in-flight rows and never their outcome. The call-logs endpoint
-+ * already merges in-memory active/completed entries with persisted rows and
-+ * returns them newest-first (active on top), which is exactly this feed.
++ * WebSocket. The WS is used elsewhere for the in-flight beam (it emits
++ * `request.started` and, since the stuck-latch fix, `request.completed`/`request.failed`),
++ * but its payload carries no tokens/latency/status and no persisted history — so it
++ * can't back a "recent requests" table on its own. The call-logs endpoint merges the
++ * in-memory active/completed entries with persisted rows and returns them newest-first
++ * (active on top), which is exactly this feed.
 + *
 + * The poll is gated by `enabled` (the same `showProviderTopologyOnHome` flag that
 + * gates the topology section) AND page visibility, so a backgrounded tab pauses.
 + */
 +
 +const POLL_INTERVAL_MS = 3000;
++// Rows shown after client-side filtering of connection-test rows.
 +const RECENT_LIMIT = 20;
++// Fetch a wider window than we display so filtering out connection-test rows
++// (a burst of "Test connection" clicks) can't starve the feed below RECENT_LIMIT.
++const FETCH_LIMIT = 60;
 +
 +type CallLogRow = {
 +  id?: string;
@@ -97,11 +164,30 @@ index 000000000..575bea7b6
 +  model?: string;
 +  provider?: string;
 +  providerDisplay?: string | null;
++  path?: string;
++  sourceFormat?: string | null;
++  targetFormat?: string | null;
 +  tokens?: { in?: number; out?: number };
 +  error?: string | null;
 +  active?: boolean;
 +  completed?: boolean;
 +};
++
++/**
++ * Connection tests write real `call_logs` rows (provider "Test connection" button →
++ * `/api/providers/[id]/test`) with fixed markers: model `connection-test`, path
++ * `/api/providers/test`, sourceFormat/targetFormat `test`. Those are health probes,
++ * not user traffic, so they must not clutter the Recent Requests feed (matching how
++ * 9Router keeps its Usage list to real calls). Drop any row carrying a test marker.
++ */
++function isConnectionTestRow(row: CallLogRow): boolean {
++  return (
++    row.model === "connection-test" ||
++    row.sourceFormat === "test" ||
++    row.targetFormat === "test" ||
++    row.path === "/api/providers/test"
++  );
++}
 +
 +type RequestState = "active" | "error" | "ok";
 +
@@ -143,14 +229,17 @@ index 000000000..575bea7b6
 +
 +  const load = useCallback(async (signal: AbortSignal) => {
 +    try {
-+      const res = await fetch(`/api/usage/call-logs?limit=${RECENT_LIMIT}`, {
++      const res = await fetch(`/api/usage/call-logs?limit=${FETCH_LIMIT}`, {
 +        cache: "no-store",
 +        signal,
 +      });
 +      if (!res.ok) return;
 +      const data = await res.json();
 +      if (signal.aborted) return;
-+      setRows(Array.isArray(data) ? data.slice(0, RECENT_LIMIT) : []);
++      const filtered = Array.isArray(data)
++        ? (data as CallLogRow[]).filter((row) => !isConnectionTestRow(row)).slice(0, RECENT_LIMIT)
++        : [];
++      setRows(filtered);
 +      setLoaded(true);
 +    } catch (error) {
 +      const isAbort = error instanceof DOMException && error.name === "AbortError";
@@ -245,7 +334,7 @@ index 000000000..575bea7b6
 +  );
 +}
 diff --git a/src/app/(dashboard)/home/ProviderTopology.tsx b/src/app/(dashboard)/home/ProviderTopology.tsx
-index 313e2faad..2bd14b63b 100644
+index 313e2faad..58b7b5743 100644
 --- a/src/app/(dashboard)/home/ProviderTopology.tsx
 +++ b/src/app/(dashboard)/home/ProviderTopology.tsx
 @@ -2,11 +2,13 @@
@@ -263,7 +352,61 @@ index 313e2faad..2bd14b63b 100644
  import { edgeStyle, FLOW_EDGE_COLORS } from "@/shared/components/flow/edgeStyles";
  import { resolveTopologyNodeLabel } from "./topologyLabel";
  
-@@ -112,8 +114,13 @@ function ProviderNode({ data }: { data: ProviderNodeData }) {
+@@ -37,28 +39,24 @@ type ProviderNodeData = {
+   providerId: string;
+   active: boolean;
+   error: boolean;
+-  /** Connection-health base state: a healthy connection with no in-flight traffic. */
+-  healthy: boolean;
+ };
+ 
+ function ProviderNode({ data }: { data: ProviderNodeData }) {
+-  const { label, color, providerId, active, error, healthy } = data;
++  const { label, color, providerId, active, error } = data;
+   const GREEN = FLOW_EDGE_COLORS.active;
+   const RED = FLOW_EDGE_COLORS.error;
+ 
+   return (
+     <div
+-      className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border-2 transition-all duration-300 bg-bg"
++      className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border transition-all duration-300 bg-bg"
+       style={{
+-        borderColor: error ? RED : active ? color : healthy ? GREEN : "var(--color-border)",
+-        boxShadow: error
+-          ? `0 0 12px ${RED}30`
+-          : active
+-            ? `0 0 12px ${color}30`
+-            : healthy
+-              ? `0 0 10px ${GREEN}20`
+-              : "none",
+-        minWidth: "136px",
++        // Idle providers (including healthy-but-quiet connections) sit muted with the
++        // default border and no glow — only live traffic (active) or a real error
++        // lights a node up, matching 9Router's calm-at-rest map. This kills the
++        // "everything glows green" clutter anh Hà flagged.
++        borderColor: error ? RED : active ? color : "var(--color-border)",
++        boxShadow: error ? `0 0 10px ${RED}26` : active ? `0 0 10px ${color}26` : "none",
++        minWidth: "128px",
+       }}
+     >
+       <Handle
+@@ -96,13 +94,13 @@ function ProviderNode({ data }: { data: ProviderNodeData }) {
+       <span
+         className="text-xs font-medium truncate flex-1"
+         style={{
+-          color: active ? color : error ? RED : healthy ? GREEN : "var(--color-text-main)",
++          color: active ? color : error ? RED : "var(--color-text-main)",
+         }}
+       >
+         {label}
+       </span>
+ 
+-      {(active || error || healthy) && (
++      {(active || error) && (
+         <StatusDot color={active ? color : GREEN} error={error} pulse={active || error} />
+       )}
+     </div>
+@@ -112,8 +110,13 @@ function ProviderNode({ data }: { data: ProviderNodeData }) {
  type RouterNodeData = { activeCount: number };
  
  function RouterNode({ data }: { data: RouterNodeData }) {
@@ -271,14 +414,14 @@ index 313e2faad..2bd14b63b 100644
    return (
 -    <div className="flex items-center gap-2 px-5 py-3 rounded-xl border-2 border-primary bg-primary/8 shadow-lg min-w-[140px] justify-center">
 +    <div
-+      className={`relative flex items-center justify-center size-16 rounded-2xl border-2 border-primary bg-primary/8 shadow-lg transition-all duration-300${
++      className={`relative flex items-center justify-center size-12 rounded-xl border border-primary/70 bg-primary/8 shadow-sm transition-all duration-300${
 +        active ? " topology-router-core" : ""
 +      }`}
 +    >
        <Handle
          type="source"
          position={Position.Top}
-@@ -139,12 +146,12 @@ function RouterNode({ data }: { data: RouterNodeData }) {
+@@ -139,12 +142,12 @@ function RouterNode({ data }: { data: RouterNodeData }) {
          className="!bg-transparent !border-0 !w-0 !h-0"
        />
  
@@ -289,7 +432,7 @@ index 313e2faad..2bd14b63b 100644
 -      {data.activeCount > 0 && (
 -        <span className="ml-1 px-1.5 py-0.5 rounded-full bg-primary text-white text-[10px] font-bold leading-none">
 +      <OmniRouteLogo
-+        size={34}
++        size={24}
 +        className={`text-primary${active ? " topology-router-icon" : ""}`}
 +      />
 +      {active && (
@@ -297,7 +440,7 @@ index 313e2faad..2bd14b63b 100644
            {data.activeCount}
          </span>
        )}
-@@ -157,6 +164,10 @@ const nodeTypes: NodeTypes = {
+@@ -157,6 +160,10 @@ const nodeTypes: NodeTypes = {
    router: RouterNode as any,
  };
  
@@ -308,18 +451,62 @@ index 313e2faad..2bd14b63b 100644
  type ProviderHealth = "active" | "error" | "idle";
  type ProviderEntry = { id?: string; provider: string; name?: string; status?: ProviderHealth };
  
-@@ -179,8 +190,8 @@ function buildLayout(
+@@ -179,8 +186,8 @@ function buildLayout(
  ): { nodes: Node[]; edges: Edge[] } {
    const nodeW = 156;
    const nodeH = 28;
 -  const routerW = 148;
 -  const routerH = 44;
-+  const routerW = 64;
-+  const routerH = 64;
++  const routerW = 48;
++  const routerH = 48;
  
    const nodes: Node[] = [];
    const edges: Edge[] = [];
-@@ -253,11 +264,15 @@ function buildLayout(
+@@ -195,21 +202,13 @@ function buildLayout(
+ 
+   if (providers.length === 0) return { nodes, edges };
+ 
+-  // Sort: active → error → last-used → healthy(connected) → rest (alpha within groups)
+-  const sorted = [...providers].sort((a, b) => {
+-    const rank = (p: ProviderEntry) => {
+-      const id = p.provider.toLowerCase();
+-      if (activeSet.has(id)) return 0;
+-      if (errorSet.has(id) || p.status === "error") return 1;
+-      if (lastSet.has(id)) return 2;
+-      if (p.status === "active") return 3;
+-      return 4;
+-    };
+-    const d = rank(a) - rank(b);
+-    return d !== 0
+-      ? d
+-      : a.provider.toLowerCase().localeCompare(b.provider.toLowerCase()); // ASCII kasıtlı
+-  });
++  // Stable alphabetical order. Node POSITION never depends on activity — a provider
++  // keeps its ring slot whether or not it's mid-request, so the map no longer
++  // reshuffles ("jumps") every time a call lands. Activity is conveyed purely by
++  // node/edge styling, matching 9Router's `providers.forEach((p, i) => ...)`.
++  const sorted = [...providers].sort((a, b) =>
++    a.provider.toLowerCase().localeCompare(b.provider.toLowerCase())
++  );
+ 
+   let provIdx = 0;
+   for (let ri = 0; ri < RINGS.length && provIdx < sorted.length; ri++) {
+@@ -226,7 +225,6 @@ function buildLayout(
+       const trafficError = !active && errorSet.has(pid);
+       const last = !active && !trafficError && lastSet.has(pid);
+       const healthError = !active && !trafficError && !last && p.status === "error";
+-      const healthy = !active && !trafficError && !last && !healthError && p.status === "active";
+       const error = trafficError || healthError;
+       const config = getProviderConfig(p.provider);
+       const nodeId = `provider-${p.provider}`;
+@@ -246,19 +244,24 @@ function buildLayout(
+           providerId: p.provider,
+           active,
+           error,
+-          healthy,
+         } satisfies ProviderNodeData,
+         draggable: false,
+       });
  
        edges.push({
          id: `e-${nodeId}`,
@@ -329,14 +516,18 @@ index 313e2faad..2bd14b63b 100644
          target: nodeId,
          targetHandle,
 -        animated: active,
+-        style: edgeStyle(active, last, error, healthy),
 +        // The kame beam runs its own SVG animation on active edges; the flat
-+        // BaseEdge fallback (idle/last/error/healthy) is styled by edgeStyle().
++        // BaseEdge fallback (idle/last/error) is styled by edgeStyle(). Healthy-but-quiet
++        // connections fall through to the muted idle stroke on purpose — the map stays
++        // calm at rest and only lights up on real traffic, matching 9Router.
 +        animated: false,
 +        data: { active },
-         style: edgeStyle(active, last, error, healthy),
++        style: edgeStyle(active, last, error),
        });
      }
-@@ -333,6 +348,7 @@ export default function ProviderTopology({
+   }
+@@ -333,6 +336,7 @@ export default function ProviderTopology({
        nodes={nodes}
        edges={edges}
        nodeTypes={nodeTypes}
@@ -345,7 +536,7 @@ index 313e2faad..2bd14b63b 100644
        className={containerClass}
      />
 diff --git a/src/app/globals.css b/src/app/globals.css
-index 2130bda65..d93ddcb41 100644
+index 2130bda65..e70db0b34 100644
 --- a/src/app/globals.css
 +++ b/src/app/globals.css
 @@ -428,6 +428,91 @@ button .material-symbols-outlined,
@@ -362,18 +553,18 @@ index 2130bda65..d93ddcb41 100644
 +  100% {
 +    transform: scale(1);
 +    box-shadow:
-+      0 0 8px #fde047,
-+      0 0 20px color-mix(in srgb, var(--color-primary) 65%, transparent),
-+      0 0 32px rgba(34, 211, 238, 0.4),
-+      inset 0 0 10px rgba(253, 224, 71, 0.3);
++      0 0 6px #fde047,
++      0 0 14px color-mix(in srgb, var(--color-primary) 65%, transparent),
++      0 0 22px rgba(34, 211, 238, 0.38),
++      inset 0 0 7px rgba(253, 224, 71, 0.28);
 +  }
 +  50% {
-+    transform: scale(1.06);
++    transform: scale(1.05);
 +    box-shadow:
-+      0 0 14px #fef08a,
-+      0 0 28px #facc15,
-+      0 0 44px rgba(34, 211, 238, 0.6),
-+      inset 0 0 14px rgba(255, 255, 255, 0.25);
++      0 0 10px #fef08a,
++      0 0 20px #facc15,
++      0 0 30px rgba(34, 211, 238, 0.55),
++      inset 0 0 10px rgba(255, 255, 255, 0.22);
 +  }
 +}
 +@keyframes topology-router-icon-shake {
@@ -476,6 +667,59 @@ index 43dcf70f3..4ee37c17b 100644
    },
    "analytics": {
      "title": "Phân tích",
+diff --git a/src/lib/db/callLogStats.ts b/src/lib/db/callLogStats.ts
+index 7a8ef741b..75ca23cd4 100644
+--- a/src/lib/db/callLogStats.ts
++++ b/src/lib/db/callLogStats.ts
+@@ -54,9 +54,25 @@ export interface SearchProviderCountRow {
+ // /api/provider-metrics — aggregate per-provider stats
+ // ---------------------------------------------------------------------------
+ 
++/**
++ * SQL predicate that excludes connection-test rows for the given table alias.
++ * Provider "Test connection" writes real call_logs rows tagged model
++ * `connection-test` / path `/api/providers/test` / source_format `test`
++ * (see src/app/api/providers/[id]/test/route.ts). Those are health probes, not
++ * user traffic, so the home topology's per-provider metrics and last/error hints
++ * must ignore them — otherwise a failed test lights a provider node red at rest.
++ * Applied to the main query AND both last-status subselects so a test row can
++ * never surface as `lastStatus`/`lastErrorStatus`.
++ */
++function excludeConnectionTests(alias: string): string {
++  return `(${alias}.model IS NULL OR ${alias}.model != 'connection-test')
++        AND (${alias}.source_format IS NULL OR ${alias}.source_format != 'test')
++        AND (${alias}.path IS NULL OR ${alias}.path != '/api/providers/test')`;
++}
++
+ /**
+  * Returns one row per provider with call-level aggregates plus last-status
+- * subselects. Excludes rows where provider is NULL or '-'.
++ * subselects. Excludes rows where provider is NULL or '-', and connection-test rows.
+  */
+ export function getProviderMetrics(): ProviderMetricRow[] {
+   const db = getDbInstance();
+@@ -80,6 +96,7 @@ export function getProviderMetrics(): ProviderMetricRow[] {
+             SELECT c2.status
+             FROM call_logs c2
+             WHERE c2.provider = c.provider
++              AND ${excludeConnectionTests("c2")}
+             ORDER BY c2.timestamp DESC, c2.id DESC
+             LIMIT 1
+           ) as lastStatus,
+@@ -91,11 +108,13 @@ export function getProviderMetrics(): ProviderMetricRow[] {
+                 (c3.status IS NOT NULL AND (c3.status < 200 OR c3.status >= 400))
+                 OR c3.error_summary IS NOT NULL
+               )
++              AND ${excludeConnectionTests("c3")}
+             ORDER BY c3.timestamp DESC, c3.id DESC
+             LIMIT 1
+           ) as lastErrorStatus
+         FROM call_logs c
+         WHERE c.provider IS NOT NULL AND c.provider != '-'
++          AND ${excludeConnectionTests("c")}
+         GROUP BY c.provider`
+     )
+     .all() as ProviderMetricRow[];
 diff --git a/src/shared/components/flow/KameBeamEdge.tsx b/src/shared/components/flow/KameBeamEdge.tsx
 new file mode 100644
 index 000000000..b4f4569eb
