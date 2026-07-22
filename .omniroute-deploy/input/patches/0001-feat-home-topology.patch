@@ -87,7 +87,7 @@ index 24cec3140..0b9f66705 100644
    const { lastProvider, errorProvider } = providerTopology;
  
 diff --git a/src/app/(dashboard)/dashboard/HomeProviderTopologySection.tsx b/src/app/(dashboard)/dashboard/HomeProviderTopologySection.tsx
-index 034088e7b..2670f54b7 100644
+index 034088e7b..bdb6ddc78 100644
 --- a/src/app/(dashboard)/dashboard/HomeProviderTopologySection.tsx
 +++ b/src/app/(dashboard)/dashboard/HomeProviderTopologySection.tsx
 @@ -8,6 +8,7 @@ import { useLiveRequests } from "@/hooks/useLiveDashboard";
@@ -98,20 +98,7 @@ index 034088e7b..2670f54b7 100644
  
  type TopologyProvider = {
    id: string;
-@@ -39,7 +40,11 @@ export function HomeProviderTopologySection({
-   const activeProviderCount = new Set(activeRequests.map(({ provider }) => provider)).size;
- 
-   return (
--    <Card>
-+    // Frameless section: no card surface/border/shadow so the diagram floats on the
-+    // page's shared graph-paper wallpaper instead of a nested boxed panel (anh Hà:
-+    // "dùng background chung với toàn trang"). Recent Requests keeps its own inner
-+    // Card for legibility; only this outer wrapper goes transparent.
-+    <Card className="bg-transparent border-0 shadow-none">
-       <div className="flex items-center justify-between mb-3">
-         <div>
-           <h2 className="text-base font-semibold">{t("providerTopology")}</h2>
-@@ -62,12 +67,15 @@ export function HomeProviderTopologySection({
+@@ -62,12 +63,15 @@ export function HomeProviderTopologySection({
            </span>
          </div>
        </div>
@@ -347,12 +334,14 @@ index 000000000..de028e1a1
 +  );
 +}
 diff --git a/src/app/(dashboard)/home/ProviderTopology.tsx b/src/app/(dashboard)/home/ProviderTopology.tsx
-index 313e2faad..f470423eb 100644
+index 313e2faad..86cac293c 100644
 --- a/src/app/(dashboard)/home/ProviderTopology.tsx
 +++ b/src/app/(dashboard)/home/ProviderTopology.tsx
-@@ -2,11 +2,13 @@
+@@ -1,15 +1,23 @@
+ "use client";
  
- import { useMemo } from "react";
+-import { useMemo } from "react";
++import { useEffect, useMemo, useRef, useState } from "react";
  import { useTranslations } from "next-intl";
 -import { Handle, Position, type Node, type Edge, type NodeTypes } from "@xyflow/react";
 +import { Handle, Position, type Node, type Edge, type NodeTypes, type EdgeTypes } from "@xyflow/react";
@@ -365,7 +354,16 @@ index 313e2faad..f470423eb 100644
  import { edgeStyle, FLOW_EDGE_COLORS } from "@/shared/components/flow/edgeStyles";
  import { resolveTopologyNodeLabel } from "./topologyLabel";
  
-@@ -37,28 +39,24 @@ type ProviderNodeData = {
++// Force-stop the active beam if a provider stays "active" longer than this — a
++// safety valve (ported from 9Router) so a stuck/never-completed in-flight signal
++// can't keep an edge lit forever. The edge then falls back to last/idle and fades.
++const FE_ACTIVE_TIMEOUT_MS = 60000;
++const FE_ACTIVE_TICK_MS = 1000;
++
+ // Rings: [capacity, rx, ry]. Each successive ring fits ~6 more nodes.
+ const RINGS: [number, number, number][] = [
+   [8, 210, 132],
+@@ -37,28 +45,24 @@ type ProviderNodeData = {
    providerId: string;
    active: boolean;
    error: boolean;
@@ -403,7 +401,7 @@ index 313e2faad..f470423eb 100644
        }}
      >
        <Handle
-@@ -96,13 +94,13 @@ function ProviderNode({ data }: { data: ProviderNodeData }) {
+@@ -96,13 +100,13 @@ function ProviderNode({ data }: { data: ProviderNodeData }) {
        <span
          className="text-xs font-medium truncate flex-1"
          style={{
@@ -419,7 +417,7 @@ index 313e2faad..f470423eb 100644
          <StatusDot color={active ? color : GREEN} error={error} pulse={active || error} />
        )}
      </div>
-@@ -112,8 +110,13 @@ function ProviderNode({ data }: { data: ProviderNodeData }) {
+@@ -112,8 +116,13 @@ function ProviderNode({ data }: { data: ProviderNodeData }) {
  type RouterNodeData = { activeCount: number };
  
  function RouterNode({ data }: { data: RouterNodeData }) {
@@ -434,7 +432,7 @@ index 313e2faad..f470423eb 100644
        <Handle
          type="source"
          position={Position.Top}
-@@ -139,12 +142,12 @@ function RouterNode({ data }: { data: RouterNodeData }) {
+@@ -139,12 +148,12 @@ function RouterNode({ data }: { data: RouterNodeData }) {
          className="!bg-transparent !border-0 !w-0 !h-0"
        />
  
@@ -453,7 +451,7 @@ index 313e2faad..f470423eb 100644
            {data.activeCount}
          </span>
        )}
-@@ -157,6 +160,10 @@ const nodeTypes: NodeTypes = {
+@@ -157,6 +166,10 @@ const nodeTypes: NodeTypes = {
    router: RouterNode as any,
  };
  
@@ -464,7 +462,7 @@ index 313e2faad..f470423eb 100644
  type ProviderHealth = "active" | "error" | "idle";
  type ProviderEntry = { id?: string; provider: string; name?: string; status?: ProviderHealth };
  
-@@ -179,8 +186,8 @@ function buildLayout(
+@@ -179,8 +192,8 @@ function buildLayout(
  ): { nodes: Node[]; edges: Edge[] } {
    const nodeW = 156;
    const nodeH = 28;
@@ -475,7 +473,7 @@ index 313e2faad..f470423eb 100644
  
    const nodes: Node[] = [];
    const edges: Edge[] = [];
-@@ -195,21 +202,13 @@ function buildLayout(
+@@ -195,21 +208,13 @@ function buildLayout(
  
    if (providers.length === 0) return { nodes, edges };
  
@@ -504,15 +502,31 @@ index 313e2faad..f470423eb 100644
  
    let provIdx = 0;
    for (let ri = 0; ri < RINGS.length && provIdx < sorted.length; ri++) {
-@@ -226,7 +225,6 @@ function buildLayout(
-       const trafficError = !active && errorSet.has(pid);
-       const last = !active && !trafficError && lastSet.has(pid);
-       const healthError = !active && !trafficError && !last && p.status === "error";
+@@ -219,15 +224,15 @@ function buildLayout(
+     for (let i = 0; i < count; i++) {
+       const p = sorted[provIdx++];
+       const pid = p.provider.toLowerCase();
++      // Edge/node state is driven PURELY by transient traffic, exactly like 9Router:
++      //   active (in-flight) > last (single most-recent) > error (a live failed request).
++      // Connection-health (`p.status`) is deliberately NOT painted onto the edge — that
++      // was an Omni-only addition that kept a line lit forever ("hiện mãi") for a quiet
++      // or test-failed connection. With it gone the connector changes and then fades to
++      // the muted idle stroke once traffic stops, matching 9Router's calm-at-rest map.
+       const active = activeSet.has(pid);
+-      // Traffic signals (live/recent request) take precedence; connection health is the
+-      // base state shown when a provider has no in-flight or recent traffic, so the map
+-      // still reflects "what is connected" at rest instead of going blank after a restart.
+-      const trafficError = !active && errorSet.has(pid);
+-      const last = !active && !trafficError && lastSet.has(pid);
+-      const healthError = !active && !trafficError && !last && p.status === "error";
 -      const healthy = !active && !trafficError && !last && !healthError && p.status === "active";
-       const error = trafficError || healthError;
+-      const error = trafficError || healthError;
++      const error = !active && errorSet.has(pid);
++      const last = !active && !error && lastSet.has(pid);
        const config = getProviderConfig(p.provider);
        const nodeId = `provider-${p.provider}`;
-@@ -246,19 +244,24 @@ function buildLayout(
+ 
+@@ -246,19 +251,24 @@ function buildLayout(
            providerId: p.provider,
            active,
            error,
@@ -540,7 +554,57 @@ index 313e2faad..f470423eb 100644
        });
      }
    }
-@@ -314,8 +317,12 @@ export default function ProviderTopology({
+@@ -292,13 +302,48 @@ export default function ProviderTopology({
+   const lastKey = lastProvider.toLowerCase();
+   const errorKey = errorProvider.toLowerCase();
+ 
+-  const activeSet = useMemo(
++  const rawActiveSet = useMemo(
+     () => new Set<string>(activeKey ? activeKey.split(",") : []),
+     [activeKey]
+   );
+   const lastSet = useMemo(() => new Set<string>(lastKey ? [lastKey] : []), [lastKey]);
+   const errorSet = useMemo(() => new Set<string>(errorKey ? [errorKey] : []), [errorKey]);
+ 
++  // Track when each provider first went active; a provider that stays active past
++  // FE_ACTIVE_TIMEOUT_MS is dropped from the derived activeSet so its beam stops —
++  // the edge then falls back to last-used/idle and fades. Mirrors 9Router's
++  // firstSeenRef + tick guard against a stuck in-flight signal.
++  const firstSeenRef = useRef<Record<string, number>>({});
++  const [tick, setTick] = useState(0);
++
++  useEffect(() => {
++    const seen = firstSeenRef.current;
++    const now = Date.now();
++    for (const p of rawActiveSet) {
++      if (!seen[p]) seen[p] = now;
++    }
++    for (const p of Object.keys(seen)) {
++      if (!rawActiveSet.has(p)) delete seen[p];
++    }
++  }, [rawActiveSet]);
++
++  useEffect(() => {
++    if (rawActiveSet.size === 0) return;
++    const id = setInterval(() => setTick((v) => v + 1), FE_ACTIVE_TICK_MS);
++    return () => clearInterval(id);
++  }, [rawActiveSet]);
++
++  const activeSet = useMemo(() => {
++    const now = Date.now();
++    const filtered = new Set<string>();
++    for (const p of rawActiveSet) {
++      const ts = firstSeenRef.current[p];
++      if (!ts || now - ts < FE_ACTIVE_TIMEOUT_MS) filtered.add(p);
++    }
++    return filtered;
++    // eslint-disable-next-line react-hooks/exhaustive-deps
++  }, [rawActiveSet, tick]);
++
+   const { nodes, edges } = useMemo(
+     () => buildLayout(providers, activeSet, lastSet, errorSet),
+     // eslint-disable-next-line react-hooks/exhaustive-deps
+@@ -314,8 +359,12 @@ export default function ProviderTopology({
      [providers]
    );
  
@@ -555,7 +619,7 @@ index 313e2faad..f470423eb 100644
  
    if (providers.length === 0) {
      return (
-@@ -333,6 +340,7 @@ export default function ProviderTopology({
+@@ -333,6 +382,7 @@ export default function ProviderTopology({
        nodes={nodes}
        edges={edges}
        nodeTypes={nodeTypes}
