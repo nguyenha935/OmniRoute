@@ -20,7 +20,6 @@ import {
   keepaliveFrame,
   parseFrame,
   resolveChatInvocationOverrides,
-  resolveToneForModel,
   splitFrames,
 } from "./copilot-m365-frames.ts";
 
@@ -168,9 +167,6 @@ export class CopilotM365WebExecutor extends BaseExecutor {
             const sendChat = () => {
               ws?.send(keepaliveFrame());
               const overrides = resolveChatInvocationOverrides(input.tier);
-              // Model-driven tone (#7872) wins over the tier default; a bare/unknown id
-              // keeps the tier tone resolved above.
-              const tone = resolveToneForModel(input.model) ?? overrides.tone;
               ws?.send(
                 encodeFrame(
                   buildChatInvocation({
@@ -179,7 +175,6 @@ export class CopilotM365WebExecutor extends BaseExecutor {
                     sessionId,
                     isStartOfSession: true,
                     ...overrides,
-                    tone,
                   })
                 )
               );
