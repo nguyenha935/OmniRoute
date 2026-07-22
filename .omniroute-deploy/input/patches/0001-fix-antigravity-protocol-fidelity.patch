@@ -1,8 +1,8 @@
 diff --git a/.env.example b/.env.example
-index eca058fdc..9712beaa6 100644
+index d0fc4022e..e96d58344 100644
 --- a/.env.example
 +++ b/.env.example
-@@ -838,10 +838,11 @@ PROVIDER_LIMITS_SYNC_SPACING_MS=1500
+@@ -843,10 +843,11 @@ PROVIDER_LIMITS_SYNC_SPACING_MS=1500
  # Used by: open-sse/executors/antigravity.ts — escape hatch for multi-project setups.
  # OMNIROUTE_ALLOW_BODY_PROJECT_OVERRIDE=0
  
@@ -35,10 +35,10 @@ index 000000000..1bca2c43f
 +- Make Antigravity safety and Google One AI credits explicit, with `off`, single `retry`, and credit-first `always` modes.
 +- Separate live runtime endpoints from discovery and project bootstrap, exclude sandbox from runtime fallback, and make project bootstrap token-safe, coalesced, and abort-aware.
 diff --git a/config/quality/eslint-suppressions.json b/config/quality/eslint-suppressions.json
-index 789ad579c..dfcca3adf 100644
+index 0e1a9eccf..97eb86545 100644
 --- a/config/quality/eslint-suppressions.json
 +++ b/config/quality/eslint-suppressions.json
-@@ -494,11 +494,6 @@
+@@ -690,11 +690,6 @@
        "count": 3
      }
    },
@@ -50,7 +50,7 @@ index 789ad579c..dfcca3adf 100644
    "tests/unit/api-key-reveal-route.test.ts": {
      "@typescript-eslint/no-explicit-any": {
        "count": 8
-@@ -2121,7 +2116,7 @@
+@@ -2317,7 +2312,7 @@
    },
    "tests/unit/translator-openai-to-gemini.test.ts": {
      "@typescript-eslint/no-explicit-any": {
@@ -60,7 +60,7 @@ index 789ad579c..dfcca3adf 100644
    },
    "tests/unit/translator-openai-to-kiro.test.ts": {
 diff --git a/docs/architecture/ARCHITECTURE.md b/docs/architecture/ARCHITECTURE.md
-index 53b11e7e8..b71bbc84a 100644
+index ed7a762a3..7afb4ec17 100644
 --- a/docs/architecture/ARCHITECTURE.md
 +++ b/docs/architecture/ARCHITECTURE.md
 @@ -481,7 +481,7 @@ the global circuit breaker / connection cooldown / model lockout layers:
@@ -86,264 +86,23 @@ index 06bb8dbea..ed3b8add5 100644
  - Claude Code CCH (Handshake de Canal de Compatibilidade): `open-sse/services/claudeCodeCCH.ts`,
    além de `claudeCodeCompatible.ts`, `claudeCodeConstraints.ts`, `claudeCodeExtraRemap.ts`,
 diff --git a/docs/i18n/zh-CN/docs/architecture/ARCHITECTURE.md b/docs/i18n/zh-CN/docs/architecture/ARCHITECTURE.md
-index 98d801e5a..59eb80dfb 100644
+index 98d801e5a..eba7d6ad1 100644
 --- a/docs/i18n/zh-CN/docs/architecture/ARCHITECTURE.md
 +++ b/docs/i18n/zh-CN/docs/architecture/ARCHITECTURE.md
-@@ -479,8 +479,8 @@ FSM 状态转换反馈到 Auto Combo 的评分中，使后台/自动化任务偏
+@@ -479,7 +479,7 @@ FSM 状态转换反馈到 Auto Combo 的评分中，使后台/自动化任务偏
  
  - Antigravity 429 引擎：`open-sse/services/antigravity429Engine.ts`（轮换
    身份、清洗响应头，通过 `antigravityCredits.ts`、`antigravityHeaderScrub.ts`、
 -  `antigravityHeaders.ts`、`antigravityIdentity.ts`、`antigravityObfuscation.ts`、
--  `antigravityVersion.ts` 驱动积分/版本追踪）
-+  `antigravityHeaders.ts`、`antigravityIdentity.ts`、`antigravityVersion.ts`
-+  驱动积分/版本追踪）
++  `antigravityHeaders.ts`、`antigravityIdentity.ts`、
+   `antigravityVersion.ts` 驱动积分/版本追踪）
  - ModelScope 配额策略：`open-sse/services/modelscopePolicy.ts`
  - Claude Code CCH（兼容通道握手）：`open-sse/services/claudeCodeCCH.ts`，
-   外加 `claudeCodeCompatible.ts`、`claudeCodeConstraints.ts`、`claudeCodeExtraRemap.ts`、
-@@ -896,36 +896,36 @@ flowchart LR
- 
- 每个服务商都有一个继承 `BaseExecutor`（在 `open-sse/executors/base.ts` 中）的专用执行器，该基类提供了 URL 构建、Header 构造、带指数退避的重试、凭据刷新钩子以及 `execute()` 编排方法。
- 
--| 执行器                     | 服务商                                                                                                                                                       | 特殊处理                                          |
--| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
--| `DefaultExecutor`        | OpenAI, Claude, Gemini, Qwen, OpenRouter, GLM, Kimi, MiniMax, DeepSeek, Groq, xAI, Mistral, Perplexity, Together, Fireworks, Cerebras, Cohere, NVIDIA 等    | 每服务商动态 URL/Header 配置                       |
--| `AntigravityExecutor`    | Google Antigravity                                                                                                                                          | 自定义项目/会话 ID、Retry-After 解析、429 混淆     |
--| `AzureOpenAIExecutor`    | Azure OpenAI                                                                                                                                                | 基于部署的路由、api-version 查询参数强制执行       |
--| `BlackboxWebExecutor`    | Blackbox AI (web-mode)                                                                                                                                      | Web 会话反向 + TLS 指纹模拟                        |
--| `ChatGPTWebExecutor`     | ChatGPT web                                                                                                                                                 | TLS 客户端 + 会话 Cookie 管理（`chatgptTlsClient.ts`）|
--| `ClaudeIdentityExecutor` | Claude.ai (CCH 通道)                                                                                                                                        | 约束 + Tool 重映射管线、指纹塑造                   |
--| `CliProxyApiExecutor`    | CLIProxyAPI 兼容服务商                                                                                                                                      | 自定义认证和协议处理                               |
--| `CloudflareAiExecutor`   | Cloudflare Workers AI                                                                                                                                       | 帐户 ID 注入、基于 Neurons 的用量追踪              |
--| `CodexExecutor`          | OpenAI Codex                                                                                                                                                | 注入系统指令、强制推理力度                          |
--| `CommandCodeExecutor`    | Command Code                                                                                                                                                | OAuth + 每会话 Header 轮换                         |
--| `CursorExecutor`         | Cursor IDE                                                                                                                                                  | ConnectRPC 协议、Protobuf 编码、基于校验和的请求签名|
--| `DevinCliExecutor`       | Devin CLI                                                                                                                                                   | Devin 任务生命周期桥接（通过云代理模块）            |
--| `GithubExecutor`         | GitHub Copilot                                                                                                                                              | Copilot Token 刷新、VSCode 模仿 Header             |
--| `GitlabExecutor`         | GitLab Duo                                                                                                                                                  | GitLab OAuth + 项目级路由                          |
--| `GlmExecutor`            | Z.AI GLM（含 `glmt` 预设）                                                                                                                                  | Thinking Budget 感知、GLMT 预设常量                |
--| `GrokWebExecutor`        | xAI Grok web                                                                                                                                                | Web 会话反向、模式选择（think/standard）            |
--| `KieExecutor`            | KIE                                                                                                                                                         | 自定义 Token 签发 + 轮换会话锚点                   |
--| `KiroExecutor`           | AWS CodeWhisperer/Kiro                                                                                                                                      | AWS EventStream 二进制格式 → SSE 转换              |
--| `MuseSparkWebExecutor`   | Muse Spark (web)                                                                                                                                            | Web 会话反向 + 图片消息桥接                        |
--| `NlpCloudExecutor`       | NLP Cloud                                                                                                                                                   | 服务商专属请求体形状                               |
--| `OpenCodeExecutor`       | OpenCode                                                                                                                                                    | AI SDK 兼容服务商初始化                            |
--| `PerplexityWebExecutor`  | Perplexity web                                                                                                                                              | Web 会话反向，用于聊延续                            |
--| `PetalsExecutor`         | Petals distributed inference                                                                                                                                | 去中心化集群路由                                   |
--| `PollinationsExecutor`   | Pollinations AI                                                                                                                                             | 无需 API Key、带速率限制的请求                     |
--| `PuterExecutor`          | Puter                                                                                                                                                       | 基于浏览器的服务商集成                             |
--| `QoderExecutor`          | Qoder AI                                                                                                                                                    | PAT 和 OAuth 支持、多模型免费层                    |
--| `VertexExecutor`         | Google Vertex AI                                                                                                                                            | 服务帐户认证、基于区域的端点                       |
--| `WindsurfExecutor`       | Windsurf (Codeium)                                                                                                                                          | Codeium OAuth + 会话 Token 刷新                    |
-+| 执行器                   | 服务商                                                                                                                                                   | 特殊处理                                               |
-+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
-+| `DefaultExecutor`        | OpenAI, Claude, Gemini, Qwen, OpenRouter, GLM, Kimi, MiniMax, DeepSeek, Groq, xAI, Mistral, Perplexity, Together, Fireworks, Cerebras, Cohere, NVIDIA 等 | 每服务商动态 URL/Header 配置                           |
-+| `AntigravityExecutor`    | Google Antigravity                                                                                                                                       | 自定义项目/会话 ID、Retry-After 解析、429 混淆         |
-+| `AzureOpenAIExecutor`    | Azure OpenAI                                                                                                                                             | 基于部署的路由、api-version 查询参数强制执行           |
-+| `BlackboxWebExecutor`    | Blackbox AI (web-mode)                                                                                                                                   | Web 会话反向 + TLS 指纹模拟                            |
-+| `ChatGPTWebExecutor`     | ChatGPT web                                                                                                                                              | TLS 客户端 + 会话 Cookie 管理（`chatgptTlsClient.ts`） |
-+| `ClaudeIdentityExecutor` | Claude.ai (CCH 通道)                                                                                                                                     | 约束 + Tool 重映射管线、指纹塑造                       |
-+| `CliProxyApiExecutor`    | CLIProxyAPI 兼容服务商                                                                                                                                   | 自定义认证和协议处理                                   |
-+| `CloudflareAiExecutor`   | Cloudflare Workers AI                                                                                                                                    | 帐户 ID 注入、基于 Neurons 的用量追踪                  |
-+| `CodexExecutor`          | OpenAI Codex                                                                                                                                             | 注入系统指令、强制推理力度                             |
-+| `CommandCodeExecutor`    | Command Code                                                                                                                                             | OAuth + 每会话 Header 轮换                             |
-+| `CursorExecutor`         | Cursor IDE                                                                                                                                               | ConnectRPC 协议、Protobuf 编码、基于校验和的请求签名   |
-+| `DevinCliExecutor`       | Devin CLI                                                                                                                                                | Devin 任务生命周期桥接（通过云代理模块）               |
-+| `GithubExecutor`         | GitHub Copilot                                                                                                                                           | Copilot Token 刷新、VSCode 模仿 Header                 |
-+| `GitlabExecutor`         | GitLab Duo                                                                                                                                               | GitLab OAuth + 项目级路由                              |
-+| `GlmExecutor`            | Z.AI GLM（含 `glmt` 预设）                                                                                                                               | Thinking Budget 感知、GLMT 预设常量                    |
-+| `GrokWebExecutor`        | xAI Grok web                                                                                                                                             | Web 会话反向、模式选择（think/standard）               |
-+| `KieExecutor`            | KIE                                                                                                                                                      | 自定义 Token 签发 + 轮换会话锚点                       |
-+| `KiroExecutor`           | AWS CodeWhisperer/Kiro                                                                                                                                   | AWS EventStream 二进制格式 → SSE 转换                  |
-+| `MuseSparkWebExecutor`   | Muse Spark (web)                                                                                                                                         | Web 会话反向 + 图片消息桥接                            |
-+| `NlpCloudExecutor`       | NLP Cloud                                                                                                                                                | 服务商专属请求体形状                                   |
-+| `OpenCodeExecutor`       | OpenCode                                                                                                                                                 | AI SDK 兼容服务商初始化                                |
-+| `PerplexityWebExecutor`  | Perplexity web                                                                                                                                           | Web 会话反向，用于聊延续                               |
-+| `PetalsExecutor`         | Petals distributed inference                                                                                                                             | 去中心化集群路由                                       |
-+| `PollinationsExecutor`   | Pollinations AI                                                                                                                                          | 无需 API Key、带速率限制的请求                         |
-+| `PuterExecutor`          | Puter                                                                                                                                                    | 基于浏览器的服务商集成                                 |
-+| `QoderExecutor`          | Qoder AI                                                                                                                                                 | PAT 和 OAuth 支持、多模型免费层                        |
-+| `VertexExecutor`         | Google Vertex AI                                                                                                                                         | 服务帐户认证、基于区域的端点                           |
-+| `WindsurfExecutor`       | Windsurf (Codeium)                                                                                                                                       | Codeium OAuth + 会话 Token 刷新                        |
- 
- 其余所有服务商（含自定义兼容节点）使用 `DefaultExecutor`。
- 
-@@ -936,66 +936,66 @@ flowchart LR
- > [`docs/reference/PROVIDER_REFERENCE.md`](../reference/PROVIDER_REFERENCE.md)（自动生成）或数据源头
- > `src/shared/constants/providers.ts`（加载时通过 Zod 校验）。
- 
--| 服务商             | 格式              | 认证                   | 流式           | 非流式     | Token 刷新  | 用量 API          |
--| ----------------- | ---------------- | --------------------- | -------------- | ---------- | ----------- | ----------------- |
--| Claude            | claude           | API Key / OAuth       | ✅             | ✅         | ✅          | ⚠️ 仅管理员        |
--| Gemini            | gemini           | API Key / OAuth       | ✅             | ✅         | ✅          | ⚠️ Cloud Console   |
--| Antigravity       | antigravity      | OAuth                 | ✅             | ✅         | ✅          | ✅ 完整配额 API    |
--| OpenAI            | openai           | API Key               | ✅             | ✅         | ❌          | ❌                 |
--| Codex             | openai-responses | OAuth                 | ✅ 强制         | ❌         | ✅          | ✅ 速率限制        |
--| GitHub Copilot    | openai           | OAuth + Copilot Token | ✅             | ✅         | ✅          | ✅ 配额快照        |
--| Cursor            | cursor           | 自定义校验和           | ✅             | ✅         | ❌          | ❌                 |
--| Kiro              | kiro             | AWS SSO OIDC          | ✅ (EventStream)| ❌         | ✅          | ✅ 用量限制        |
--| Qwen              | openai           | OAuth                 | ✅             | ✅         | ✅          | ⚠️ 每请求          |
--| Qoder             | openai           | OAuth / PAT           | ✅             | ✅         | ✅          | ⚠️ 每请求          |
--| Kilo Code         | openai           | OAuth                 | ✅             | ✅         | ✅          | ❌                 |
--| Cline             | openai           | OAuth                 | ✅             | ✅         | ✅          | ❌                 |
--| Kimi Coding       | openai           | OAuth                 | ✅             | ✅         | ✅          | ❌                 |
--| OpenRouter        | openai           | API Key               | ✅             | ✅         | ❌          | ❌                 |
--| GLM/Kimi/MiniMax  | claude           | API Key               | ✅             | ✅         | ❌          | ❌                 |
--| DeepSeek          | openai           | API Key               | ✅             | ✅         | ❌          | ❌                 |
--| Groq              | openai           | API Key               | ✅             | ✅         | ❌          | ❌                 |
--| xAI (Grok)        | openai           | API Key               | ✅             | ✅         | ❌          | ❌                 |
--| Mistral           | openai           | API Key               | ✅             | ✅         | ❌          | ❌                 |
--| Perplexity        | openai           | API Key               | ✅             | ✅         | ❌          | ❌                 |
--| Together AI       | openai           | API Key               | ✅             | ✅         | ❌          | ❌                 |
--| Fireworks AI      | openai           | API Key               | ✅             | ✅         | ❌          | ❌                 |
--| Cerebras          | openai           | API Key               | ✅             | ✅         | ❌          | ❌                 |
--| Cohere            | openai           | API Key               | ✅             | ✅         | ❌          | ❌                 |
--| NVIDIA NIM        | openai           | API Key               | ✅             | ✅         | ❌          | ❌                 |
--| Cloudflare AI     | openai           | API Token + 帐户 ID    | ✅             | ✅         | ❌          | ❌                 |
--| Pollinations      | openai           | 无需密钥                | ✅             | ✅         | ❌          | ❌                 |
--| Scaleway AI       | openai           | API Key               | ✅             | ✅         | ❌          | ❌                 |
--| LongCat           | openai           | API Key               | ✅             | ✅         | ❌          | ❌                 |
--| Ollama Cloud      | openai           | API Key（可选）         | ✅             | ✅         | ❌          | ❌                 |
--| HuggingFace       | openai           | API Key               | ✅             | ✅         | ❌          | ❌                 |
--| Nebius            | openai           | API Key               | ✅             | ✅         | ❌          | ❌                 |
--| SiliconFlow       | openai           | API Key               | ✅             | ✅         | ❌          | ❌                 |
--| Hyperbolic        | openai           | API Key               | ✅             | ✅         | ❌          | ❌                 |
--| Vertex AI         | gemini           | 服务帐户               | ✅             | ✅         | ✅          | ⚠️ Cloud Console   |
--| Puter             | openai           | API Key               | ✅             | ✅         | ❌          | ❌                 |
--| Command Code      | openai           | OAuth                 | ✅             | ✅         | ✅          | ⚠️ 每请求          |
--| Z.AI / GLM        | openai           | API Key / OAuth       | ✅             | ✅         | ❌          | ❌                 |
--| GLMT (preset)     | claude           | API Key               | ✅             | ✅         | ❌          | ⚠️ 每请求          |
--| Kimi Coding       | openai           | OAuth / API Key       | ✅             | ✅         | ✅          | ❌                 |
--| KIE               | openai           | API Key               | ✅             | ✅         | ❌          | ❌                 |
--| Windsurf          | openai           | OAuth (Codeium)       | ✅             | ✅         | ✅          | ⚠️ 每请求          |
--| GitLab Duo        | openai           | OAuth (GitLab)        | ✅             | ✅         | ✅          | ❌                 |
--| Devin CLI         | openai           | OAuth                 | ✅             | ✅         | ✅          | ✅ 任务 API        |
--| Codex Cloud       | openai-responses | OAuth                 | ✅             | ❌         | ✅          | ✅ 速率限制        |
--| Jules             | openai           | OAuth                 | ✅             | ✅         | ✅          | ✅ 任务 API        |
--| AgentRouter       | openai           | API Key               | ✅             | ✅         | ❌          | ❌                 |
--| ChatGPT-Web       | openai           | 会话 Cookie + TLS      | ✅             | ✅         | ❌          | ❌                 |
--| Grok-Web          | openai           | 会话 Cookie            | ✅             | ✅         | ❌          | ❌                 |
--| Perplexity-Web    | openai           | 会话 Cookie            | ✅             | ✅         | ❌          | ❌                 |
--| BlackBox-Web      | openai           | 会话 Cookie + TLS      | ✅             | ✅         | ❌          | ❌                 |
--| Muse-Spark-Web    | openai           | 会话 Cookie            | ✅             | ✅         | ❌          | ❌                 |
--| ModelScope        | openai           | API Key               | ✅             | ✅         | ❌          | ⚠️ 配额策略        |
--| BazaarLink        | openai           | API Key               | ✅             | ✅         | ❌          | ❌                 |
--| Petals            | openai           | 无需密钥                | ✅             | ✅         | ❌          | ❌                 |
--| Qoder             | openai           | OAuth / PAT           | ✅             | ✅         | ✅          | ⚠️ 每请求          |
--| OpenCode (Go/Zen) | openai           | OAuth                 | ✅             | ✅         | ✅          | ❌                 |
--| CLIProxyAPI       | openai           | 自定义                  | ✅             | ✅         | ❌          | ❌                 |
-+| 服务商            | 格式             | 认证                  | 流式             | 非流式 | Token 刷新 | 用量 API         |
-+| ----------------- | ---------------- | --------------------- | ---------------- | ------ | ---------- | ---------------- |
-+| Claude            | claude           | API Key / OAuth       | ✅               | ✅     | ✅         | ⚠️ 仅管理员      |
-+| Gemini            | gemini           | API Key / OAuth       | ✅               | ✅     | ✅         | ⚠️ Cloud Console |
-+| Antigravity       | antigravity      | OAuth                 | ✅               | ✅     | ✅         | ✅ 完整配额 API  |
-+| OpenAI            | openai           | API Key               | ✅               | ✅     | ❌         | ❌               |
-+| Codex             | openai-responses | OAuth                 | ✅ 强制          | ❌     | ✅         | ✅ 速率限制      |
-+| GitHub Copilot    | openai           | OAuth + Copilot Token | ✅               | ✅     | ✅         | ✅ 配额快照      |
-+| Cursor            | cursor           | 自定义校验和          | ✅               | ✅     | ❌         | ❌               |
-+| Kiro              | kiro             | AWS SSO OIDC          | ✅ (EventStream) | ❌     | ✅         | ✅ 用量限制      |
-+| Qwen              | openai           | OAuth                 | ✅               | ✅     | ✅         | ⚠️ 每请求        |
-+| Qoder             | openai           | OAuth / PAT           | ✅               | ✅     | ✅         | ⚠️ 每请求        |
-+| Kilo Code         | openai           | OAuth                 | ✅               | ✅     | ✅         | ❌               |
-+| Cline             | openai           | OAuth                 | ✅               | ✅     | ✅         | ❌               |
-+| Kimi Coding       | openai           | OAuth                 | ✅               | ✅     | ✅         | ❌               |
-+| OpenRouter        | openai           | API Key               | ✅               | ✅     | ❌         | ❌               |
-+| GLM/Kimi/MiniMax  | claude           | API Key               | ✅               | ✅     | ❌         | ❌               |
-+| DeepSeek          | openai           | API Key               | ✅               | ✅     | ❌         | ❌               |
-+| Groq              | openai           | API Key               | ✅               | ✅     | ❌         | ❌               |
-+| xAI (Grok)        | openai           | API Key               | ✅               | ✅     | ❌         | ❌               |
-+| Mistral           | openai           | API Key               | ✅               | ✅     | ❌         | ❌               |
-+| Perplexity        | openai           | API Key               | ✅               | ✅     | ❌         | ❌               |
-+| Together AI       | openai           | API Key               | ✅               | ✅     | ❌         | ❌               |
-+| Fireworks AI      | openai           | API Key               | ✅               | ✅     | ❌         | ❌               |
-+| Cerebras          | openai           | API Key               | ✅               | ✅     | ❌         | ❌               |
-+| Cohere            | openai           | API Key               | ✅               | ✅     | ❌         | ❌               |
-+| NVIDIA NIM        | openai           | API Key               | ✅               | ✅     | ❌         | ❌               |
-+| Cloudflare AI     | openai           | API Token + 帐户 ID   | ✅               | ✅     | ❌         | ❌               |
-+| Pollinations      | openai           | 无需密钥              | ✅               | ✅     | ❌         | ❌               |
-+| Scaleway AI       | openai           | API Key               | ✅               | ✅     | ❌         | ❌               |
-+| LongCat           | openai           | API Key               | ✅               | ✅     | ❌         | ❌               |
-+| Ollama Cloud      | openai           | API Key（可选）       | ✅               | ✅     | ❌         | ❌               |
-+| HuggingFace       | openai           | API Key               | ✅               | ✅     | ❌         | ❌               |
-+| Nebius            | openai           | API Key               | ✅               | ✅     | ❌         | ❌               |
-+| SiliconFlow       | openai           | API Key               | ✅               | ✅     | ❌         | ❌               |
-+| Hyperbolic        | openai           | API Key               | ✅               | ✅     | ❌         | ❌               |
-+| Vertex AI         | gemini           | 服务帐户              | ✅               | ✅     | ✅         | ⚠️ Cloud Console |
-+| Puter             | openai           | API Key               | ✅               | ✅     | ❌         | ❌               |
-+| Command Code      | openai           | OAuth                 | ✅               | ✅     | ✅         | ⚠️ 每请求        |
-+| Z.AI / GLM        | openai           | API Key / OAuth       | ✅               | ✅     | ❌         | ❌               |
-+| GLMT (preset)     | claude           | API Key               | ✅               | ✅     | ❌         | ⚠️ 每请求        |
-+| Kimi Coding       | openai           | OAuth / API Key       | ✅               | ✅     | ✅         | ❌               |
-+| KIE               | openai           | API Key               | ✅               | ✅     | ❌         | ❌               |
-+| Windsurf          | openai           | OAuth (Codeium)       | ✅               | ✅     | ✅         | ⚠️ 每请求        |
-+| GitLab Duo        | openai           | OAuth (GitLab)        | ✅               | ✅     | ✅         | ❌               |
-+| Devin CLI         | openai           | OAuth                 | ✅               | ✅     | ✅         | ✅ 任务 API      |
-+| Codex Cloud       | openai-responses | OAuth                 | ✅               | ❌     | ✅         | ✅ 速率限制      |
-+| Jules             | openai           | OAuth                 | ✅               | ✅     | ✅         | ✅ 任务 API      |
-+| AgentRouter       | openai           | API Key               | ✅               | ✅     | ❌         | ❌               |
-+| ChatGPT-Web       | openai           | 会话 Cookie + TLS     | ✅               | ✅     | ❌         | ❌               |
-+| Grok-Web          | openai           | 会话 Cookie           | ✅               | ✅     | ❌         | ❌               |
-+| Perplexity-Web    | openai           | 会话 Cookie           | ✅               | ✅     | ❌         | ❌               |
-+| BlackBox-Web      | openai           | 会话 Cookie + TLS     | ✅               | ✅     | ❌         | ❌               |
-+| Muse-Spark-Web    | openai           | 会话 Cookie           | ✅               | ✅     | ❌         | ❌               |
-+| ModelScope        | openai           | API Key               | ✅               | ✅     | ❌         | ⚠️ 配额策略      |
-+| BazaarLink        | openai           | API Key               | ✅               | ✅     | ❌         | ❌               |
-+| Petals            | openai           | 无需密钥              | ✅               | ✅     | ❌         | ❌               |
-+| Qoder             | openai           | OAuth / PAT           | ✅               | ✅     | ✅         | ⚠️ 每请求        |
-+| OpenCode (Go/Zen) | openai           | OAuth                 | ✅               | ✅     | ✅         | ❌               |
-+| CLIProxyAPI       | openai           | 自定义                | ✅               | ✅     | ❌         | ❌               |
- 
- ## 格式转换覆盖
- 
-@@ -1031,25 +1031,25 @@ flowchart LR
- 
- ## 支持的 API 端点
- 
--| 端点                                                | 格式               | 处理器                                                             |
--| --------------------------------------------------- | ------------------ | ----------------------------------------------------------------- |
--| `POST /v1/chat/completions`                        | OpenAI Chat        | `src/sse/handlers/chat.ts`                                        |
--| `POST /v1/messages`                                | Claude Messages    | 同一处理器（自动检测）                                              |
--| `POST /v1/responses`                               | OpenAI Responses   | `open-sse/handlers/responsesHandler.ts`                           |
--| `POST /v1/embeddings`                              | OpenAI Embeddings  | `open-sse/handlers/embeddings.ts`                                 |
--| `GET /v1/embeddings`                               | 模型列表            | API 路由                                                          |
--| `POST /v1/images/generations`                      | OpenAI Images      | `open-sse/handlers/imageGeneration.ts`                            |
--| `GET /v1/images/generations`                       | 模型列表            | API 路由                                                          |
--| `POST /v1/providers/{provider}/chat/completions`   | OpenAI Chat        | 带模型校验的专用每服务商路由                                        |
--| `POST /v1/providers/{provider}/embeddings`         | OpenAI Embeddings  | 带模型校验的专用每服务商路由                                        |
--| `POST /v1/providers/{provider}/images/generations` | OpenAI Images      | 带模型校验的专用每服务商路由                                        |
--| `POST /v1/messages/count_tokens`                   | Claude Token Count | API 路由                                                          |
--| `GET /v1/models`                                   | OpenAI Models 列表  | API 路由（聊 + 向量嵌入 + 图片 + 自定义模型）                       |
--| `GET /api/models/catalog`                          | 目录               | 按服务商 + 类型分组的所有模型                                       |
--| `POST /v1beta/models/*:streamGenerateContent`      | Gemini native      | API 路由                                                          |
--| `GET/PUT/DELETE /api/settings/proxy`               | 代理配置            | 网络代理配置                                                       |
--| `POST /api/settings/proxy/test`                    | 代理连通性          | 代理健康/连通性测试端点                                            |
--| `GET/POST/DELETE /api/provider-models`             | 服务商模型          | 服务商模型元数据，支撑自定义和管理可用模型                          |
-+| 端点                                               | 格式               | 处理器                                        |
-+| -------------------------------------------------- | ------------------ | --------------------------------------------- |
-+| `POST /v1/chat/completions`                        | OpenAI Chat        | `src/sse/handlers/chat.ts`                    |
-+| `POST /v1/messages`                                | Claude Messages    | 同一处理器（自动检测）                        |
-+| `POST /v1/responses`                               | OpenAI Responses   | `open-sse/handlers/responsesHandler.ts`       |
-+| `POST /v1/embeddings`                              | OpenAI Embeddings  | `open-sse/handlers/embeddings.ts`             |
-+| `GET /v1/embeddings`                               | 模型列表           | API 路由                                      |
-+| `POST /v1/images/generations`                      | OpenAI Images      | `open-sse/handlers/imageGeneration.ts`        |
-+| `GET /v1/images/generations`                       | 模型列表           | API 路由                                      |
-+| `POST /v1/providers/{provider}/chat/completions`   | OpenAI Chat        | 带模型校验的专用每服务商路由                  |
-+| `POST /v1/providers/{provider}/embeddings`         | OpenAI Embeddings  | 带模型校验的专用每服务商路由                  |
-+| `POST /v1/providers/{provider}/images/generations` | OpenAI Images      | 带模型校验的专用每服务商路由                  |
-+| `POST /v1/messages/count_tokens`                   | Claude Token Count | API 路由                                      |
-+| `GET /v1/models`                                   | OpenAI Models 列表 | API 路由（聊 + 向量嵌入 + 图片 + 自定义模型） |
-+| `GET /api/models/catalog`                          | 目录               | 按服务商 + 类型分组的所有模型                 |
-+| `POST /v1beta/models/*:streamGenerateContent`      | Gemini native      | API 路由                                      |
-+| `GET/PUT/DELETE /api/settings/proxy`               | 代理配置           | 网络代理配置                                  |
-+| `POST /api/settings/proxy/test`                    | 代理连通性         | 代理健康/连通性测试端点                       |
-+| `GET/POST/DELETE /api/provider-models`             | 服务商模型         | 服务商模型元数据，支撑自定义和管理可用模型    |
- 
- ## 旁路处理器
- 
 diff --git a/docs/reference/ENVIRONMENT.md b/docs/reference/ENVIRONMENT.md
-index 47814389c..1507f2087 100644
+index 66c08a73b..d6b066c6b 100644
 --- a/docs/reference/ENVIRONMENT.md
 +++ b/docs/reference/ENVIRONMENT.md
-@@ -444,7 +444,7 @@ detection above).
+@@ -445,7 +445,7 @@ detection above).
  | `COMPRESSION_PREFIX_FREEZE_THRESHOLD`           | `3`                                                 | `open-sse/services/compression/prefixFreeze.ts`             | Observations of a system prompt before it is treated as a frozen stable prefix.                                                                                         |
  | `OMNIROUTE_BOOTSTRAPPED`                        | `false`                                             | `src/app/(dashboard)/dashboard/page.tsx`                    | Set `true` by bootstrap script after initial setup. Controls setup wizard visibility.                                                                                   |
  | `OMNIROUTE_ALLOW_BODY_PROJECT_OVERRIDE`         | `0`                                                 | `open-sse/executors/antigravity.ts`                         | Escape hatch: allow request body to override the Antigravity project field.                                                                                             |
@@ -353,7 +112,7 @@ index 47814389c..1507f2087 100644
  
  ### OAuth CLI Bridge (Internal)
 diff --git a/docs/security/STEALTH_GUIDE.md b/docs/security/STEALTH_GUIDE.md
-index 43043ce99..e4eb22ce4 100644
+index 43043ce99..dd737cb76 100644
 --- a/docs/security/STEALTH_GUIDE.md
 +++ b/docs/security/STEALTH_GUIDE.md
 @@ -6,7 +6,7 @@ lastUpdated: 2026-06-28
@@ -376,7 +135,7 @@ index 43043ce99..e4eb22ce4 100644
  
  ### `antigravityHeaderScrub.ts`
  
-@@ -129,10 +127,10 @@ The upstream enforcement is on **Google's side**, not anything OmniRoute can pre
+@@ -129,13 +127,13 @@ The upstream enforcement is on **Google's side**, not anything OmniRoute can pre
  
  **Recommended posture:**
  
@@ -388,7 +147,11 @@ index 43043ce99..e4eb22ce4 100644
 +4. **Use stable, operator-controlled upstream networking** and avoid sharing one account across unrelated users or workloads.
  5. **If banned**: appeal via `support.google.com` → "Restore Workspace/Account access" with the exact `quota_exceeded` / `service disabled` response body Google sent. Restoration is not guaranteed.
  
- This warning is also surfaced inline in the dashboard near the Antigravity provider edit screen when `ANTIGRAVITY_CREDITS` is set to `always` (or will be in v3.8.0; tracked separately).
+-This warning is also surfaced inline in the dashboard near the Antigravity provider edit screen when `ANTIGRAVITY_CREDITS` is set to `always` (or will be in v3.8.0; tracked separately).
++The environment reference documents the account and spend implications of each credits mode.
+ 
+ Touch points:
+ 
 diff --git a/open-sse/config/antigravityUpstream.ts b/open-sse/config/antigravityUpstream.ts
 index 539690665..1ed328d7f 100644
 --- a/open-sse/config/antigravityUpstream.ts
@@ -494,10 +257,10 @@ index b5d7adbad..1ca2b7601 100644
    AGY_PUBLIC_MODELS,
    ANTHROPIC_BETA_API_KEY,
 diff --git a/open-sse/config/toolCloaking.ts b/open-sse/config/toolCloaking.ts
-index 0dab4fc9a..175c043df 100644
+index 0dab4fc9a..c130b8981 100644
 --- a/open-sse/config/toolCloaking.ts
 +++ b/open-sse/config/toolCloaking.ts
-@@ -1,57 +1,9 @@
+@@ -1,64 +1,16 @@
  type JsonRecord = Record<string, unknown>;
  
 -export const AG_TOOL_SUFFIX = "_ide";
@@ -555,7 +318,39 @@ index 0dab4fc9a..175c043df 100644
  /**
   * Recursively strip `enumDescriptions` from a JSON schema.
   *
-@@ -86,180 +38,57 @@ export function stripEnumDescriptions(schema: unknown): unknown {
+  * VSCode Copilot emits `enumDescriptions` inside tool parameter schemas, but the
+  * Antigravity API rejects any request carrying that field with HTTP 400. Walk the
+- * schema's `properties` and `items` so the field is removed at every nesting level
+- * before the declaration is sent upstream.
++ * entire value tree so the field is removed from composition keywords (`anyOf`,
++ * `allOf`, `oneOf`), `$defs`, `additionalProperties`, and future schema shapes too.
+  */
+ export function stripEnumDescriptions(schema: unknown): unknown {
+   if (!schema || typeof schema !== "object") return schema;
+@@ -67,199 +19,67 @@ export function stripEnumDescriptions(schema: unknown): unknown {
+     return schema.map((entry) => stripEnumDescriptions(entry));
+   }
+ 
+-  const result: JsonRecord = { ...(schema as JsonRecord) };
+-  delete result.enumDescriptions;
+-
+-  const properties = asRecord(result.properties);
+-  if (properties) {
+-    const nextProperties: JsonRecord = {};
+-    for (const key of Object.keys(properties)) {
+-      nextProperties[key] = stripEnumDescriptions(properties[key]);
++  const result: JsonRecord = {};
++  for (const [key, value] of Object.entries(schema as JsonRecord)) {
++    if (key !== "enumDescriptions") {
++      result[key] = stripEnumDescriptions(value);
+     }
+-    result.properties = nextProperties;
+-  }
+-
+-  if (result.items !== undefined) {
+-    result.items = stripEnumDescriptions(result.items);
+   }
+ 
    return result;
  }
  
@@ -771,7 +566,7 @@ index 0dab4fc9a..175c043df 100644
    };
  }
 diff --git a/open-sse/executors/antigravity.ts b/open-sse/executors/antigravity.ts
-index e56ea9216..6c052137a 100644
+index e56ea9216..f8fe30f53 100644
 --- a/open-sse/executors/antigravity.ts
 +++ b/open-sse/executors/antigravity.ts
 @@ -27,7 +27,6 @@ import {
@@ -790,7 +585,15 @@ index e56ea9216..6c052137a 100644
  import {
    type AntigravityCollectedStream,
    processAntigravitySSEText,
-@@ -341,9 +339,10 @@ function asRecord(value: unknown): Record<string, unknown> | null {
+@@ -60,6 +58,7 @@ import {
+   buildFinalAntigravityResult,
+   buildAntigravity429ErrorMessage,
+   markCreditsExhausted,
++  isAbortError,
+   type SafeAntigravityLog,
+ } from "./antigravity/executeAttempt.ts";
+ import {
+@@ -341,9 +340,10 @@ function asRecord(value: unknown): Record<string, unknown> | null {
      : null;
  }
  
@@ -804,7 +607,7 @@ index e56ea9216..6c052137a 100644
      const category = asRecord(setting)?.category;
      return typeof category !== "string" || !ANTIGRAVITY_UNSUPPORTED_SAFETY_CATEGORIES.has(category);
    });
-@@ -369,18 +368,7 @@ function sanitizeAntigravityGeminiRequest(
+@@ -369,18 +369,7 @@ function sanitizeAntigravityGeminiRequest(
    const geminiTools = buildGeminiTools(request.tools);
    if (geminiTools) {
      clean.tools = geminiTools;
@@ -824,7 +627,7 @@ index e56ea9216..6c052137a 100644
    } else if (asRecord(request.toolConfig)) {
      clean.toolConfig = request.toolConfig;
    }
-@@ -389,10 +377,8 @@ function sanitizeAntigravityGeminiRequest(
+@@ -389,10 +378,8 @@ function sanitizeAntigravityGeminiRequest(
      clean.sessionId = request.sessionId;
    }
  
@@ -837,7 +640,7 @@ index e56ea9216..6c052137a 100644
    if (Array.isArray(request.safetySettings)) {
      clean.safetySettings = request.safetySettings;
    }
-@@ -440,6 +426,8 @@ function stripTrailingAntigravityAssistantTurn(
+@@ -440,6 +427,8 @@ function stripTrailingAntigravityAssistantTurn(
  // Test-only export so the unit suite can exercise the strip logic directly.
  export const __test_stripTrailingAntigravityAssistantTurn = stripTrailingAntigravityAssistantTurn;
  
@@ -846,7 +649,7 @@ index e56ea9216..6c052137a 100644
  /** Base per-url-index attempt context, before the request has been sent. */
  type AntigravityAttemptContext = {
    url: string;
-@@ -448,13 +436,13 @@ type AntigravityAttemptContext = {
+@@ -448,13 +437,13 @@ type AntigravityAttemptContext = {
     * credits-retry re-serializes from these, NOT from `finalHeaders` (already fingerprinted). */
    headers: Record<string, string>;
    transformedBody: Record<string, unknown>;
@@ -861,7 +664,7 @@ index e56ea9216..6c052137a 100644
    urlIndex: number;
    retryAttemptsByUrl: Record<number, number>;
    fallbackCount: number;
-@@ -506,7 +494,6 @@ export class AntigravityExecutor extends BaseExecutor {
+@@ -506,7 +495,6 @@ export class AntigravityExecutor extends BaseExecutor {
        Authorization: `Bearer ${credentials.accessToken}`,
        "User-Agent": antigravityUserAgent(),
        Accept: "text/event-stream",
@@ -869,7 +672,7 @@ index e56ea9216..6c052137a 100644
      };
      // Scrub proxy/fingerprint headers that reveal non-native traffic
      return scrubProxyAndFingerprintHeaders(raw);
-@@ -517,7 +504,8 @@ export class AntigravityExecutor extends BaseExecutor {
+@@ -517,7 +505,8 @@ export class AntigravityExecutor extends BaseExecutor {
      body: unknown,
      _stream: boolean,
      credentials: AntigravityCredentials,
@@ -879,7 +682,7 @@ index e56ea9216..6c052137a 100644
    ): Promise<AntigravityRequestEnvelope | Response> {
      // Project ID resolution: prefer OAuth-stored projectId over incoming body.project
      // to avoid stale/wrong client-side values causing 404/403 from Cloud Code endpoints.
-@@ -549,7 +537,12 @@ export class AntigravityExecutor extends BaseExecutor {
+@@ -549,7 +538,12 @@ export class AntigravityExecutor extends BaseExecutor {
      // returned empty/transiently failed). Mirror the Cloud Code bootstrap to recover it
      // here — the helper memoizes per access-token, so this is a one-time round-trip.
      if (!projectId && credentials?.accessToken) {
@@ -893,7 +696,7 @@ index e56ea9216..6c052137a 100644
        if (discovered) projectId = discovered;
      }
  
-@@ -643,6 +636,7 @@ export class AntigravityExecutor extends BaseExecutor {
+@@ -643,6 +637,7 @@ export class AntigravityExecutor extends BaseExecutor {
        }
      }
  
@@ -901,7 +704,7 @@ index e56ea9216..6c052137a 100644
      const rawTransformedRequest = {
        ...normalizedRequest,
        ...(contents.length > 0 && { contents }),
-@@ -650,13 +644,10 @@ export class AntigravityExecutor extends BaseExecutor {
+@@ -650,13 +645,10 @@ export class AntigravityExecutor extends BaseExecutor {
          credentials,
          typeof normalizedRequest?.sessionId === "string" ? normalizedRequest.sessionId : undefined
        ),
@@ -917,7 +720,7 @@ index e56ea9216..6c052137a 100644
            : normalizedRequest?.toolConfig,
      };
  
-@@ -666,20 +657,6 @@ export class AntigravityExecutor extends BaseExecutor {
+@@ -666,20 +658,6 @@ export class AntigravityExecutor extends BaseExecutor {
          )
        : rawTransformedRequest;
  
@@ -938,7 +741,7 @@ index e56ea9216..6c052137a 100644
      applyAntigravityGenerationDefaults(transformedRequest);
  
      const {
-@@ -704,6 +681,7 @@ export class AntigravityExecutor extends BaseExecutor {
+@@ -704,6 +682,7 @@ export class AntigravityExecutor extends BaseExecutor {
        reasoning: _reasoning,
        enable_thinking: _enableThinking,
        thinking_budget: _thinkingBudget,
@@ -946,7 +749,7 @@ index e56ea9216..6c052137a 100644
        ...passthroughFields
      } = normalizedBody;
  
-@@ -718,10 +696,6 @@ export class AntigravityExecutor extends BaseExecutor {
+@@ -718,10 +697,6 @@ export class AntigravityExecutor extends BaseExecutor {
        ...passthroughFields,
      };
  
@@ -957,7 +760,7 @@ index e56ea9216..6c052137a 100644
      return envelope;
    }
  
-@@ -1111,6 +1085,7 @@ export class AntigravityExecutor extends BaseExecutor {
+@@ -1111,6 +1086,7 @@ export class AntigravityExecutor extends BaseExecutor {
      // preflight normal call is skipped entirely.
      const creditsMode = getCreditsMode();
      const useCreditsFirst = shouldUseCreditsFirst(credentials?.accessToken || "", creditsMode);
@@ -965,7 +768,7 @@ index e56ea9216..6c052137a 100644
  
      for (let urlIndex = 0; urlIndex < fallbackCount; urlIndex++) {
        const url = this.buildUrl(model, upstreamStream, urlIndex);
-@@ -1121,18 +1096,15 @@ export class AntigravityExecutor extends BaseExecutor {
+@@ -1121,18 +1097,15 @@ export class AntigravityExecutor extends BaseExecutor {
          body,
          upstreamStream,
          credentials,
@@ -987,7 +790,7 @@ index e56ea9216..6c052137a 100644
  
        // Initialize retry counter for this URL
        if (!retryAttemptsByUrl[urlIndex]) {
-@@ -1145,13 +1117,13 @@ export class AntigravityExecutor extends BaseExecutor {
+@@ -1145,13 +1118,13 @@ export class AntigravityExecutor extends BaseExecutor {
            model,
            headers,
            transformedBody,
@@ -1002,7 +805,17 @@ index e56ea9216..6c052137a 100644
            urlIndex,
            retryAttemptsByUrl,
            fallbackCount,
-@@ -1193,7 +1165,6 @@ export class AntigravityExecutor extends BaseExecutor {
+@@ -1162,6 +1135,9 @@ export class AntigravityExecutor extends BaseExecutor {
+         if (outcome.sameUrl) urlIndex--;
+         continue;
+       } catch (error) {
++        if (signal?.aborted || isAbortError(error)) {
++          throw signal?.reason ?? error;
++        }
+         lastError = error;
+         l.error(
+           "TELEMETRY",
+@@ -1193,7 +1169,6 @@ export class AntigravityExecutor extends BaseExecutor {
        model,
        headers,
        transformedBody,
@@ -1010,7 +823,7 @@ index e56ea9216..6c052137a 100644
        credentials,
        stream,
        signal,
-@@ -1253,7 +1224,6 @@ export class AntigravityExecutor extends BaseExecutor {
+@@ -1253,7 +1228,6 @@ export class AntigravityExecutor extends BaseExecutor {
        url,
        finalHeaders,
        transformedBody,
@@ -1018,7 +831,7 @@ index e56ea9216..6c052137a 100644
        log
      );
      if (embedded) return { action: "return", result: embedded };
-@@ -1265,7 +1235,6 @@ export class AntigravityExecutor extends BaseExecutor {
+@@ -1265,7 +1239,6 @@ export class AntigravityExecutor extends BaseExecutor {
        url,
        finalHeaders,
        transformedBody,
@@ -1026,7 +839,7 @@ index e56ea9216..6c052137a 100644
        accountId,
        signal,
        log
-@@ -1291,7 +1260,6 @@ export class AntigravityExecutor extends BaseExecutor {
+@@ -1291,7 +1264,6 @@ export class AntigravityExecutor extends BaseExecutor {
      url: string,
      finalHeaders: Record<string, string>,
      transformedBody: Record<string, unknown>,
@@ -1034,7 +847,7 @@ index e56ea9216..6c052137a 100644
      accountId: string,
      signal: AbortSignal | null | undefined,
      log: SafeAntigravityLog
-@@ -1314,7 +1282,6 @@ export class AntigravityExecutor extends BaseExecutor {
+@@ -1314,7 +1286,6 @@ export class AntigravityExecutor extends BaseExecutor {
        url,
        finalHeaders,
        transformedBody,
@@ -1042,7 +855,7 @@ index e56ea9216..6c052137a 100644
        accountId,
        signal,
        updateAntigravityRemainingCredits
-@@ -1413,13 +1380,13 @@ export class AntigravityExecutor extends BaseExecutor {
+@@ -1413,13 +1384,13 @@ export class AntigravityExecutor extends BaseExecutor {
        url,
        headers,
        transformedBody,
@@ -1057,7 +870,7 @@ index e56ea9216..6c052137a 100644
      } = ctx;
  
      try {
-@@ -1439,12 +1406,19 @@ export class AntigravityExecutor extends BaseExecutor {
+@@ -1439,12 +1410,19 @@ export class AntigravityExecutor extends BaseExecutor {
        const retryMs = decision.retryAfterMs;
        log.debug("AG_429", `Category: ${category}, Decision: ${decision.kind} — ${decision.reason}`);
  
@@ -1081,7 +894,7 @@ index e56ea9216..6c052137a 100644
  
        if (category === "quota_exhausted" && creditsAlreadyInjected) {
          handleCreditsFailure(credentials?.accessToken || "");
-@@ -1452,18 +1426,13 @@ export class AntigravityExecutor extends BaseExecutor {
+@@ -1452,18 +1430,13 @@ export class AntigravityExecutor extends BaseExecutor {
          markCreditsExhausted(accountId);
        }
  
@@ -1102,7 +915,7 @@ index e56ea9216..6c052137a 100644
            credentials,
            stream,
            signal,
-@@ -1472,6 +1441,7 @@ export class AntigravityExecutor extends BaseExecutor {
+@@ -1472,10 +1445,14 @@ export class AntigravityExecutor extends BaseExecutor {
            updateAntigravityRemainingCredits
          );
          if (creditsResult) return { kind: "return", result: creditsResult };
@@ -1110,8 +923,16 @@ index e56ea9216..6c052137a 100644
        }
  
        return { kind: "resolved", retryMs };
+-    } catch {
++    } catch (error) {
++      if (signal?.aborted || isAbortError(error)) {
++        throw signal?.reason ?? error;
++      }
+       // Ignore parse errors, will fall back to exponential backoff
+       return { kind: "resolved", retryMs: null };
+     }
 diff --git a/open-sse/executors/antigravity/executeAttempt.ts b/open-sse/executors/antigravity/executeAttempt.ts
-index 566e65171..ac258ab01 100644
+index 566e65171..cf1132331 100644
 --- a/open-sse/executors/antigravity/executeAttempt.ts
 +++ b/open-sse/executors/antigravity/executeAttempt.ts
 @@ -14,7 +14,7 @@ import {
@@ -1123,7 +944,60 @@ index 566e65171..ac258ab01 100644
  import {
    applyAntigravityClientProfileHeaders,
    removeHeaderCaseInsensitive,
-@@ -235,38 +235,13 @@ function getRequestTargetModel(body: Record<string, unknown>): string {
+@@ -105,6 +105,13 @@ function isAntigravityPreResponseTimeout(error: unknown): boolean {
+   return getAbortErrorCode(error) === ANTIGRAVITY_PRE_RESPONSE_TIMEOUT_CODE;
+ }
+ 
++export function isAbortError(error: unknown): boolean {
++  return (
++    (error instanceof DOMException && error.name === "AbortError") ||
++    (error instanceof Error && error.name === "AbortError")
++  );
++}
++
+ /**
+  * `fetch()` wrapper that aborts if the upstream never returns response headers
+  * within `timeoutMs` (default STREAM_READINESS_TIMEOUT_MS) — distinct from the
+@@ -210,11 +217,36 @@ function cloneAntigravityRequestBody(body: unknown): unknown {
+     return body;
+   }
+ 
++  let clone: unknown;
+   try {
+-    return structuredClone(body);
++    clone = structuredClone(body);
+   } catch {
+-    return JSON.parse(JSON.stringify(body));
++    clone = JSON.parse(JSON.stringify(body));
+   }
++
++  if (clone && typeof clone === "object") {
++    delete (clone as Record<string, unknown>)._toolNameMap;
++  }
++  return clone;
++}
++
++function getToolNameMap(body: Record<string, unknown>): Map<string, string> | null {
++  return body._toolNameMap instanceof Map ? body._toolNameMap : null;
++}
++
++function attachToolNameMap(
++  body: Record<string, unknown>,
++  toolNameMap: Map<string, string> | null
++): Record<string, unknown> {
++  if (toolNameMap) {
++    Object.defineProperty(body, "_toolNameMap", {
++      value: toolNameMap,
++      configurable: true,
++      enumerable: false,
++      writable: true,
++    });
++  }
++  return body;
+ }
+ 
+ function serializeAntigravityRequest(
+@@ -235,48 +267,24 @@ function getRequestTargetModel(body: Record<string, unknown>): string {
    return typeof target === "string" && target.length > 0 ? target : "unknown";
  }
  
@@ -1161,11 +1035,15 @@ index 566e65171..ac258ab01 100644
 -    requestToolNameMap = cloaked.toolNameMap;
 -  }
 +): Record<string, unknown> {
-+  let transformedBody = sanitizeAntigravityToolPayload(transformed);
++  const toolNameMap = getToolNameMap(transformed);
++  let transformedBody = attachToolNameMap(sanitizeAntigravityToolPayload(transformed), toolNameMap);
  
    // Credits-first: inject GOOGLE_ONE_AI upfront so we never try the normal
    // quota path. If credits are exhausted / disabled shouldUseCreditsFirst()
-@@ -276,7 +251,7 @@ export function finalizeAntigravityRequestBody(
+   // returns false and we fall back to the legacy retry-on-429 flow.
+   if (useCreditsFirst) {
+-    transformedBody = injectCreditsField(transformedBody);
++    transformedBody = attachToolNameMap(injectCreditsField(transformedBody), toolNameMap);
      log.debug("AG_CREDITS", "Credits-first enabled (ANTIGRAVITY_CREDITS=always)");
    }
  
@@ -1174,7 +1052,7 @@ index 566e65171..ac258ab01 100644
  }
  
  /** Debug-only dump of outgoing headers (mask Authorization) and envelope shape. */
-@@ -393,7 +368,6 @@ export async function tryCreditsRetry(
+@@ -393,7 +401,6 @@ export async function tryCreditsRetry(
    url: string,
    headers: Record<string, string>,
    transformedBody: Record<string, unknown>,
@@ -1182,7 +1060,19 @@ index 566e65171..ac258ab01 100644
    credentials: AntigravityCredentials,
    stream: boolean,
    signal: AbortSignal | null | undefined,
-@@ -432,7 +406,7 @@ export async function tryCreditsRetry(
+@@ -402,7 +409,10 @@ export async function tryCreditsRetry(
+   onCreditsUpdate: OnAntigravityCreditsUpdate
+ ): Promise<SsePassthroughResult | null> {
+   log.info("AG_CREDITS", "Retrying with Google One AI credits");
+-  const creditsBody = injectCreditsField(transformedBody);
++  const creditsBody = attachToolNameMap(
++    injectCreditsField(transformedBody),
++    getToolNameMap(transformedBody)
++  );
+   const serializedCreditsRequest = serializeAntigravityRequest(provider, headers, creditsBody);
+   const finalCreditsHeaders = serializedCreditsRequest.headers;
+   try {
+@@ -432,7 +442,7 @@ export async function tryCreditsRetry(
            onCreditsUpdate,
            url,
            finalCreditsHeaders,
@@ -1191,7 +1081,7 @@ index 566e65171..ac258ab01 100644
            signal
          );
        }
-@@ -440,7 +414,7 @@ export async function tryCreditsRetry(
+@@ -440,7 +450,7 @@ export async function tryCreditsRetry(
          response: creditsResp,
          url,
          headers: finalCreditsHeaders,
@@ -1200,7 +1090,17 @@ index 566e65171..ac258ab01 100644
        };
      }
  
-@@ -470,7 +444,6 @@ export async function tryEmbedLongRetryAfter(
+@@ -452,6 +462,9 @@ export async function tryCreditsRetry(
+     markCreditsExhausted(accountId);
+     return null;
+   } catch (creditsErr) {
++    if (signal?.aborted || isAbortError(creditsErr)) {
++      throw signal?.reason ?? creditsErr;
++    }
+     handleCreditsFailure(credentials?.accessToken || "");
+     log.warn("AG_CREDITS", `Credits retry failed: ${creditsErr}`);
+     return null;
+@@ -470,7 +483,6 @@ export async function tryEmbedLongRetryAfter(
    url: string,
    finalHeaders: Record<string, string>,
    transformedBody: Record<string, unknown>,
@@ -1208,7 +1108,7 @@ index 566e65171..ac258ab01 100644
    log: ExecutorLog | null | undefined
  ): Promise<SsePassthroughResult | null> {
    if (
-@@ -498,7 +471,7 @@ export async function tryEmbedLongRetryAfter(
+@@ -498,7 +510,7 @@ export async function tryEmbedLongRetryAfter(
        response: modifiedResponse,
        url,
        headers: finalHeaders,
@@ -1217,7 +1117,7 @@ index 566e65171..ac258ab01 100644
      };
    } catch (err) {
      log?.warn?.("RETRY", `Failed to embed retryAfterMs: ${err}`);
-@@ -511,8 +484,7 @@ async function buildUpstreamErrorResult(
+@@ -511,8 +523,7 @@ async function buildUpstreamErrorResult(
    response: Response,
    url: string,
    finalHeaders: Record<string, string>,
@@ -1227,7 +1127,7 @@ index 566e65171..ac258ab01 100644
  ): Promise<SsePassthroughResult> {
    const rawBody = await response
      .clone()
-@@ -526,7 +498,7 @@ async function buildUpstreamErrorResult(
+@@ -526,7 +537,7 @@ async function buildUpstreamErrorResult(
      }),
      url,
      headers: finalHeaders,
@@ -1236,7 +1136,7 @@ index 566e65171..ac258ab01 100644
    };
  }
  
-@@ -544,7 +516,6 @@ async function buildNonStreamingExecuteOnceResult(
+@@ -544,7 +555,6 @@ async function buildNonStreamingExecuteOnceResult(
    url: string,
    finalHeaders: Record<string, string>,
    transformedBody: Record<string, unknown>,
@@ -1244,7 +1144,7 @@ index 566e65171..ac258ab01 100644
    accountId: string,
    signal: AbortSignal | null | undefined,
    onCreditsUpdate: OnAntigravityCreditsUpdate
-@@ -552,7 +523,7 @@ async function buildNonStreamingExecuteOnceResult(
+@@ -552,7 +562,7 @@ async function buildNonStreamingExecuteOnceResult(
    // #3229: surface a real upstream error instead of masking a 4xx/5xx as an
    // empty `chat.completion` envelope.
    if (!response.ok) {
@@ -1253,7 +1153,7 @@ index 566e65171..ac258ab01 100644
    }
  
    if (response.body) {
-@@ -566,7 +537,7 @@ async function buildNonStreamingExecuteOnceResult(
+@@ -566,7 +576,7 @@ async function buildNonStreamingExecuteOnceResult(
        onCreditsUpdate,
        url,
        finalHeaders,
@@ -1262,7 +1162,7 @@ index 566e65171..ac258ab01 100644
        signal
      );
    }
-@@ -576,7 +547,7 @@ async function buildNonStreamingExecuteOnceResult(
+@@ -576,7 +586,7 @@ async function buildNonStreamingExecuteOnceResult(
      response,
      url,
      headers: finalHeaders,
@@ -1271,7 +1171,7 @@ index 566e65171..ac258ab01 100644
    };
  }
  
-@@ -598,13 +569,12 @@ async function buildStreamingExecuteOnceResult(
+@@ -598,13 +608,12 @@ async function buildStreamingExecuteOnceResult(
    url: string,
    finalHeaders: Record<string, string>,
    transformedBody: Record<string, unknown>,
@@ -1286,7 +1186,7 @@ index 566e65171..ac258ab01 100644
    }
  
    if (response.body) {
-@@ -638,7 +608,7 @@ async function buildStreamingExecuteOnceResult(
+@@ -638,7 +647,7 @@ async function buildStreamingExecuteOnceResult(
        response: tappedResponse,
        url,
        headers: finalHeaders,
@@ -1295,7 +1195,7 @@ index 566e65171..ac258ab01 100644
      };
    }
  
-@@ -646,7 +616,7 @@ async function buildStreamingExecuteOnceResult(
+@@ -646,7 +655,7 @@ async function buildStreamingExecuteOnceResult(
      response,
      url,
      headers: finalHeaders,
@@ -1304,7 +1204,7 @@ index 566e65171..ac258ab01 100644
    };
  }
  
-@@ -657,7 +627,6 @@ export async function buildFinalAntigravityResult(
+@@ -657,7 +666,6 @@ export async function buildFinalAntigravityResult(
    url: string,
    finalHeaders: Record<string, string>,
    transformedBody: Record<string, unknown>,
@@ -1312,7 +1212,7 @@ index 566e65171..ac258ab01 100644
    accountId: string,
    signal: AbortSignal | null | undefined,
    onCreditsUpdate: OnAntigravityCreditsUpdate
-@@ -668,7 +637,6 @@ export async function buildFinalAntigravityResult(
+@@ -668,7 +676,6 @@ export async function buildFinalAntigravityResult(
        url,
        finalHeaders,
        transformedBody,
@@ -1320,7 +1220,7 @@ index 566e65171..ac258ab01 100644
        accountId,
        signal,
        onCreditsUpdate
-@@ -679,7 +647,6 @@ export async function buildFinalAntigravityResult(
+@@ -679,7 +686,6 @@ export async function buildFinalAntigravityResult(
      url,
      finalHeaders,
      transformedBody,
@@ -1981,7 +1881,7 @@ index d96a1b838..91f4d553c 100644
    if (cloudCodeRequest._toolNameMap instanceof Map && cloudCodeRequest._toolNameMap.size > 0) {
      envelope._toolNameMap = cloudCodeRequest._toolNameMap;
 diff --git a/src/lib/oauth/constants/oauth.ts b/src/lib/oauth/constants/oauth.ts
-index e7dfe6df4..347a289ac 100644
+index 990fc139a..365e6902b 100644
 --- a/src/lib/oauth/constants/oauth.ts
 +++ b/src/lib/oauth/constants/oauth.ts
 @@ -1,5 +1,6 @@
@@ -1992,7 +1892,7 @@ index e7dfe6df4..347a289ac 100644
    getAntigravityFetchAvailableModelsUrls,
  } from "@omniroute/open-sse/config/antigravityUpstream.ts";
  import {
-@@ -184,15 +185,17 @@ export const ANTIGRAVITY_CONFIG = {
+@@ -199,15 +200,17 @@ export const ANTIGRAVITY_CONFIG = {
      "https://www.googleapis.com/auth/experimentsandconfigs",
    ],
    // Antigravity specific
@@ -2145,708 +2045,8 @@ index 1f685cc26..b7e8341cf 100644
      );
    }
  
-diff --git a/tests/integration/antigravity-protocol-fidelity-http-verify.ts b/tests/integration/antigravity-protocol-fidelity-http-verify.ts
-new file mode 100644
-index 000000000..73dc955e7
---- /dev/null
-+++ b/tests/integration/antigravity-protocol-fidelity-http-verify.ts
-@@ -0,0 +1,694 @@
-+import assert from "node:assert/strict";
-+import { once } from "node:events";
-+import fs from "node:fs";
-+import fsp from "node:fs/promises";
-+import http from "node:http";
-+import os from "node:os";
-+import path from "node:path";
-+
-+const TEST_DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "omniroute-ag-http-verify-"));
-+const RUNTIME_HOSTS = new Set([
-+  "daily-cloudcode-pa.googleapis.com",
-+  "cloudcode-pa.googleapis.com",
-+]);
-+const BOOTSTRAP_URL = "https://cloudcode-pa.googleapis.com/v1internal:loadCodeAssist";
-+const PROMPT = "OmniRoute, OpenCode, Cursor — exact bytes 👩🏽‍💻";
-+
-+process.env.DATA_DIR = TEST_DATA_DIR;
-+process.env.DISABLE_SQLITE_AUTO_BACKUP = "true";
-+process.env.API_KEY_SECRET = "antigravity-http-verify-secret-123456";
-+process.env.REQUIRE_API_KEY = "false";
-+process.env.DASHBOARD_PASSWORD = "";
-+process.env.INITIAL_PASSWORD = "";
-+process.env.OMNIROUTE_LOG_REQUEST_SHAPE = "0";
-+process.env.APP_LOG_TO_FILE = "false";
-+delete process.env.JWT_SECRET;
-+
-+const core = await import("../../src/lib/db/core.ts");
-+const providersDb = await import("../../src/lib/db/providers.ts");
-+const readCacheDb = await import("../../src/lib/db/readCache.ts");
-+const chatRoute = await import("../../src/app/api/v1/chat/completions/route.ts");
-+const { clearAntigravityProjectCache } = await import(
-+  "../../open-sse/services/antigravityProjectBootstrap.ts"
-+);
-+const { seedAntigravityVersionCache } = await import(
-+  "../../open-sse/services/antigravityVersion.ts"
-+);
-+
-+const originalFetch = globalThis.fetch;
-+
-+type JsonRecord = Record<string, unknown>;
-+type UpstreamCall = {
-+  url: string;
-+  host: string;
-+  body: JsonRecord;
-+};
-+type Scenario = {
-+  name: string;
-+  creditsMode: "off" | "retry" | "always";
-+  projectId?: string;
-+  bootstrapProject?: string | null;
-+  runtimeResponses: Array<"success" | "quota429" | "pending">;
-+  requestOptions?: {
-+    includeSafety?: boolean;
-+    includeToolHistory?: boolean;
-+  };
-+};
-+type ScenarioResult = {
-+  status: number | "aborted";
-+  responseText: string;
-+  calls: UpstreamCall[];
-+};
-+
-+function asRecord(value: unknown): JsonRecord {
-+  return value && typeof value === "object" && !Array.isArray(value)
-+    ? (value as JsonRecord)
-+    : {};
-+}
-+
-+function successResponse(): Response {
-+  return new Response(
-+    'data: {"response":{"candidates":[{"content":{"parts":[{"text":"runtime-ok"}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":7,"candidatesTokenCount":2,"totalTokenCount":9}}}\n\n',
-+    { status: 200, headers: { "content-type": "text/event-stream; charset=utf-8" } }
-+  );
-+}
-+
-+function quotaResponse(): Response {
-+  return new Response(
-+    JSON.stringify({
-+      error: {
-+        message: "Quota exhausted. Resets in 5s",
-+        details: [{ reason: "QUOTA_EXHAUSTED" }],
-+      },
-+    }),
-+    { status: 429, headers: { "content-type": "application/json" } }
-+  );
-+}
-+
-+async function readIncomingBody(request: http.IncomingMessage): Promise<Buffer> {
-+  const chunks: Buffer[] = [];
-+  for await (const chunk of request) {
-+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-+  }
-+  return Buffer.concat(chunks);
-+}
-+
-+async function bridgeRouteResponse(response: Response, outgoing: http.ServerResponse): Promise<void> {
-+  outgoing.writeHead(response.status, Object.fromEntries(response.headers.entries()));
-+  if (!response.body) {
-+    outgoing.end();
-+    return;
-+  }
-+
-+  const reader = response.body.getReader();
-+  try {
-+    while (true) {
-+      const { done, value } = await reader.read();
-+      if (done) break;
-+      if (!outgoing.write(value)) await once(outgoing, "drain");
-+    }
-+    outgoing.end();
-+  } finally {
-+    reader.releaseLock();
-+  }
-+}
-+
-+async function startRouteServer(): Promise<{ server: http.Server; url: string }> {
-+  const server = http.createServer(async (incoming, outgoing) => {
-+    const clientController = new AbortController();
-+    const abortClientRequest = () => {
-+      if (!clientController.signal.aborted) {
-+        clientController.abort(new DOMException("Verification client disconnected", "AbortError"));
-+      }
-+    };
-+    const onIncomingAborted = () => abortClientRequest();
-+    const onOutgoingClose = () => {
-+      if (!outgoing.writableEnded) abortClientRequest();
-+    };
-+    incoming.once("aborted", onIncomingAborted);
-+    outgoing.once("close", onOutgoingClose);
-+
-+    try {
-+      if (incoming.method !== "POST" || incoming.url !== "/v1/chat/completions") {
-+        outgoing.writeHead(404).end();
-+        return;
-+      }
-+
-+      const body = await readIncomingBody(incoming);
-+      const address = server.address();
-+      assert(address && typeof address !== "string");
-+      const headers = new Headers();
-+      for (const [name, value] of Object.entries(incoming.headers)) {
-+        if (Array.isArray(value)) value.forEach((item) => headers.append(name, item));
-+        else if (value !== undefined) headers.set(name, value);
-+      }
-+
-+      const requestSignal = AbortSignal.any([
-+        clientController.signal,
-+        AbortSignal.timeout(10_000),
-+      ]);
-+      const request = new Request(`http://127.0.0.1:${address.port}${incoming.url}`, {
-+        method: incoming.method,
-+        headers,
-+        body,
-+        signal: requestSignal,
-+      });
-+      await bridgeRouteResponse(await chatRoute.POST(request), outgoing);
-+    } catch (error) {
-+      if (!clientController.signal.aborted) {
-+        if (!outgoing.headersSent) {
-+          outgoing.writeHead(500, { "content-type": "text/plain" });
-+        }
-+        outgoing.end("internal verification route error");
-+      }
-+    } finally {
-+      incoming.removeListener("aborted", onIncomingAborted);
-+      outgoing.removeListener("close", onOutgoingClose);
-+    }
-+  });
-+
-+  await new Promise<void>((resolve, reject) => {
-+    server.once("error", reject);
-+    server.listen(0, "127.0.0.1", resolve);
-+  });
-+  const address = server.address();
-+  assert(address && typeof address !== "string");
-+  return { server, url: `http://127.0.0.1:${address.port}/v1/chat/completions` };
-+}
-+
-+async function closeServer(server: http.Server): Promise<void> {
-+  if (!server.listening) return;
-+  await new Promise<void>((resolve) => server.close(() => resolve()));
-+}
-+
-+function requestBody(options: { includeSafety?: boolean; includeToolHistory?: boolean } = {}): JsonRecord {
-+  const includeSafety = options.includeSafety !== false;
-+  const includeToolHistory = options.includeToolHistory === true;
-+  const messages: JsonRecord[] = [];
-+  if (includeToolHistory) {
-+    messages.push(
-+      {
-+        role: "assistant",
-+        content: null,
-+        tool_calls: [
-+          {
-+            id: "call_workspace_read",
-+            type: "function",
-+            function: { name: "workspace_read", arguments: '{"path":"a"}' },
-+          },
-+        ],
-+      },
-+      {
-+        role: "tool",
-+        tool_call_id: "call_workspace_read",
-+        name: "workspace_read",
-+        content: '{"ok":true}',
-+      }
-+    );
-+  }
-+  messages.push({ role: "user", content: PROMPT });
-+
-+  return {
-+    model: "antigravity/gemini-2.5-flash",
-+    stream: false,
-+    messages,
-+    ...(includeSafety
-+      ? {
-+          safetySettings: [
-+            { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
-+            { category: "HARM_CATEGORY_CIVIC_INTEGRITY", threshold: "OFF" },
-+          ],
-+        }
-+      : {}),
-+    tools: [
-+      {
-+        type: "function",
-+        function: {
-+          name: "workspace_read",
-+          description: "Read one workspace file",
-+          parameters: {
-+            type: "object",
-+            enumDescriptions: ["root"],
-+            properties: {
-+              path: {
-+                type: "string",
-+                enum: ["a", "b"],
-+                enumDescriptions: ["first", "second"],
-+              },
-+              nested: {
-+                type: "array",
-+                items: {
-+                  type: "object",
-+                  enumDescriptions: ["nested"],
-+                  properties: {
-+                    mode: {
-+                      type: "string",
-+                      enum: ["safe"],
-+                      enumDescriptions: ["safe mode"],
-+                    },
-+                  },
-+                },
-+              },
-+            },
-+            required: ["path"],
-+          },
-+        },
-+      },
-+    ],
-+  };
-+}
-+
-+function hasKeyDeep(value: unknown, key: string): boolean {
-+  if (Array.isArray(value)) return value.some((entry) => hasKeyDeep(entry, key));
-+  if (!value || typeof value !== "object") return false;
-+  const record = value as JsonRecord;
-+  return Object.prototype.hasOwnProperty.call(record, key) ||
-+    Object.values(record).some((entry) => hasKeyDeep(entry, key));
-+}
-+
-+function runtimeCalls(calls: UpstreamCall[]): UpstreamCall[] {
-+  return calls.filter((call) => call.url.includes("streamGenerateContent"));
-+}
-+
-+function innerRequest(call: UpstreamCall): JsonRecord {
-+  return asRecord(call.body.request);
-+}
-+
-+function textParts(call: UpstreamCall): string[] {
-+  const contents = innerRequest(call).contents;
-+  if (!Array.isArray(contents)) return [];
-+
-+  return contents.flatMap((content) => {
-+    const parts = asRecord(content).parts;
-+    if (!Array.isArray(parts)) return [];
-+    return parts
-+      .map((part) => asRecord(part).text)
-+      .filter((text): text is string => typeof text === "string");
-+  });
-+}
-+
-+function inferenceCalls(calls: UpstreamCall[]): UpstreamCall[] {
-+  return runtimeCalls(calls).filter((call) => textParts(call).includes(PROMPT));
-+}
-+
-+function creditProbeCalls(calls: UpstreamCall[]): UpstreamCall[] {
-+  return runtimeCalls(calls).filter((call) => {
-+    const request = innerRequest(call);
-+    const generationConfig = asRecord(request.generationConfig);
-+    return (
-+      call.body.model === "gemini-2-flash" &&
-+      textParts(call).includes("hi") &&
-+      generationConfig.maxOutputTokens === 1
-+    );
-+  });
-+}
-+
-+function bootstrapCalls(calls: UpstreamCall[]): UpstreamCall[] {
-+  return calls.filter((call) => call.url === BOOTSTRAP_URL);
-+}
-+
-+async function replaceConnection(
-+  connectionId: string,
-+  projectId: string | undefined,
-+  tokenSuffix: string
-+): Promise<void> {
-+  await providersDb.updateProviderConnection(connectionId, {
-+    accessToken: `fake-antigravity-token-${tokenSuffix}`,
-+    refreshToken: `fake-antigravity-refresh-${tokenSuffix}`,
-+    expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
-+    projectId: projectId ?? null,
-+    providerSpecificData: {},
-+    testStatus: "active",
-+    isActive: true,
-+  });
-+  readCacheDb.invalidateDbCache("connections");
-+  clearAntigravityProjectCache();
-+}
-+
-+async function runScenario(
-+  routeUrl: string,
-+  connectionId: string,
-+  scenario: Scenario,
-+  tokenSuffix: string
-+): Promise<ScenarioResult> {
-+  await replaceConnection(connectionId, scenario.projectId, tokenSuffix);
-+  process.env.ANTIGRAVITY_CREDITS = scenario.creditsMode;
-+  seedAntigravityVersionCache("2026.04.17-verify");
-+
-+  const calls: UpstreamCall[] = [];
-+  let runtimeIndex = 0;
-+  globalThis.fetch = async (input, init) => {
-+    const request = input instanceof Request ? input : new Request(input, init);
-+    const parsed = new URL(request.url);
-+    if (request.url === BOOTSTRAP_URL) {
-+      calls.push({
-+        url: request.url,
-+        host: parsed.host,
-+        body: JSON.parse(await request.text()) as JsonRecord,
-+      });
-+      const payload = scenario.bootstrapProject
-+        ? { cloudaicompanionProject: scenario.bootstrapProject }
-+        : {};
-+      return new Response(JSON.stringify(payload), {
-+        status: 200,
-+        headers: { "content-type": "application/json" },
-+      });
-+    }
-+
-+    if (!RUNTIME_HOSTS.has(parsed.host) || !request.url.includes("streamGenerateContent")) {
-+      throw new Error(`Blocked unexpected external fetch: ${request.url}`);
-+    }
-+    calls.push({
-+      url: request.url,
-+      host: parsed.host,
-+      body: JSON.parse(await request.text()) as JsonRecord,
-+    });
-+
-+    const responseKind = scenario.runtimeResponses[runtimeIndex++] ?? "success";
-+    if (responseKind === "success") return successResponse();
-+    if (responseKind === "quota429") return quotaResponse();
-+    return new Promise<Response>((_resolve, reject) => {
-+      request.signal.addEventListener("abort", () => reject(request.signal.reason), { once: true });
-+    });
-+  };
-+
-+  try {
-+    const response = await originalFetch(routeUrl, {
-+      method: "POST",
-+      headers: { "content-type": "application/json" },
-+      body: JSON.stringify(requestBody(scenario.requestOptions)),
-+    });
-+    return { status: response.status, responseText: await response.text(), calls };
-+  } finally {
-+    globalThis.fetch = originalFetch;
-+  }
-+}
-+
-+async function runAbortScenario(
-+  routeUrl: string,
-+  connectionId: string,
-+  tokenSuffix: string
-+): Promise<ScenarioResult> {
-+  await replaceConnection(connectionId, undefined, tokenSuffix);
-+  process.env.ANTIGRAVITY_CREDITS = "off";
-+  seedAntigravityVersionCache("2026.04.17-verify");
-+
-+  const calls: UpstreamCall[] = [];
-+  let bootstrapStarted: (() => void) | undefined;
-+  const started = new Promise<void>((resolve) => {
-+    bootstrapStarted = resolve;
-+  });
-+
-+  globalThis.fetch = async (input, init) => {
-+    const request = input instanceof Request ? input : new Request(input, init);
-+    const parsed = new URL(request.url);
-+    if (request.url !== BOOTSTRAP_URL) {
-+      throw new Error(`Abort probe reached unexpected external URL: ${request.url}`);
-+    }
-+    calls.push({
-+      url: request.url,
-+      host: parsed.host,
-+      body: JSON.parse(await request.text()) as JsonRecord,
-+    });
-+    bootstrapStarted?.();
-+    return new Promise<Response>((_resolve, reject) => {
-+      request.signal.addEventListener("abort", () => reject(request.signal.reason), { once: true });
-+    });
-+  };
-+
-+  const controller = new AbortController();
-+  const request = originalFetch(routeUrl, {
-+    method: "POST",
-+    headers: { "content-type": "application/json" },
-+    body: JSON.stringify(requestBody()),
-+    signal: controller.signal,
-+  });
-+
-+  try {
-+    await started;
-+    controller.abort(new DOMException("verification client disconnected", "AbortError"));
-+    await assert.rejects(request, { name: "AbortError" });
-+    await new Promise<void>((resolve) => setTimeout(resolve, 50));
-+    return { status: "aborted", responseText: "client AbortError", calls };
-+  } finally {
-+    globalThis.fetch = originalFetch;
-+  }
-+}
-+
-+function validateEnvelope(
-+  call: UpstreamCall,
-+  options: { expectedSafety?: unknown; expectToolHistory?: boolean } = {}
-+): void {
-+  const request = innerRequest(call);
-+  const contents = request.contents as Array<{ parts?: Array<JsonRecord> }>;
-+  const promptText = contents
-+    .flatMap((content) => content.parts ?? [])
-+    .map((part) => part.text)
-+    .find((text) => text === PROMPT);
-+  assert.equal(promptText, PROMPT);
-+  assert.deepEqual(Buffer.from(promptText), Buffer.from(PROMPT));
-+
-+  const tools = request.tools as Array<{
-+    functionDeclarations: Array<{ name: string; parameters: unknown }>;
-+  }>;
-+  const declarations = tools.flatMap((tool) => tool.functionDeclarations ?? []);
-+  assert.deepEqual(declarations.map((declaration) => declaration.name), ["workspace_read"]);
-+  assert.equal(
-+    hasKeyDeep(declarations, "enumDescriptions"),
-+    false,
-+    JSON.stringify(declarations, null, 2)
-+  );
-+  assert.equal(hasKeyDeep(call.body, "includeServerSideToolInvocations"), false);
-+  assert.equal(JSON.stringify(call.body).includes("_ide"), false);
-+  assert.equal("_toolNameMap" in call.body, false);
-+
-+  if (options.expectToolHistory) {
-+    const parts = contents.flatMap((content) => content.parts ?? []);
-+    const callNames = parts
-+      .map((part) => asRecord(part.functionCall).name)
-+      .filter((name): name is string => typeof name === "string");
-+    const responseNames = parts
-+      .map((part) => asRecord(part.functionResponse).name)
-+      .filter((name): name is string => typeof name === "string");
-+    assert.deepEqual(callNames, ["workspace_read"]);
-+    assert.deepEqual(responseNames, ["workspace_read"]);
-+  }
-+
-+  if (Object.prototype.hasOwnProperty.call(options, "expectedSafety")) {
-+    assert.deepEqual(request.safetySettings, options.expectedSafety);
-+  } else {
-+    assert.equal(request.safetySettings, undefined);
-+  }
-+}
-+
-+async function main(): Promise<void> {
-+  let server: http.Server | undefined;
-+  try {
-+    const connection = await providersDb.createProviderConnection({
-+      provider: "antigravity",
-+      authType: "oauth",
-+      name: "antigravity-http-verify",
-+      email: "antigravity-http-verify@example.test",
-+      accessToken: "fake-antigravity-token-seed",
-+      refreshToken: "fake-antigravity-refresh-seed",
-+      expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
-+      projectId: "project-verify",
-+      providerSpecificData: {},
-+      isActive: true,
-+      testStatus: "active",
-+    });
-+    assert(connection && typeof connection.id === "string");
-+
-+    const routeHarness = await startRouteServer();
-+    server = routeHarness.server;
-+
-+    const off = await runScenario(
-+      routeHarness.url,
-+      connection.id,
-+      {
-+        name: "off",
-+        creditsMode: "off",
-+        projectId: "project-off",
-+        runtimeResponses: ["success"],
-+        requestOptions: { includeToolHistory: true },
-+      },
-+      "off"
-+    );
-+    assert.equal(off.status, 200, off.responseText);
-+    assert.match(off.responseText, /runtime-ok/);
-+    const offInference = inferenceCalls(off.calls);
-+    assert.equal(offInference.length, 1);
-+    assert.equal(creditProbeCalls(off.calls).length, 0);
-+    validateEnvelope(offInference[0], {
-+      expectedSafety: [
-+        { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
-+      ],
-+      expectToolHistory: true,
-+    });
-+    assert.equal(offInference[0].body.enabledCreditTypes, undefined);
-+
-+    const noSafety = await runScenario(
-+      routeHarness.url,
-+      connection.id,
-+      {
-+        name: "no-safety",
-+        creditsMode: "off",
-+        projectId: "project-no-safety",
-+        runtimeResponses: ["success"],
-+        requestOptions: { includeSafety: false },
-+      },
-+      "no-safety"
-+    );
-+    assert.equal(noSafety.status, 200, noSafety.responseText);
-+    const noSafetyInference = inferenceCalls(noSafety.calls);
-+    assert.equal(noSafetyInference.length, 1);
-+    assert.equal(creditProbeCalls(noSafety.calls).length, 0);
-+    validateEnvelope(noSafetyInference[0]);
-+
-+    const retry = await runScenario(
-+      routeHarness.url,
-+      connection.id,
-+      {
-+        name: "retry",
-+        creditsMode: "retry",
-+        projectId: "project-retry",
-+        runtimeResponses: ["quota429", "success"],
-+      },
-+      "retry"
-+    );
-+    assert.equal(retry.status, 200, retry.responseText);
-+    const retryInference = inferenceCalls(retry.calls);
-+    assert.equal(retryInference.length, 2);
-+    assert.equal(creditProbeCalls(retry.calls).length, 0);
-+    assert.equal(retryInference[0].body.enabledCreditTypes, undefined);
-+    assert.deepEqual(retryInference[1].body.enabledCreditTypes, ["GOOGLE_ONE_AI"]);
-+
-+    const always = await runScenario(
-+      routeHarness.url,
-+      connection.id,
-+      {
-+        name: "always",
-+        creditsMode: "always",
-+        projectId: "project-always",
-+        runtimeResponses: ["success"],
-+      },
-+      "always"
-+    );
-+    assert.equal(always.status, 200, always.responseText);
-+    const alwaysInference = inferenceCalls(always.calls);
-+    assert.equal(alwaysInference.length, 1);
-+    assert.equal(
-+      creditProbeCalls(always.calls).length,
-+      0,
-+      JSON.stringify(
-+        runtimeCalls(always.calls).map((call) => ({
-+          url: call.url,
-+          model: call.body.model,
-+          texts: textParts(call),
-+          generationConfig: innerRequest(call).generationConfig,
-+          credits: call.body.enabledCreditTypes,
-+        }))
-+      )
-+    );
-+    assert.equal(runtimeCalls(always.calls).length, 1);
-+    assert.deepEqual(alwaysInference[0].body.enabledCreditTypes, ["GOOGLE_ONE_AI"]);
-+
-+    const missingProject = await runScenario(
-+      routeHarness.url,
-+      connection.id,
-+      {
-+        name: "missing-project",
-+        creditsMode: "off",
-+        bootstrapProject: null,
-+        runtimeResponses: [],
-+      },
-+      "missing-project"
-+    );
-+    assert.equal(missingProject.status, 422, missingProject.responseText);
-+    assert.match(missingProject.responseText, /missing_project_id/);
-+    assert.equal(bootstrapCalls(missingProject.calls).length, 1);
-+    assert.equal(runtimeCalls(missingProject.calls).length, 0);
-+
-+    const abort = await runAbortScenario(routeHarness.url, connection.id, "abort");
-+    assert.equal(abort.status, "aborted");
-+    assert.equal(bootstrapCalls(abort.calls).length, 1);
-+    assert.equal(runtimeCalls(abort.calls).length, 0);
-+
-+    for (const result of [off, noSafety, retry, always, missingProject, abort]) {
-+      assert.equal(result.calls.some((call) => call.host.includes("sandbox")), false);
-+    }
-+
-+    const evidence = {
-+      surface: "/v1/chat/completions over loopback HTTP",
-+      prompt: {
-+        utf8Bytes: Buffer.byteLength(PROMPT),
-+        preserved: true,
-+      },
-+      tools: {
-+        declarations: ["workspace_read"],
-+        historyCalls: ["workspace_read"],
-+        historyResponses: ["workspace_read"],
-+        namesAligned: true,
-+        hasIdeSuffix: false,
-+        hasDecoys: false,
-+        hasEnumDescriptions: false,
-+        hasServerInvocationFlag: false,
-+      },
-+      safety: {
-+        absentWhenOmitted: true,
-+        accepted: ["HARM_CATEGORY_HATE_SPEECH"],
-+        rejected: ["HARM_CATEGORY_CIVIC_INTEGRITY"],
-+      },
-+      credits: {
-+        off: {
-+          inference: offInference.map((call) => call.body.enabledCreditTypes ?? null),
-+          probes: creditProbeCalls(off.calls).length,
-+        },
-+        retry: {
-+          inference: retryInference.map((call) => call.body.enabledCreditTypes ?? null),
-+          probes: creditProbeCalls(retry.calls).length,
-+        },
-+        always: {
-+          inference: alwaysInference.map((call) => call.body.enabledCreditTypes ?? null),
-+          probes: creditProbeCalls(always.calls).length,
-+        },
-+      },
-+      endpoints: {
-+        runtimeHosts: [
-+          ...new Set(
-+            [off, noSafety, retry, always].flatMap((result) =>
-+              inferenceCalls(result.calls).map((call) => call.host)
-+            )
-+          ),
-+        ],
-+        sandboxCalled: false,
-+        bootstrapUrl: BOOTSTRAP_URL,
-+      },
-+      failClosed: {
-+        httpStatus: missingProject.status,
-+        bootstrapCalls: bootstrapCalls(missingProject.calls).length,
-+        runtimeCalls: runtimeCalls(missingProject.calls).length,
-+      },
-+      abort: {
-+        clientResult: abort.responseText,
-+        bootstrapCalls: bootstrapCalls(abort.calls).length,
-+        runtimeCallsAfterAbort: runtimeCalls(abort.calls).length,
-+      },
-+    };
-+
-+    process.stdout.write(`${JSON.stringify(evidence, null, 2)}\n`);
-+  } finally {
-+    globalThis.fetch = originalFetch;
-+    clearAntigravityProjectCache();
-+    if (server) await closeServer(server);
-+    core.closeDbInstance({ checkpointMode: null });
-+    await fsp.rm(TEST_DATA_DIR, {
-+      recursive: true,
-+      force: true,
-+      maxRetries: 5,
-+      retryDelay: 100,
-+    });
-+  }
-+}
-+
-+await main();
 diff --git a/tests/snapshots/provider/translate-path.json b/tests/snapshots/provider/translate-path.json
-index 2be52c889..a425843ae 100644
+index de1e271d8..e8a1cf56f 100644
 --- a/tests/snapshots/provider/translate-path.json
 +++ b/tests/snapshots/provider/translate-path.json
 @@ -118,18 +118,18 @@
@@ -2871,7 +2071,7 @@ index 2be52c889..a425843ae 100644
        }
      },
      "url": {
-@@ -288,18 +288,18 @@
+@@ -334,18 +334,18 @@
          "Accept": "text/event-stream",
          "Authorization": "Bearer <TOK>",
          "Content-Type": "application/json",
@@ -3566,10 +2766,10 @@ index 1bcb0834d..cb10dd5bc 100644
 +  assert.equal(request.toolConfig?.include_server_side_tool_invocations, undefined);
  });
 diff --git a/tests/unit/antigravity-tool-cloaking.test.ts b/tests/unit/antigravity-tool-cloaking.test.ts
-index 3770eab65..e3de1857d 100644
+index 3770eab65..f05c058db 100644
 --- a/tests/unit/antigravity-tool-cloaking.test.ts
 +++ b/tests/unit/antigravity-tool-cloaking.test.ts
-@@ -2,13 +2,16 @@ import test from "node:test";
+@@ -2,13 +2,25 @@ import test from "node:test";
  import assert from "node:assert/strict";
  
  import {
@@ -3586,11 +2786,20 @@ index 3770eab65..e3de1857d 100644
 +  parameters?: Record<string, unknown>;
 +};
 +
++function hasKeyDeep(value: unknown, key: string): boolean {
++  if (!value || typeof value !== "object") return false;
++  if (Array.isArray(value)) return value.some((entry) => hasKeyDeep(entry, key));
++  const record = value as Record<string, unknown>;
++  return (
++    Object.hasOwn(record, key) || Object.values(record).some((entry) => hasKeyDeep(entry, key))
++  );
++}
++
 +test("Antigravity tool sanitization preserves declared and historical tool names", () => {
    const payload = {
      request: {
        tools: [
-@@ -21,7 +24,7 @@ test("cloakAntigravityToolPayload cloaks custom tools, preserves native tools an
+@@ -21,7 +33,7 @@ test("cloakAntigravityToolPayload cloaks custom tools, preserves native tools an
              },
              {
                name: "run_command",
@@ -3599,7 +2808,7 @@ index 3770eab65..e3de1857d 100644
                parameters: { type: "OBJECT", properties: {} },
              },
            ],
-@@ -40,57 +43,29 @@ test("cloakAntigravityToolPayload cloaks custom tools, preserves native tools an
+@@ -40,57 +52,29 @@ test("cloakAntigravityToolPayload cloaks custom tools, preserves native tools an
      },
    };
  
@@ -3673,28 +2882,37 @@ index 3770eab65..e3de1857d 100644
    );
  });
  
-@@ -123,19 +98,24 @@ test("stripEnumDescriptions removes enumDescriptions at every nesting level", ()
+@@ -121,21 +105,28 @@ test("stripEnumDescriptions removes enumDescriptions at every nesting level", ()
+         },
+       },
      },
++    anyOf: [{ type: "STRING", enumDescriptions: ["anyOf desc"] }],
++    allOf: [{ oneOf: [{ type: "NUMBER", enumDescriptions: ["oneOf desc"] }] }],
++    $defs: {
++      shared: { type: "BOOLEAN", enumDescriptions: ["definition desc"] },
++    },
++    additionalProperties: {
++      type: "STRING",
++      enumDescriptions: ["additionalProperties desc"],
++    },
    };
  
 -  const stripped = stripEnumDescriptions(schema) as any;
-+  const stripped = stripEnumDescriptions(schema) as {
-+    enumDescriptions?: unknown;
-+    properties: {
-+      mode: { enumDescriptions?: unknown; enum: string[] };
-+      nested: { properties: { choice: { enumDescriptions?: unknown } } };
-+      list: { items: { enumDescriptions?: unknown } };
-+    };
-+  };
++  const stripped = stripEnumDescriptions(schema) as Record<string, unknown>;
  
-   assert.equal("enumDescriptions" in stripped, false);
-   assert.equal("enumDescriptions" in stripped.properties.mode, false);
-   assert.equal("enumDescriptions" in stripped.properties.nested.properties.choice, false);
-   assert.equal("enumDescriptions" in stripped.properties.list.items, false);
+-  assert.equal("enumDescriptions" in stripped, false);
+-  assert.equal("enumDescriptions" in stripped.properties.mode, false);
+-  assert.equal("enumDescriptions" in stripped.properties.nested.properties.choice, false);
+-  assert.equal("enumDescriptions" in stripped.properties.list.items, false);
 -  // Non-target fields are preserved.
-   assert.deepEqual(stripped.properties.mode.enum, ["a", "b"]);
+-  assert.deepEqual(stripped.properties.mode.enum, ["a", "b"]);
 -  // Input is not mutated.
 -  assert.ok(Array.isArray((schema.properties.mode as any).enumDescriptions));
++  assert.equal(hasKeyDeep(stripped, "enumDescriptions"), false);
++  assert.deepEqual(
++    ((stripped.properties as Record<string, unknown>).mode as Record<string, unknown>).enum,
++    ["a", "b"]
++  );
 +  assert.ok(Array.isArray(schema.properties.mode.enumDescriptions), "input must not be mutated");
  });
  
@@ -3703,7 +2921,7 @@ index 3770eab65..e3de1857d 100644
    const payload = {
      request: {
        tools: [
-@@ -156,19 +136,6 @@ test("cloakAntigravityToolPayload strips enumDescriptions from declaration param
+@@ -156,19 +147,6 @@ test("cloakAntigravityToolPayload strips enumDescriptions from declaration param
                  },
                },
              },
@@ -3723,7 +2941,7 @@ index 3770eab65..e3de1857d 100644
            ],
          },
        ],
-@@ -176,18 +143,15 @@ test("cloakAntigravityToolPayload strips enumDescriptions from declaration param
+@@ -176,18 +154,15 @@ test("cloakAntigravityToolPayload strips enumDescriptions from declaration param
      },
    };
  
@@ -3809,10 +3027,18 @@ index b53e482d5..66bb87b6e 100644
 +  });
  });
 diff --git a/tests/unit/executor-antigravity.test.ts b/tests/unit/executor-antigravity.test.ts
-index 1cdc87e6b..785221baa 100644
+index 1cdc87e6b..b4a02fb45 100644
 --- a/tests/unit/executor-antigravity.test.ts
 +++ b/tests/unit/executor-antigravity.test.ts
-@@ -38,6 +38,21 @@ type ChatCompletionPayload = {
+@@ -11,6 +11,7 @@ import {
+ } from "../../open-sse/services/antigravityVersion.ts";
+ import { clearAntigravityProjectCache } from "../../open-sse/services/antigravityProjectBootstrap.ts";
+ import { runWithCapture } from "../../open-sse/utils/providerRequestLogging.ts";
++import { shouldRetryWithCredits } from "../../open-sse/services/antigravityCredits.ts";
+ 
+ type AntigravityTransformResult = Exclude<
+   Awaited<ReturnType<AntigravityExecutor["transformRequest"]>>,
+@@ -38,6 +39,21 @@ type ChatCompletionPayload = {
    };
  };
  
@@ -3834,7 +3060,7 @@ index 1cdc87e6b..785221baa 100644
  async function withEnv<T>(
    name: string,
    value: string | undefined,
-@@ -83,7 +98,7 @@ test("AntigravityExecutor.buildHeaders includes native headers without OmniRoute
+@@ -83,7 +99,7 @@ test("AntigravityExecutor.buildHeaders includes native headers without OmniRoute
  
    assert.equal(headers.Authorization, "Bearer ag-token");
    assert.equal(headers.Accept, "text/event-stream");
@@ -3843,7 +3069,7 @@ index 1cdc87e6b..785221baa 100644
    assert.equal(headers["X-OmniRoute-Source"], undefined);
  });
  
-@@ -138,23 +153,43 @@ test("AntigravityExecutor.transformRequest normalizes model, project and content
+@@ -138,23 +154,43 @@ test("AntigravityExecutor.transformRequest normalizes model, project and content
      "model",
      "userAgent",
      "requestType",
@@ -3890,10 +3116,146 @@ index 1cdc87e6b..785221baa 100644
  test("AntigravityExecutor.transformRequest strips thinking config for Cloud Code models that do not support reasoning", async () => {
    const executor = new AntigravityExecutor();
    const body = {
-@@ -631,6 +666,147 @@ test("AntigravityExecutor.refreshCredentials refreshes Google OAuth tokens", asy
+@@ -631,6 +667,283 @@ test("AntigravityExecutor.refreshCredentials refreshes Google OAuth tokens", asy
    }
  });
  
++test("AntigravityExecutor keeps tool-name maps internal across credits request paths", async () => {
++  const originalFetch = globalThis.fetch;
++  const longOriginal = "namespace:" + "very_long_tool_name_".repeat(5);
++  const toolNameMap = new Map([
++    ["weather", "ns:weather"],
++    ["long_tool_alias", longOriginal],
++  ]);
++  seedAntigravityVersionCache("2026.04.17-test");
++
++  const success = () =>
++    new Response(
++      'data: {"response":{"candidates":[{"content":{"parts":[{"text":"OK"}]},"finishReason":"STOP"}]}}\n\n',
++      { status: 200, headers: { "Content-Type": "text/event-stream" } }
++    );
++  const quota429 = () =>
++    new Response(
++      JSON.stringify({
++        error: {
++          message: "Quota exhausted. Resets in 5s",
++          details: [{ reason: "QUOTA_EXHAUSTED" }],
++        },
++      }),
++      { status: 429, headers: { "Content-Type": "application/json" } }
++    );
++
++  try {
++    for (const mode of ["always", "retry"] as const) {
++      const wireBodies: Array<Record<string, unknown>> = [];
++      globalThis.fetch = async (_url, init) => {
++        const wireBody = JSON.parse(await readRequestBody(init?.body)) as Record<string, unknown>;
++        wireBodies.push(wireBody);
++        return mode === "retry" && wireBodies.length === 1 ? quota429() : success();
++      };
++
++      const result = await withEnv("ANTIGRAVITY_CREDITS", mode, () =>
++        new AntigravityExecutor().execute({
++          model: "antigravity/gemini-2.5-flash",
++          body: {
++            _toolNameMap: toolNameMap,
++            request: {
++              contents: [{ role: "user", parts: [{ text: "hello" }] }],
++              tools: [
++                {
++                  functionDeclarations: [{ name: "weather" }, { name: "long_tool_alias" }],
++                },
++              ],
++            },
++          },
++          stream: true,
++          credentials: {
++            accessToken: "tool-map-" + mode,
++            connectionId: "tool-map-" + mode,
++            projectId: "project-1",
++          },
++          log: { debug() {}, warn() {}, info() {} },
++        })
++      );
++
++      assert.equal(
++        wireBodies.some((body) => "_toolNameMap" in body),
++        false
++      );
++      assert.equal(JSON.stringify(wireBodies).includes("_toolNameMap"), false);
++      const returnedBody = result.transformedBody as Record<string, unknown>;
++      assert.equal(returnedBody._toolNameMap, toolNameMap);
++      assert.equal(Object.keys(returnedBody).includes("_toolNameMap"), false);
++      assert.equal(
++        (returnedBody._toolNameMap as Map<string, string>).get("long_tool_alias"),
++        longOriginal
++      );
++    }
++  } finally {
++    globalThis.fetch = originalFetch;
++  }
++});
++
++test("client aborts during credits retry do not disable future credits attempts", async () => {
++  const originalFetch = globalThis.fetch;
++  const authKey = "credits-client-abort-token";
++  seedAntigravityVersionCache("2026.04.17-test");
++
++  try {
++    for (let attempt = 0; attempt < 3; attempt++) {
++      const controller = new AbortController();
++      let calls = 0;
++      globalThis.fetch = async (_url, init) => {
++        calls++;
++        if (calls === 1) {
++          return new Response(
++            JSON.stringify({
++              error: {
++                message: "Quota exhausted. Resets in 5s",
++                details: [{ reason: "QUOTA_EXHAUSTED" }],
++              },
++            }),
++            { status: 429, headers: { "Content-Type": "application/json" } }
++          );
++        }
++        return new Promise<Response>((_resolve, reject) => {
++          const signal = init?.signal;
++          if (signal?.aborted) {
++            reject(signal.reason);
++            return;
++          }
++          signal?.addEventListener("abort", () => reject(signal.reason), { once: true });
++        });
++      };
++
++      const pending = withEnv("ANTIGRAVITY_CREDITS", "retry", () =>
++        new AntigravityExecutor().execute({
++          model: "antigravity/gemini-2.5-flash",
++          body: { request: { contents: [{ role: "user", parts: [{ text: "hello" }] }] } },
++          stream: true,
++          credentials: {
++            accessToken: authKey,
++            connectionId: "credits-client-abort-connection",
++            projectId: "project-1",
++          },
++          signal: controller.signal,
++          log: { debug() {}, warn() {}, info() {}, error() {} },
++        })
++      );
++
++      while (calls < 2) {
++        await new Promise<void>((resolve) => setImmediate(resolve));
++      }
++      controller.abort(new DOMException("caller disconnected", "AbortError"));
++
++      await assert.rejects(pending, { name: "AbortError" });
++      assert.equal(shouldRetryWithCredits(authKey, "retry"), true);
++    }
++  } finally {
++    globalThis.fetch = originalFetch;
++  }
++});
++
 +test("AntigravityExecutor credits modes control envelopes and eligible retry counts", async (t) => {
 +  const originalFetch = globalThis.fetch;
 +  seedAntigravityVersionCache("2026.04.17-test");
@@ -4038,7 +3400,7 @@ index 1cdc87e6b..785221baa 100644
  // The non-streaming passthrough drain test ("auto-retries short 429 responses and
  // collects SSE for non-stream clients") lives in
  // tests/unit/antigravity-streaming-passthrough.test.ts with the other passthrough tests.
-@@ -706,18 +882,60 @@ test("AntigravityExecutor.execute bounds a persistent short-retry 429 instead of
+@@ -706,18 +1019,60 @@ test("AntigravityExecutor.execute bounds a persistent short-retry 429 instead of
      // Returns the 429 rather than hanging.
      assert.equal(result.response.status, 429);
  
@@ -4103,7 +3465,7 @@ index 1cdc87e6b..785221baa 100644
  test("AntigravityExecutor.execute tags pre-response stalls with a fallbackable timeout code", async () => {
    const executor = new AntigravityExecutor();
    const originalFetch = globalThis.fetch;
-@@ -792,6 +1010,7 @@ test("AntigravityExecutor.execute applies CLI fingerprint when enabled", async (
+@@ -792,6 +1147,7 @@ test("AntigravityExecutor.execute applies CLI fingerprint when enabled", async (
        "requestType",
        "enabledCreditTypes",
      ]);
@@ -4111,7 +3473,7 @@ index 1cdc87e6b..785221baa 100644
  
      return new Response(
        'data: {"response":{"candidates":[{"content":{"parts":[{"text":"OK"}]},"finishReason":"STOP"}]}}\n\n',
-@@ -867,7 +1086,7 @@ test("AntigravityExecutor.transformRequest maps Claude models through Gemini con
+@@ -867,7 +1223,7 @@ test("AntigravityExecutor.transformRequest maps Claude models through Gemini con
    assert.equal(result.model, "claude-sonnet-4-6");
    assert.equal(result.requestType, "agent");
    assert.ok(result.request.sessionId);
