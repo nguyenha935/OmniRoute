@@ -1351,7 +1351,13 @@ export class MuseSparkWebExecutor extends BaseExecutor {
       log?.error?.("MUSE-SPARK-WEB", `WS error: ${wsResult.error}`);
       const lower = wsResult.error.toLowerCase();
       const status = /auth|authorization|401/.test(lower) ? 401 : 502;
-      return errorResult(status, wsResult.error, "meta_ai_ws_error", headers, body);
+      // On a 401, name the live cookie so users know what to re-paste. Meta
+      // rebranded Abra→Ecto: the retired `abra_sess` cookie is now `ecto_1_sess`.
+      const message =
+        status === 401
+          ? `${wsResult.error} — your meta.ai ecto_1_sess cookie may be missing or expired; re-paste the ecto_1_sess value from DevTools.`
+          : wsResult.error;
+      return errorResult(status, message, "meta_ai_ws_error", headers, body);
     }
 
     const content = wsResult.content || "";
