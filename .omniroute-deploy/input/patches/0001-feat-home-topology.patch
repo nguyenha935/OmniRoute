@@ -1,0 +1,638 @@
+diff --git a/changelog.d/features/home-topology-live-feed.md b/changelog.d/features/home-topology-live-feed.md
+new file mode 100644
+index 000000000..209ffe641
+--- /dev/null
++++ b/changelog.d/features/home-topology-live-feed.md
+@@ -0,0 +1 @@
++- **feat(home):** the home Provider Topology now shows a logo-only router core with an electric "kame beam" on active links, a live **Recent Requests** panel (polls `/api/usage/call-logs` every ~3s, gated by the topology appearance toggle + page visibility), and only surfaces providers with a healthy connection or real traffic — untested/failing connections no longer clutter the map.
+diff --git a/src/app/(dashboard)/dashboard/HomePageClient.tsx b/src/app/(dashboard)/dashboard/HomePageClient.tsx
+index 24cec3140..bc472eaa9 100644
+--- a/src/app/(dashboard)/dashboard/HomePageClient.tsx
++++ b/src/app/(dashboard)/dashboard/HomePageClient.tsx
+@@ -506,8 +506,13 @@ export default function HomePageClient({ machineId }: HomePageClientProps) {
+       });
+     };
+ 
++    // Only surface a provider whose connection is genuinely healthy (≥1 connected).
++    // A provider that merely has connection rows — untested, or failing their health
++    // check — used to appear here (`total > 0`) and cluttered the map with nodes that
++    // aren't actually reachable. Providers with real traffic still get added below via
++    // `providerMetrics`, so a provider that errored *while serving requests* is not lost.
+     providerStats
+-      .filter((provider) => provider.total > 0)
++      .filter((provider) => provider.connected > 0)
+       .forEach((provider) => addProvider(provider.id, provider.provider.name));
+     Object.keys(providerMetrics).forEach((provider) => addProvider(provider));
+ 
+diff --git a/src/app/(dashboard)/dashboard/HomeProviderTopologySection.tsx b/src/app/(dashboard)/dashboard/HomeProviderTopologySection.tsx
+index 034088e7b..bdb6ddc78 100644
+--- a/src/app/(dashboard)/dashboard/HomeProviderTopologySection.tsx
++++ b/src/app/(dashboard)/dashboard/HomeProviderTopologySection.tsx
+@@ -8,6 +8,7 @@ import { useLiveRequests } from "@/hooks/useLiveDashboard";
+ import { selectActiveRequests } from "../home/topologyUtils";
+ 
+ const ProviderTopology = dynamic(() => import("../home/ProviderTopology"), { ssr: false });
++const HomeRecentRequests = dynamic(() => import("../home/HomeRecentRequests"), { ssr: false });
+ 
+ type TopologyProvider = {
+   id: string;
+@@ -62,12 +63,15 @@ export function HomeProviderTopologySection({
+           </span>
+         </div>
+       </div>
+-      <ProviderTopology
+-        providers={providers}
+-        activeRequests={activeRequests}
+-        lastProvider={lastProvider}
+-        errorProvider={errorProvider}
+-      />
++      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[2fr_1fr]">
++        <ProviderTopology
++          providers={providers}
++          activeRequests={activeRequests}
++          lastProvider={lastProvider}
++          errorProvider={errorProvider}
++        />
++        <HomeRecentRequests enabled={enabled} />
++      </div>
+     </Card>
+   );
+ }
+diff --git a/src/app/(dashboard)/home/HomeRecentRequests.tsx b/src/app/(dashboard)/home/HomeRecentRequests.tsx
+new file mode 100644
+index 000000000..575bea7b6
+--- /dev/null
++++ b/src/app/(dashboard)/home/HomeRecentRequests.tsx
+@@ -0,0 +1,180 @@
++"use client";
++
++import { useCallback, useEffect, useState } from "react";
++import { useTranslations } from "next-intl";
++import { Card } from "@/shared/components";
++import { fmtCompact } from "@/shared/utils/formatting";
++
++/**
++ * Home-page "Recent Requests" panel — the live request feed that sits beside the
++ * Provider Topology graph (parity with 9Router's Usage view).
++ *
++ * ## Data source
++ * Fed by POLLING `GET /api/usage/call-logs?limit=N` every ~3s, NOT by the live
++ * WebSocket. OmniRoute's WS (EventBus) only emits `request.started`;
++ * `request.completed`/`request.failed` are never emitted, so a WS-fed table would
++ * only ever show in-flight rows and never their outcome. The call-logs endpoint
++ * already merges in-memory active/completed entries with persisted rows and
++ * returns them newest-first (active on top), which is exactly this feed.
++ *
++ * The poll is gated by `enabled` (the same `showProviderTopologyOnHome` flag that
++ * gates the topology section) AND page visibility, so a backgrounded tab pauses.
++ */
++
++const POLL_INTERVAL_MS = 3000;
++const RECENT_LIMIT = 20;
++
++type CallLogRow = {
++  id?: string;
++  timestamp?: string;
++  status?: number;
++  model?: string;
++  provider?: string;
++  providerDisplay?: string | null;
++  tokens?: { in?: number; out?: number };
++  error?: string | null;
++  active?: boolean;
++  completed?: boolean;
++};
++
++type RequestState = "active" | "error" | "ok";
++
++function requestState(row: CallLogRow): RequestState {
++  if (row.active || row.status === 0) return "active";
++  if (row.error || (typeof row.status === "number" && row.status >= 400)) return "error";
++  return "ok";
++}
++
++function timeAgo(timestamp: string | undefined, nowMs: number): string {
++  if (!timestamp) return "";
++  const then = Date.parse(timestamp);
++  if (!Number.isFinite(then)) return "";
++  const diff = Math.max(0, Math.floor((nowMs - then) / 1000));
++  if (diff < 60) return `${diff}s`;
++  if (diff < 3600) return `${Math.floor(diff / 60)}m`;
++  if (diff < 86400) return `${Math.floor(diff / 3600)}h`;
++  return `${Math.floor(diff / 86400)}d`;
++}
++
++const STATE_DOT: Record<RequestState, string> = {
++  active: "bg-primary animate-pulse",
++  error: "bg-red-500",
++  ok: "bg-green-500",
++};
++
++export default function HomeRecentRequests({ enabled = true }: { enabled?: boolean }) {
++  const t = useTranslations("home");
++  const [rows, setRows] = useState<CallLogRow[]>([]);
++  const [loaded, setLoaded] = useState(false);
++  // A ticking clock so the relative "When" column updates without re-fetching.
++  const [nowMs, setNowMs] = useState(() => Date.now());
++
++  useEffect(() => {
++    if (!enabled) return;
++    const id = setInterval(() => setNowMs(Date.now()), 1000);
++    return () => clearInterval(id);
++  }, [enabled]);
++
++  const load = useCallback(async (signal: AbortSignal) => {
++    try {
++      const res = await fetch(`/api/usage/call-logs?limit=${RECENT_LIMIT}`, {
++        cache: "no-store",
++        signal,
++      });
++      if (!res.ok) return;
++      const data = await res.json();
++      if (signal.aborted) return;
++      setRows(Array.isArray(data) ? data.slice(0, RECENT_LIMIT) : []);
++      setLoaded(true);
++    } catch (error) {
++      const isAbort = error instanceof DOMException && error.name === "AbortError";
++      if (!isAbort) console.error("Failed to load recent requests:", error);
++    }
++  }, []);
++
++  useEffect(() => {
++    if (!enabled) return;
++
++    let cancelled = false;
++    let timeoutId: ReturnType<typeof setTimeout> | null = null;
++    let controller: AbortController | null = null;
++
++    const tick = async () => {
++      // Pause polling while the tab is backgrounded; resume on next tick.
++      if (document.visibilityState === "visible") {
++        const currentController = new AbortController();
++        controller = currentController;
++        await load(currentController.signal);
++        if (controller === currentController) controller = null;
++      }
++      if (!cancelled) timeoutId = setTimeout(tick, POLL_INTERVAL_MS);
++    };
++
++    tick();
++    return () => {
++      cancelled = true;
++      if (timeoutId) clearTimeout(timeoutId);
++      controller?.abort();
++    };
++  }, [enabled, load]);
++
++  return (
++    <Card padding="sm" className="flex min-w-0 flex-col overflow-hidden h-[300px] sm:h-[420px]">
++      <div className="pb-2 mb-1 border-b border-border shrink-0">
++        <span className="text-xs font-semibold uppercase tracking-wide text-text-muted">
++          {t("recentRequests")}
++        </span>
++      </div>
++
++      {loaded && rows.length === 0 ? (
++        <div className="flex-1 flex items-center justify-center text-sm text-text-muted">
++          {t("recentRequestsEmpty")}
++        </div>
++      ) : (
++        <div className="flex-1 overflow-y-auto -mx-1 px-1">
++          <table className="w-full min-w-0 border-collapse text-xs">
++            <thead className="sticky top-0 z-10 bg-surface">
++              <tr className="border-b border-border text-text-muted">
++                <th className="w-2 py-1.5" />
++                <th className="py-1.5 text-left font-semibold">{t("recentRequestsModel")}</th>
++                <th className="py-1.5 text-right font-semibold whitespace-nowrap">
++                  {t("recentRequestsTokens")}
++                </th>
++                <th className="py-1.5 text-right font-semibold">{t("recentRequestsWhen")}</th>
++              </tr>
++            </thead>
++            <tbody className="divide-y divide-border/50">
++              {rows.map((row, i) => {
++                const state = requestState(row);
++                return (
++                  <tr key={row.id || i} className="hover:bg-bg-subtle transition-colors">
++                    <td className="py-1.5">
++                      <span className={`block size-1.5 rounded-full ${STATE_DOT[state]}`} />
++                    </td>
++                    <td
++                      className="py-1.5 font-mono truncate max-w-[140px]"
++                      title={row.model || ""}
++                    >
++                      {row.model || "—"}
++                    </td>
++                    <td className="py-1.5 text-right whitespace-nowrap">
++                      <span className="text-primary">{fmtCompact(row.tokens?.in)}↑</span>{" "}
++                      <span className="text-green-500">{fmtCompact(row.tokens?.out)}↓</span>
++                    </td>
++                    <td className="py-1.5 text-right whitespace-nowrap text-text-muted">
++                      {state === "active" ? (
++                        <span className="text-primary">•••</span>
++                      ) : (
++                        timeAgo(row.timestamp, nowMs)
++                      )}
++                    </td>
++                  </tr>
++                );
++              })}
++            </tbody>
++          </table>
++        </div>
++      )}
++    </Card>
++  );
++}
+diff --git a/src/app/(dashboard)/home/ProviderTopology.tsx b/src/app/(dashboard)/home/ProviderTopology.tsx
+index 313e2faad..2bd14b63b 100644
+--- a/src/app/(dashboard)/home/ProviderTopology.tsx
++++ b/src/app/(dashboard)/home/ProviderTopology.tsx
+@@ -2,11 +2,13 @@
+ 
+ import { useMemo } from "react";
+ import { useTranslations } from "next-intl";
+-import { Handle, Position, type Node, type Edge, type NodeTypes } from "@xyflow/react";
++import { Handle, Position, type Node, type Edge, type NodeTypes, type EdgeTypes } from "@xyflow/react";
+ import { AI_PROVIDERS } from "@/shared/constants/providers";
+ import ProviderIcon from "@/shared/components/ProviderIcon";
++import OmniRouteLogo from "@/shared/components/OmniRouteLogo";
+ import { FlowCanvas } from "@/shared/components/flow/FlowCanvas";
+ import { StatusDot } from "@/shared/components/flow/StatusDot";
++import { KameBeamEdge } from "@/shared/components/flow/KameBeamEdge";
+ import { edgeStyle, FLOW_EDGE_COLORS } from "@/shared/components/flow/edgeStyles";
+ import { resolveTopologyNodeLabel } from "./topologyLabel";
+ 
+@@ -112,8 +114,13 @@ function ProviderNode({ data }: { data: ProviderNodeData }) {
+ type RouterNodeData = { activeCount: number };
+ 
+ function RouterNode({ data }: { data: RouterNodeData }) {
++  const active = data.activeCount > 0;
+   return (
+-    <div className="flex items-center gap-2 px-5 py-3 rounded-xl border-2 border-primary bg-primary/8 shadow-lg min-w-[140px] justify-center">
++    <div
++      className={`relative flex items-center justify-center size-16 rounded-2xl border-2 border-primary bg-primary/8 shadow-lg transition-all duration-300${
++        active ? " topology-router-core" : ""
++      }`}
++    >
+       <Handle
+         type="source"
+         position={Position.Top}
+@@ -139,12 +146,12 @@ function RouterNode({ data }: { data: RouterNodeData }) {
+         className="!bg-transparent !border-0 !w-0 !h-0"
+       />
+ 
+-      <div className="flex items-center justify-center size-7 rounded-md bg-primary/15 shrink-0">
+-        <span className="material-symbols-outlined text-primary text-[16px]">route</span>
+-      </div>
+-      <span className="text-sm font-bold text-primary">OmniRoute</span>
+-      {data.activeCount > 0 && (
+-        <span className="ml-1 px-1.5 py-0.5 rounded-full bg-primary text-white text-[10px] font-bold leading-none">
++      <OmniRouteLogo
++        size={34}
++        className={`text-primary${active ? " topology-router-icon" : ""}`}
++      />
++      {active && (
++        <span className="topology-router-badge absolute -top-2 -right-2 flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-primary text-white text-[10px] font-bold leading-none">
+           {data.activeCount}
+         </span>
+       )}
+@@ -157,6 +164,10 @@ const nodeTypes: NodeTypes = {
+   router: RouterNode as any,
+ };
+ 
++const edgeTypes: EdgeTypes = {
++  kame: KameBeamEdge as any,
++};
++
+ type ProviderHealth = "active" | "error" | "idle";
+ type ProviderEntry = { id?: string; provider: string; name?: string; status?: ProviderHealth };
+ 
+@@ -179,8 +190,8 @@ function buildLayout(
+ ): { nodes: Node[]; edges: Edge[] } {
+   const nodeW = 156;
+   const nodeH = 28;
+-  const routerW = 148;
+-  const routerH = 44;
++  const routerW = 64;
++  const routerH = 64;
+ 
+   const nodes: Node[] = [];
+   const edges: Edge[] = [];
+@@ -253,11 +264,15 @@ function buildLayout(
+ 
+       edges.push({
+         id: `e-${nodeId}`,
++        type: "kame",
+         source: "router",
+         sourceHandle,
+         target: nodeId,
+         targetHandle,
+-        animated: active,
++        // The kame beam runs its own SVG animation on active edges; the flat
++        // BaseEdge fallback (idle/last/error/healthy) is styled by edgeStyle().
++        animated: false,
++        data: { active },
+         style: edgeStyle(active, last, error, healthy),
+       });
+     }
+@@ -333,6 +348,7 @@ export default function ProviderTopology({
+       nodes={nodes}
+       edges={edges}
+       nodeTypes={nodeTypes}
++      edgeTypes={edgeTypes}
+       fitKey={providersKey}
+       className={containerClass}
+     />
+diff --git a/src/app/globals.css b/src/app/globals.css
+index 2130bda65..d93ddcb41 100644
+--- a/src/app/globals.css
++++ b/src/app/globals.css
+@@ -428,6 +428,91 @@ button .material-symbols-outlined,
+   animation: border-glow 2s ease-in-out infinite;
+ }
+ 
++/* Topology: router-core pulse (logo-only center node) + electric "kame beam" edge.
++ * Adapted from the 9Router usage topology. The center node shows only the logo,
++ * so there is no label-flicker here (unlike the source). Colors keep the electric
++ * cyan/green/amber signature but the core glow is mixed with --color-primary so it
++ * tracks the app theme. */
++@keyframes topology-router-pulse {
++  0%,
++  100% {
++    transform: scale(1);
++    box-shadow:
++      0 0 8px #fde047,
++      0 0 20px color-mix(in srgb, var(--color-primary) 65%, transparent),
++      0 0 32px rgba(34, 211, 238, 0.4),
++      inset 0 0 10px rgba(253, 224, 71, 0.3);
++  }
++  50% {
++    transform: scale(1.06);
++    box-shadow:
++      0 0 14px #fef08a,
++      0 0 28px #facc15,
++      0 0 44px rgba(34, 211, 238, 0.6),
++      inset 0 0 14px rgba(255, 255, 255, 0.25);
++  }
++}
++@keyframes topology-router-icon-shake {
++  0%,
++  100% {
++    transform: rotate(0deg) scale(1);
++    filter: drop-shadow(0 0 2px #fde047);
++  }
++  25% {
++    transform: rotate(-5deg) scale(1.08);
++    filter: drop-shadow(0 0 6px #facc15);
++  }
++  75% {
++    transform: rotate(5deg) scale(1.08);
++    filter: drop-shadow(0 0 6px #22d3ee);
++  }
++}
++@keyframes topology-edge-dash {
++  to {
++    stroke-dashoffset: -36;
++  }
++}
++@keyframes topology-edge-flicker {
++  0%,
++  100% {
++    opacity: 0.85;
++  }
++  40% {
++    opacity: 1;
++  }
++  55% {
++    opacity: 0.55;
++  }
++  70% {
++    opacity: 1;
++  }
++}
++.topology-router-core {
++  animation: topology-router-pulse 0.75s ease-in-out infinite;
++  border-color: #fde047 !important;
++}
++.topology-router-icon {
++  animation: topology-router-icon-shake 0.45s ease-in-out infinite;
++}
++.topology-router-badge {
++  box-shadow:
++    0 0 10px #fde047,
++    0 0 16px rgba(34, 211, 238, 0.6);
++}
++.topology-edge-kame {
++  stroke-dasharray: 8 6;
++  animation: topology-edge-dash 0.22s linear infinite;
++}
++.topology-edge-halo {
++  animation: topology-edge-flicker 0.18s steps(2) infinite;
++}
++.topology-edge-plasma {
++  stroke-dasharray: 14 10;
++  animation:
++    topology-edge-dash 0.18s linear infinite,
++    topology-edge-flicker 0.22s steps(3) infinite;
++}
++
+ /* macOS Vibrancy/Blur Effect */
+ .bg-vibrancy {
+   backdrop-filter: blur(20px);
+diff --git a/src/i18n/messages/en.json b/src/i18n/messages/en.json
+index 8e19bfd59..d565a7bde 100644
+--- a/src/i18n/messages/en.json
++++ b/src/i18n/messages/en.json
+@@ -1718,7 +1718,12 @@
+     "updateAvailableDesc": "A new version is available. Click to update.",
+     "updateStarted": "Update started...",
+     "reloadingPageAutomatically": "Reloading page automatically...",
+-    "providerTopology": "Provider Topology"
++    "providerTopology": "Provider Topology",
++    "recentRequests": "Recent Requests",
++    "recentRequestsEmpty": "No requests yet.",
++    "recentRequestsModel": "Model",
++    "recentRequestsTokens": "In / Out",
++    "recentRequestsWhen": "When"
+   },
+   "analytics": {
+     "title": "Analytics",
+diff --git a/src/i18n/messages/vi.json b/src/i18n/messages/vi.json
+index 43dcf70f3..4ee37c17b 100644
+--- a/src/i18n/messages/vi.json
++++ b/src/i18n/messages/vi.json
+@@ -1718,7 +1718,12 @@
+     "updateAvailableDesc": "Đã có phiên bản mới. Nhấp để cập nhật.",
+     "updateStarted": "Đã bắt đầu cập nhật...",
+     "reloadingPageAutomatically": "Đang tự động tải lại trang...",
+-    "providerTopology": "Cấu trúc liên kết nhà cung cấp"
++    "providerTopology": "Cấu trúc liên kết nhà cung cấp",
++    "recentRequests": "Yêu cầu gần đây",
++    "recentRequestsEmpty": "Chưa có yêu cầu nào.",
++    "recentRequestsModel": "Mô hình",
++    "recentRequestsTokens": "Vào / Ra",
++    "recentRequestsWhen": "Thời điểm"
+   },
+   "analytics": {
+     "title": "Phân tích",
+diff --git a/src/shared/components/flow/KameBeamEdge.tsx b/src/shared/components/flow/KameBeamEdge.tsx
+new file mode 100644
+index 000000000..b4f4569eb
+--- /dev/null
++++ b/src/shared/components/flow/KameBeamEdge.tsx
+@@ -0,0 +1,154 @@
++import { BaseEdge, getBezierPath, type EdgeProps } from "@xyflow/react";
++
++/**
++ * "Electric kame beam" edge for the home Provider Topology, adapted to TypeScript +
++ * `@xyflow/react` from the 9Router topology (`ProviderTopology.js` `TopologyEdge`).
++ *
++ * When `data.active` (a live/in-flight request on this router→provider link) the edge
++ * renders a multi-layer animated beam: a turbulence-displaced cyan halo, a green plasma
++ * mid-layer, a hot white dashed core, plus energy orbs and short-lived sparks travelling
++ * the bezier path. At rest it collapses to a flat `BaseEdge` styled by `edgeStyle()` (the
++ * idle / last-used / error / healthy states resolved upstream and passed in via `style`),
++ * so the graph stays meaningful without the expensive SVG filters running.
++ */
++
++// Energy orbs + electric sparks that travel an active edge. Ported from 9Router.
++const KAME_PARTICLE_COUNT = 6;
++const SPARK_COUNT = 5;
++
++type KameEdgeData = {
++  active?: boolean;
++};
++
++export function KameBeamEdge({
++  id,
++  sourceX,
++  sourceY,
++  targetX,
++  targetY,
++  sourcePosition,
++  targetPosition,
++  style = {},
++  data,
++}: EdgeProps) {
++  const [edgePath] = getBezierPath({
++    sourceX,
++    sourceY,
++    sourcePosition,
++    targetX,
++    targetY,
++    targetPosition,
++  });
++
++  const active = !!(data as KameEdgeData | undefined)?.active;
++
++  // Idle / last-used / error / healthy: flat stroke resolved by edgeStyle() upstream.
++  if (!active) {
++    return <BaseEdge id={id} path={edgePath} style={style} />;
++  }
++
++  // feTurbulence + feDisplacementMap needs a unique filter id per edge instance,
++  // otherwise multiple active edges share (and fight over) one filter node.
++  const filterId = `kame-electric-${id}`;
++
++  return (
++    <g className="topology-edge-electric">
++      <defs>
++        <filter id={filterId} x="-40%" y="-40%" width="180%" height="180%">
++          <feTurbulence
++            type="fractalNoise"
++            baseFrequency="0.9"
++            numOctaves="2"
++            seed="2"
++            result="noise"
++          >
++            <animate
++              attributeName="baseFrequency"
++              values="0.8;1.4;0.8"
++              dur="0.25s"
++              repeatCount="indefinite"
++            />
++          </feTurbulence>
++          <feDisplacementMap
++            in="SourceGraphic"
++            in2="noise"
++            scale="3.5"
++            xChannelSelector="R"
++            yChannelSelector="G"
++          />
++        </filter>
++      </defs>
++
++      {/* Outer electric halo */}
++      <path
++        d={edgePath}
++        fill="none"
++        stroke="#22d3ee"
++        strokeWidth={10}
++        strokeOpacity={0.35}
++        strokeLinecap="round"
++        filter={`url(#${filterId})`}
++        className="topology-edge-halo"
++      />
++
++      {/* Mid plasma */}
++      <path
++        d={edgePath}
++        fill="none"
++        stroke="#4ade80"
++        strokeWidth={5}
++        strokeOpacity={0.85}
++        strokeLinecap="round"
++        filter={`url(#${filterId})`}
++        className="topology-edge-plasma"
++      />
++
++      {/* Hot white core */}
++      <BaseEdge
++        id={id}
++        path={edgePath}
++        style={{ stroke: "#f8fafc", strokeWidth: 2.2, opacity: 1 }}
++        className="topology-edge-kame"
++      />
++
++      {/* Energy orbs */}
++      {Array.from({ length: KAME_PARTICLE_COUNT }, (_, i) => (
++        <circle
++          key={`${id}-p-${i}`}
++          r={i % 2 === 0 ? 4 : 2.5}
++          fill={i % 3 === 0 ? "#fde047" : i % 3 === 1 ? "#67e8f9" : "#fff"}
++          opacity={0.95}
++          style={{ filter: "drop-shadow(0 0 4px #22d3ee)" }}
++        >
++          <animateMotion
++            dur={`${0.4 + i * 0.08}s`}
++            repeatCount="indefinite"
++            path={edgePath}
++            begin={`${i * 0.09}s`}
++          />
++        </circle>
++      ))}
++
++      {/* Electric sparks (short-lived blink along path) */}
++      {Array.from({ length: SPARK_COUNT }, (_, i) => (
++        <circle key={`${id}-s-${i}`} r={1.8} fill="#e0f2fe" opacity={0}>
++          <animate
++            attributeName="opacity"
++            values="0;1;0;0;1;0"
++            dur={`${0.35 + (i % 3) * 0.1}s`}
++            begin={`${i * 0.07}s`}
++            repeatCount="indefinite"
++          />
++          <animateMotion
++            dur={`${0.28 + i * 0.05}s`}
++            repeatCount="indefinite"
++            path={edgePath}
++            begin={`${i * 0.11}s`}
++          />
++        </circle>
++      ))}
++    </g>
++  );
++}
++
++export default KameBeamEdge;
