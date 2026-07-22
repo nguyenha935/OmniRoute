@@ -25,15 +25,13 @@ index 858201625..000000000
 +++ /dev/null
 @@ -1 +0,0 @@
 -- fix(sse): set includeServerSideToolInvocations on Antigravity tool cloak decoys (#6914)
-diff --git a/changelog.d/fixes/antigravity-protocol-fidelity.md b/changelog.d/fixes/antigravity-protocol-fidelity.md
+diff --git a/changelog.d/fixes/8098-antigravity-protocol-fidelity.md b/changelog.d/fixes/8098-antigravity-protocol-fidelity.md
 new file mode 100644
-index 000000000..1bca2c43f
+index 000000000..1c5b3974d
 --- /dev/null
-+++ b/changelog.d/fixes/antigravity-protocol-fidelity.md
-@@ -0,0 +1,3 @@
-+- Preserve Antigravity request content and tool names without zero-width mutation, cloaking, or decoy declarations.
-+- Make Antigravity safety and Google One AI credits explicit, with `off`, single `retry`, and credit-first `always` modes.
-+- Separate live runtime endpoints from discovery and project bootstrap, exclude sandbox from runtime fallback, and make project bootstrap token-safe, coalesced, and abort-aware.
++++ b/changelog.d/fixes/8098-antigravity-protocol-fidelity.md
+@@ -0,0 +1 @@
++- **fix(antigravity):** preserve request/tool fidelity, make credits modes explicit, and separate runtime endpoints from discovery/bootstrap ([#8098](https://github.com/diegosouzapw/OmniRoute/pull/8098)) — thanks @nguyenha935
 diff --git a/config/quality/eslint-suppressions.json b/config/quality/eslint-suppressions.json
 index 0e1a9eccf..97eb86545 100644
 --- a/config/quality/eslint-suppressions.json

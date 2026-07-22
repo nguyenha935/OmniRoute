@@ -7,7 +7,6 @@
 import type { A2ATask, TaskArtifact } from "../taskManager";
 import { resolveOmniRouteBaseUrl } from "@/shared/utils/resolveOmniRouteBaseUrl";
 import { formatCost } from "@/shared/utils/formatting";
-import { toNumber } from "@/shared/utils/numeric";
 
 type AnalyticsRecord = Record<string, unknown>;
 
@@ -46,6 +45,14 @@ async function costFetch(path: string): Promise<AnalyticsRecord> {
   return response.json();
 }
 
+function toNumber(value: unknown): number {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
+}
 
 function toCostEntries(value: unknown): CostEntry[] {
   if (!value || typeof value !== "object" || Array.isArray(value)) return [];
