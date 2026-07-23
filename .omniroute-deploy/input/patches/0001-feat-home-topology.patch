@@ -742,10 +742,34 @@ index 67a500c36..87522ecd2 100644
    "analytics": {
      "title": "Analytics",
 diff --git a/src/i18n/messages/vi.json b/src/i18n/messages/vi.json
-index 6cd5ba422..598c6db3b 100644
+index 6cd5ba422..ae170ac9e 100644
 --- a/src/i18n/messages/vi.json
 +++ b/src/i18n/messages/vi.json
-@@ -1720,7 +1720,12 @@
+@@ -1102,6 +1102,7 @@
+     "settingsSecurity": "Bảo mật",
+     "settingsAccessTokens": "Token truy cập",
+     "settingsFeatureFlags": "Cờ tính năng",
++    "settingsCache": "Bộ nhớ đệm",
+     "settingsAuthz": "Phân quyền",
+     "settingsRouting": "Định tuyến",
+     "settingsResilience": "Khả năng phục hồi",
+@@ -1186,6 +1187,7 @@
+     "settingsSecuritySubtitle": "Xác thực và mã hóa",
+     "settingsAccessTokensSubtitle": "Token CLI có phạm vi cho chế độ từ xa",
+     "settingsFeatureFlagsSubtitle": "Chuyển đổi các khả năng của hệ thống",
++    "settingsCacheSubtitle": "Bộ nhớ đệm danh mục model và phản hồi",
+     "settingsSidebar": "Thanh bên",
+     "settingsSidebarSubtitle": "Tùy chỉnh bố cục thanh bên",
+     "settingsAuthzSubtitle": "Kiểm kê định tuyến và chính sách bỏ qua",
+@@ -1548,6 +1550,7 @@
+     "settingsGeneralDescription": "Cài đặt lưu trữ, cơ sở dữ liệu, sao lưu và thời gian lưu giữ",
+     "settingsAppearanceDescription": "Chủ đề, thương hiệu và tùy chỉnh giao diện",
+     "settingsAiDescription": "Cài đặt về hành vi AI, ngân sách suy luận, khả năng thị giác và bộ nhớ",
++    "settingsCacheDescription": "TTL cho các mục bộ nhớ đệm danh mục model",
+     "settingsSecurityDescription": "Cài đặt xác thực, phân quyền và kiểm soát truy cập",
+     "featureFlags": "Cờ tính năng",
+     "featureFlagsDescription": "Kiểm soát khả năng của hệ thống và các tính năng thử nghiệm",
+@@ -1720,7 +1723,12 @@
      "updateAvailableDesc": "Đã có phiên bản mới. Nhấp để cập nhật.",
      "updateStarted": "Đã bắt đầu cập nhật...",
      "reloadingPageAutomatically": "Đang tự động tải lại trang...",
