@@ -334,7 +334,7 @@ index 000000000..de028e1a1
 +  );
 +}
 diff --git a/src/app/(dashboard)/home/ProviderTopology.tsx b/src/app/(dashboard)/home/ProviderTopology.tsx
-index 313e2faad..86cac293c 100644
+index 313e2faad..c2ed554ce 100644
 --- a/src/app/(dashboard)/home/ProviderTopology.tsx
 +++ b/src/app/(dashboard)/home/ProviderTopology.tsx
 @@ -1,15 +1,23 @@
@@ -380,7 +380,7 @@ index 313e2faad..86cac293c 100644
    return (
      <div
 -      className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border-2 transition-all duration-300 bg-bg"
-+      className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border transition-all duration-300"
++      className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border transition-all duration-300 bg-bg"
        style={{
 -        borderColor: error ? RED : active ? color : healthy ? GREEN : "var(--color-border)",
 -        boxShadow: error
@@ -425,7 +425,7 @@ index 313e2faad..86cac293c 100644
    return (
 -    <div className="flex items-center gap-2 px-5 py-3 rounded-xl border-2 border-primary bg-primary/8 shadow-lg min-w-[140px] justify-center">
 +    <div
-+      className={`relative flex items-center justify-center size-12 rounded-xl border border-primary/70 transition-all duration-300${
++      className={`relative flex items-center justify-center size-12 rounded-xl border border-primary/70 bg-primary/8 transition-all duration-300${
 +        active ? " topology-router-core" : ""
 +      }`}
 +    >
@@ -604,22 +604,17 @@ index 313e2faad..86cac293c 100644
    const { nodes, edges } = useMemo(
      () => buildLayout(providers, activeSet, lastSet, errorSet),
      // eslint-disable-next-line react-hooks/exhaustive-deps
-@@ -314,8 +359,12 @@ export default function ProviderTopology({
+@@ -314,6 +359,9 @@ export default function ProviderTopology({
      [providers]
    );
  
--  const containerClass =
--    "h-[300px] w-full min-w-0 rounded-xl border border-border bg-bg-subtle/20 overflow-hidden sm:h-[420px]";
-+  // No background/border on the diagram itself: the page's shared graph-paper
-+  // wallpaper (globals.css body::before) shows straight through the canvas, so the
-+  // provider structure reads as part of the page instead of a nested boxed panel.
-+  // Node fills are transparent too (see ProviderNode / RouterNode) — only the
-+  // Recent Requests table keeps its own surface for legibility.
-+  const containerClass = "h-[300px] w-full min-w-0 overflow-hidden sm:h-[420px]";
++  // The diagram keeps its own framed surface — a rounded border and a subtle fill
++  // that sits on top of the page's graph-paper wallpaper — so the provider structure
++  // reads as a distinct panel, not as bare nodes floating on the page/tab background.
+   const containerClass =
+     "h-[300px] w-full min-w-0 rounded-xl border border-border bg-bg-subtle/20 overflow-hidden sm:h-[420px]";
  
-   if (providers.length === 0) {
-     return (
-@@ -333,6 +382,7 @@ export default function ProviderTopology({
+@@ -333,6 +381,7 @@ export default function ProviderTopology({
        nodes={nodes}
        edges={edges}
        nodeTypes={nodeTypes}
