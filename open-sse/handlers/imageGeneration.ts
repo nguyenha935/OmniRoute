@@ -69,10 +69,6 @@ import { handleSegmindImageGeneration } from "./imageGeneration/providers/segmin
 import { handleDesignerWebImageGeneration } from "./imageGeneration/providers/designerWeb.ts";
 import { handleMinimaxImageGeneration } from "./imageGeneration/providers/minimax.ts";
 import { handleAdobeFireflyImageGeneration } from "./imageGeneration/providers/adobeFirefly.ts";
-import {
-  applyPollinationsAnonymousFallback,
-  reportPollinationsAnonOutcome,
-} from "./imageGeneration/pollinationsAnonAuth.ts";
 
 
 interface KieImageOptions {
@@ -1035,28 +1031,15 @@ async function handleOpenAIImageGeneration({
   }
 
   // Build headers
-  let headers: Record<string, string> = {
+  const headers = {
     "Content-Type": "application/json",
   };
 
   const token = credentials.apiKey || credentials.accessToken;
-  if (token && providerConfig.authHeader === "bearer") {
+  if (providerConfig.authHeader === "bearer") {
     headers["Authorization"] = `Bearer ${token}`;
-  } else if (token && providerConfig.authHeader === "x-api-key") {
+  } else if (providerConfig.authHeader === "x-api-key") {
     headers["x-api-key"] = token;
-  }
-
-  // #8085 — keyless Pollinations image requests (the common free case) get
-  // no Authorization header above. Mirror the chat executor's anonymous
-  // fingerprint-pool fallback (open-sse/executors/pollinations.ts) so the
-  // outbound request isn't sent bare and rejected by Pollinations' own 401.
-  let pollinationsAnonSession: Awaited<
-    ReturnType<typeof applyPollinationsAnonymousFallback>
-  >["session"] = null;
-  if (providerConfig.id === "pollinations") {
-    const anon = await applyPollinationsAnonymousFallback(providerConfig.id, token, headers);
-    headers = anon.headers;
-    pollinationsAnonSession = anon.session;
   }
 
   if (log) {
@@ -1097,10 +1080,6 @@ async function handleOpenAIImageGeneration({
       provider,
       log
     );
-  }
-
-  if (pollinationsAnonSession) {
-    reportPollinationsAnonOutcome(pollinationsAnonSession, result.status);
   }
 
   // Save call log after result is determined
