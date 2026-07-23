@@ -724,10 +724,10 @@ index 2130bda65..e70db0b34 100644
  .bg-vibrancy {
    backdrop-filter: blur(20px);
 diff --git a/src/i18n/messages/en.json b/src/i18n/messages/en.json
-index 8e19bfd59..d565a7bde 100644
+index 67a500c36..87522ecd2 100644
 --- a/src/i18n/messages/en.json
 +++ b/src/i18n/messages/en.json
-@@ -1718,7 +1718,12 @@
+@@ -1723,7 +1723,12 @@
      "updateAvailableDesc": "A new version is available. Click to update.",
      "updateStarted": "Update started...",
      "reloadingPageAutomatically": "Reloading page automatically...",
@@ -742,10 +742,10 @@ index 8e19bfd59..d565a7bde 100644
    "analytics": {
      "title": "Analytics",
 diff --git a/src/i18n/messages/vi.json b/src/i18n/messages/vi.json
-index 43dcf70f3..4ee37c17b 100644
+index 6cd5ba422..598c6db3b 100644
 --- a/src/i18n/messages/vi.json
 +++ b/src/i18n/messages/vi.json
-@@ -1718,7 +1718,12 @@
+@@ -1720,7 +1720,12 @@
      "updateAvailableDesc": "Đã có phiên bản mới. Nhấp để cập nhật.",
      "updateStarted": "Đã bắt đầu cập nhật...",
      "reloadingPageAutomatically": "Đang tự động tải lại trang...",
