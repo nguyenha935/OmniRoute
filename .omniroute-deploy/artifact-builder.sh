@@ -37,12 +37,38 @@ restore_next_cache() {
 }
 
 save_next_cache() {
+  # Persisting the Next.js webpack cache is a pure future-build speedup that feeds
+  # the actions/cache restore step; it is NOT part of the artifact. Under `set -e`
+  # a failed copy here (e.g. runner out of disk) would abort the whole build AFTER
+  # a successful compile but BEFORE the payload is packed. So this step is made
+  # space-aware (skip when free disk lacks headroom) and strictly non-fatal: any
+  # failure is logged and swallowed so the artifact can still be produced.
   local source_cache="$SOURCE_TREE/.build/next/cache"
   [ -n "$NEXT_CACHE_DIR" ] && [ -d "$source_cache" ] || return 0
-  rm -rf -- "$NEXT_CACHE_DIR"
-  mkdir -p "$NEXT_CACHE_DIR"
-  cp -a -- "$source_cache/." "$NEXT_CACHE_DIR/"
-  log "saved Next.js build cache"
+
+  local cache_kb avail_kb dest_parent
+  dest_parent="$(dirname -- "$NEXT_CACHE_DIR")"
+  mkdir -p "$dest_parent" 2>/dev/null || true
+  cache_kb="$(du -sk -- "$source_cache" 2>/dev/null | cut -f1)"
+  avail_kb="$(df -Pk -- "$dest_parent" 2>/dev/null | awk 'NR==2 {print $4}')"
+  # Require the destination to hold the cache plus a 2 GiB headroom margin; the
+  # copy transiently coexists with the source, and the payload packing that runs
+  # next also needs room. Skip (not fail) if we cannot confirm enough space.
+  if [ -z "$cache_kb" ] || [ -z "$avail_kb" ] \
+    || [ "$avail_kb" -lt "$((cache_kb + 2 * 1024 * 1024))" ]; then
+    log "skipped saving Next.js build cache (insufficient disk headroom: need ~${cache_kb:-?}KB + 2GiB, have ${avail_kb:-?}KB)"
+    return 0
+  fi
+
+  if rm -rf -- "$NEXT_CACHE_DIR" \
+    && mkdir -p "$NEXT_CACHE_DIR" \
+    && cp -a -- "$source_cache/." "$NEXT_CACHE_DIR/"; then
+    log "saved Next.js build cache"
+  else
+    log "WARNING: saving Next.js build cache failed; continuing (cache save is non-essential)"
+    rm -rf -- "$NEXT_CACHE_DIR" 2>/dev/null || true
+  fi
+  return 0
 }
 
 prepare_typecheck_baseline() {
