@@ -87,10 +87,15 @@ index 24cec3140..0b9f66705 100644
    const { lastProvider, errorProvider } = providerTopology;
  
 diff --git a/src/app/(dashboard)/dashboard/HomeProviderTopologySection.tsx b/src/app/(dashboard)/dashboard/HomeProviderTopologySection.tsx
-index 034088e7b..bdb6ddc78 100644
+index 034088e7b..76fd548c7 100644
 --- a/src/app/(dashboard)/dashboard/HomeProviderTopologySection.tsx
 +++ b/src/app/(dashboard)/dashboard/HomeProviderTopologySection.tsx
-@@ -8,6 +8,7 @@ import { useLiveRequests } from "@/hooks/useLiveDashboard";
+@@ -3,11 +3,11 @@
+ import { useTranslations } from "next-intl";
+ import dynamic from "next/dynamic";
+ 
+-import { Card } from "@/shared/components";
+ import { useLiveRequests } from "@/hooks/useLiveDashboard";
  import { selectActiveRequests } from "../home/topologyUtils";
  
  const ProviderTopology = dynamic(() => import("../home/ProviderTopology"), { ssr: false });
@@ -98,7 +103,23 @@ index 034088e7b..bdb6ddc78 100644
  
  type TopologyProvider = {
    id: string;
-@@ -62,12 +63,15 @@ export function HomeProviderTopologySection({
+@@ -38,8 +38,14 @@ export function HomeProviderTopologySection({
+   const activeRequests = selectActiveRequests(liveActiveRequests);
+   const activeProviderCount = new Set(activeRequests.map(({ provider }) => provider)).size;
+ 
++  // No wrapping <Card> here: an opaque card surface behind the diagram would block the
++  // page's graph-paper wallpaper, and anh Hà wants that grid to show THROUGH the topology
++  // frame ("xuyên qua"). So the header/legend are plain elements on the page and the
++  // topology tile carries only a transparent bordered frame — matching 9Router, where this
++  // section sits directly on the page grid. Recent Requests keeps its own solid Card
++  // (defined inside HomeRecentRequests) since a live data table needs a readable surface.
+   return (
+-    <Card>
++    <div>
+       <div className="flex items-center justify-between mb-3">
+         <div>
+           <h2 className="text-base font-semibold">{t("providerTopology")}</h2>
+@@ -62,12 +68,15 @@ export function HomeProviderTopologySection({
            </span>
          </div>
        </div>
@@ -108,6 +129,7 @@ index 034088e7b..bdb6ddc78 100644
 -        lastProvider={lastProvider}
 -        errorProvider={errorProvider}
 -      />
+-    </Card>
 +      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[2fr_1fr]">
 +        <ProviderTopology
 +          providers={providers}
@@ -117,12 +139,12 @@ index 034088e7b..bdb6ddc78 100644
 +        />
 +        <HomeRecentRequests enabled={enabled} />
 +      </div>
-     </Card>
++    </div>
    );
  }
 diff --git a/src/app/(dashboard)/home/HomeRecentRequests.tsx b/src/app/(dashboard)/home/HomeRecentRequests.tsx
 new file mode 100644
-index 000000000..de028e1a1
+index 000000000..abe6f57ed
 --- /dev/null
 +++ b/src/app/(dashboard)/home/HomeRecentRequests.tsx
 @@ -0,0 +1,207 @@
@@ -229,7 +251,7 @@ index 000000000..de028e1a1
 +
 +  const load = useCallback(async (signal: AbortSignal) => {
 +    try {
-+      const res = await fetch(`/api/usage/call-logs?limit=${FETCH_LIMIT}`, {
++      const res = await fetch(`/api/usage/call-logs?limit=${FETCH_LIMIT}&excludeTests=1`, {
 +        cache: "no-store",
 +        signal,
 +      });
@@ -334,7 +356,7 @@ index 000000000..de028e1a1
 +  );
 +}
 diff --git a/src/app/(dashboard)/home/ProviderTopology.tsx b/src/app/(dashboard)/home/ProviderTopology.tsx
-index 313e2faad..c2ed554ce 100644
+index 313e2faad..fd1f26343 100644
 --- a/src/app/(dashboard)/home/ProviderTopology.tsx
 +++ b/src/app/(dashboard)/home/ProviderTopology.tsx
 @@ -1,15 +1,23 @@
@@ -604,17 +626,24 @@ index 313e2faad..c2ed554ce 100644
    const { nodes, edges } = useMemo(
      () => buildLayout(providers, activeSet, lastSet, errorSet),
      // eslint-disable-next-line react-hooks/exhaustive-deps
-@@ -314,6 +359,9 @@ export default function ProviderTopology({
+@@ -314,8 +359,15 @@ export default function ProviderTopology({
      [providers]
    );
  
-+  // The diagram keeps its own framed surface — a rounded border and a subtle fill
-+  // that sits on top of the page's graph-paper wallpaper — so the provider structure
-+  // reads as a distinct panel, not as bare nodes floating on the page/tab background.
++  // The diagram keeps its rounded border frame (the "khung" anh Hà wants kept) but its
++  // background is fully TRANSPARENT — the page's fixed graph-paper wallpaper (body::before)
++  // must show straight THROUGH the frame ("xuyên qua"), not be repainted or covered by an
++  // opaque fill. This only works because the section no longer wraps the tile in an opaque
++  // Card (see HomeProviderTopologySection) — with a solid surface behind it the wallpaper
++  // could never bleed through. Matches 9Router, where the topology tile sits directly on
++  // the page grid and only Recent Requests is a solid card.
    const containerClass =
-     "h-[300px] w-full min-w-0 rounded-xl border border-border bg-bg-subtle/20 overflow-hidden sm:h-[420px]";
+-    "h-[300px] w-full min-w-0 rounded-xl border border-border bg-bg-subtle/20 overflow-hidden sm:h-[420px]";
++    "h-[300px] w-full min-w-0 rounded-xl border border-border bg-transparent overflow-hidden sm:h-[420px]";
  
-@@ -333,6 +381,7 @@ export default function ProviderTopology({
+   if (providers.length === 0) {
+     return (
+@@ -333,6 +385,7 @@ export default function ProviderTopology({
        nodes={nodes}
        edges={edges}
        nodeTypes={nodeTypes}
@@ -622,6 +651,20 @@ index 313e2faad..c2ed554ce 100644
        fitKey={providersKey}
        className={containerClass}
      />
+diff --git a/src/app/api/usage/call-logs/route.ts b/src/app/api/usage/call-logs/route.ts
+index 3b3b8ddcc..0a737ea1f 100644
+--- a/src/app/api/usage/call-logs/route.ts
++++ b/src/app/api/usage/call-logs/route.ts
+@@ -143,6 +143,9 @@ export async function GET(request: Request) {
+     if (searchParams.get("correlationId")) filter.correlationId = searchParams.get("correlationId");
+     if (searchParams.get("limit")) filter.limit = parseInt(searchParams.get("limit"));
+     if (searchParams.get("offset")) filter.offset = parseInt(searchParams.get("offset"));
++    // Home Recent Requests feed sets excludeTests=1 so connection-test probe rows
++    // are dropped at the SQL layer (before LIMIT), not client-side after slicing.
++    if (searchParams.get("excludeTests") === "1") filter.excludeTests = true;
+ 
+     const [logs, connections, providerNodes] = await Promise.all([
+       getCallLogs(filter),
 diff --git a/src/app/globals.css b/src/app/globals.css
 index 2130bda65..e70db0b34 100644
 --- a/src/app/globals.css
@@ -831,6 +874,29 @@ index 7a8ef741b..75ca23cd4 100644
          GROUP BY c.provider`
      )
      .all() as ProviderMetricRow[];
+diff --git a/src/lib/usage/callLogs.ts b/src/lib/usage/callLogs.ts
+index 7f555b779..ba53cb3de 100644
+--- a/src/lib/usage/callLogs.ts
++++ b/src/lib/usage/callLogs.ts
+@@ -807,6 +807,18 @@ export async function getCallLogs(filter: any = {}) {
+   if (filter.combo) {
+     conditions.push("cl.combo_name IS NOT NULL");
+   }
++  if (filter.excludeTests) {
++    // Drop provider "Test connection" probe rows (model connection-test /
++    // path /api/providers/test / source_format test) at the SQL layer so they
++    // never consume LIMIT slots. Filtering these client-side after the DB has
++    // already applied LIMIT let a burst of tests starve the feed of real
++    // traffic — the "Recent Requests jumps around / loses history" report.
++    conditions.push(
++      `(cl.model IS NULL OR cl.model != 'connection-test')
++       AND (cl.source_format IS NULL OR cl.source_format != 'test')
++       AND (cl.path IS NULL OR cl.path != '/api/providers/test')`
++    );
++  }
+   if (filter.since) {
+     conditions.push("cl.timestamp >= @since");
+     params.since = filter.since instanceof Date ? filter.since.toISOString() : String(filter.since);
 diff --git a/src/shared/components/flow/KameBeamEdge.tsx b/src/shared/components/flow/KameBeamEdge.tsx
 new file mode 100644
 index 000000000..b4f4569eb
@@ -991,3 +1057,23 @@ index 000000000..b4f4569eb
 +}
 +
 +export default KameBeamEdge;
+diff --git a/src/shared/components/flow/edgeStyles.ts b/src/shared/components/flow/edgeStyles.ts
+index 6d20f2f8a..1bb7af14e 100644
+--- a/src/shared/components/flow/edgeStyles.ts
++++ b/src/shared/components/flow/edgeStyles.ts
+@@ -36,7 +36,12 @@ export function edgeStyle(
+ ): FlowEdgeStyle {
+   if (error) return { stroke: FLOW_EDGE_COLORS.error, strokeWidth: 2, opacity: 0.85 };
+   if (active) return { stroke: FLOW_EDGE_COLORS.active, strokeWidth: 2.5, opacity: 1 };
+-  if (last) return { stroke: FLOW_EDGE_COLORS.last, strokeWidth: 1.5, opacity: 0.6 };
+-  if (healthy) return { stroke: FLOW_EDGE_COLORS.active, strokeWidth: 1.5, opacity: 0.4 };
+-  return { stroke: FLOW_EDGE_COLORS.idle, strokeWidth: 1, opacity: 0.3 };
++  // At rest the connectors must read as faint hairlines — only a live call (active)
++  // or a real error is allowed to stand out. `last` is a brief amber afterglow of the
++  // most-recent call that then fades; `idle` is barely-there. These were far too dark
++  // before (last 0.6 / idle 0.3), keeping every line prominent after traffic stopped —
++  // the "đường truyền vẫn đậm chưa nhạt bớt" report.
++  if (last) return { stroke: FLOW_EDGE_COLORS.last, strokeWidth: 1.25, opacity: 0.3 };
++  if (healthy) return { stroke: FLOW_EDGE_COLORS.active, strokeWidth: 1.25, opacity: 0.22 };
++  return { stroke: FLOW_EDGE_COLORS.idle, strokeWidth: 1, opacity: 0.12 };
+ }
