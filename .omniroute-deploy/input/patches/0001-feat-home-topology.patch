@@ -359,7 +359,7 @@ index 000000000..abe6f57ed
 +  );
 +}
 diff --git a/src/app/(dashboard)/home/ProviderTopology.tsx b/src/app/(dashboard)/home/ProviderTopology.tsx
-index 313e2faad..d2e340311 100644
+index 1b19cd230..00347798b 100644
 --- a/src/app/(dashboard)/home/ProviderTopology.tsx
 +++ b/src/app/(dashboard)/home/ProviderTopology.tsx
 @@ -2,11 +2,13 @@
@@ -375,9 +375,9 @@ index 313e2faad..d2e340311 100644
  import { StatusDot } from "@/shared/components/flow/StatusDot";
 +import { KameBeamEdge } from "@/shared/components/flow/KameBeamEdge";
  import { edgeStyle, FLOW_EDGE_COLORS } from "@/shared/components/flow/edgeStyles";
+ import { getFallbackProviderColor } from "@/shared/utils/providerFallbackColor";
  import { resolveTopologyNodeLabel } from "./topologyLabel";
- 
-@@ -37,28 +39,24 @@ type ProviderNodeData = {
+@@ -41,28 +43,24 @@ type ProviderNodeData = {
    providerId: string;
    active: boolean;
    error: boolean;
@@ -415,7 +415,7 @@ index 313e2faad..d2e340311 100644
        }}
      >
        <Handle
-@@ -96,13 +94,13 @@ function ProviderNode({ data }: { data: ProviderNodeData }) {
+@@ -100,13 +98,13 @@ function ProviderNode({ data }: { data: ProviderNodeData }) {
        <span
          className="text-xs font-medium truncate flex-1"
          style={{
@@ -431,7 +431,7 @@ index 313e2faad..d2e340311 100644
          <StatusDot color={active ? color : GREEN} error={error} pulse={active || error} />
        )}
      </div>
-@@ -112,8 +110,13 @@ function ProviderNode({ data }: { data: ProviderNodeData }) {
+@@ -116,8 +114,13 @@ function ProviderNode({ data }: { data: ProviderNodeData }) {
  type RouterNodeData = { activeCount: number };
  
  function RouterNode({ data }: { data: RouterNodeData }) {
@@ -446,7 +446,7 @@ index 313e2faad..d2e340311 100644
        <Handle
          type="source"
          position={Position.Top}
-@@ -139,12 +142,12 @@ function RouterNode({ data }: { data: RouterNodeData }) {
+@@ -143,12 +146,12 @@ function RouterNode({ data }: { data: RouterNodeData }) {
          className="!bg-transparent !border-0 !w-0 !h-0"
        />
  
@@ -465,7 +465,7 @@ index 313e2faad..d2e340311 100644
            {data.activeCount}
          </span>
        )}
-@@ -157,6 +160,10 @@ const nodeTypes: NodeTypes = {
+@@ -161,6 +164,10 @@ const nodeTypes: NodeTypes = {
    router: RouterNode as any,
  };
  
@@ -476,7 +476,7 @@ index 313e2faad..d2e340311 100644
  type ProviderHealth = "active" | "error" | "idle";
  type ProviderEntry = { id?: string; provider: string; name?: string; status?: ProviderHealth };
  
-@@ -179,8 +186,8 @@ function buildLayout(
+@@ -183,8 +190,8 @@ function buildLayout(
  ): { nodes: Node[]; edges: Edge[] } {
    const nodeW = 156;
    const nodeH = 28;
@@ -487,7 +487,7 @@ index 313e2faad..d2e340311 100644
  
    const nodes: Node[] = [];
    const edges: Edge[] = [];
-@@ -195,21 +202,13 @@ function buildLayout(
+@@ -199,21 +206,13 @@ function buildLayout(
  
    if (providers.length === 0) return { nodes, edges };
  
@@ -516,7 +516,7 @@ index 313e2faad..d2e340311 100644
  
    let provIdx = 0;
    for (let ri = 0; ri < RINGS.length && provIdx < sorted.length; ri++) {
-@@ -219,15 +218,15 @@ function buildLayout(
+@@ -223,15 +222,15 @@ function buildLayout(
      for (let i = 0; i < count; i++) {
        const p = sorted[provIdx++];
        const pid = p.provider.toLowerCase();
@@ -540,7 +540,7 @@ index 313e2faad..d2e340311 100644
        const config = getProviderConfig(p.provider);
        const nodeId = `provider-${p.provider}`;
  
-@@ -246,19 +245,24 @@ function buildLayout(
+@@ -250,19 +249,24 @@ function buildLayout(
            providerId: p.provider,
            active,
            error,
@@ -568,7 +568,7 @@ index 313e2faad..d2e340311 100644
        });
      }
    }
-@@ -292,6 +296,17 @@ export default function ProviderTopology({
+@@ -296,6 +300,17 @@ export default function ProviderTopology({
    const lastKey = lastProvider.toLowerCase();
    const errorKey = errorProvider.toLowerCase();
  
@@ -586,7 +586,7 @@ index 313e2faad..d2e340311 100644
    const activeSet = useMemo(
      () => new Set<string>(activeKey ? activeKey.split(",") : []),
      [activeKey]
-@@ -314,8 +329,15 @@ export default function ProviderTopology({
+@@ -318,8 +333,15 @@ export default function ProviderTopology({
      [providers]
    );
  
@@ -603,7 +603,7 @@ index 313e2faad..d2e340311 100644
  
    if (providers.length === 0) {
      return (
-@@ -333,6 +355,7 @@ export default function ProviderTopology({
+@@ -337,6 +359,7 @@ export default function ProviderTopology({
        nodes={nodes}
        edges={edges}
        nodeTypes={nodeTypes}
@@ -722,7 +722,7 @@ index 2130bda65..e70db0b34 100644
  .bg-vibrancy {
    backdrop-filter: blur(20px);
 diff --git a/src/i18n/messages/en.json b/src/i18n/messages/en.json
-index 67a500c36..87522ecd2 100644
+index 041809351..b3008d036 100644
 --- a/src/i18n/messages/en.json
 +++ b/src/i18n/messages/en.json
 @@ -1723,7 +1723,12 @@
@@ -740,10 +740,10 @@ index 67a500c36..87522ecd2 100644
    "analytics": {
      "title": "Analytics",
 diff --git a/src/i18n/messages/vi.json b/src/i18n/messages/vi.json
-index 6cd5ba422..598c6db3b 100644
+index 620248b46..c78b74b7d 100644
 --- a/src/i18n/messages/vi.json
 +++ b/src/i18n/messages/vi.json
-@@ -1720,7 +1720,12 @@
+@@ -1723,7 +1723,12 @@
      "updateAvailableDesc": "Đã có phiên bản mới. Nhấp để cập nhật.",
      "updateStarted": "Đã bắt đầu cập nhật...",
      "reloadingPageAutomatically": "Đang tự động tải lại trang...",
