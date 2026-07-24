@@ -87,7 +87,7 @@ index 24cec3140..0b9f66705 100644
    const { lastProvider, errorProvider } = providerTopology;
  
 diff --git a/src/app/(dashboard)/dashboard/HomeProviderTopologySection.tsx b/src/app/(dashboard)/dashboard/HomeProviderTopologySection.tsx
-index 034088e7b..76fd548c7 100644
+index 034088e7b..09e283584 100644
 --- a/src/app/(dashboard)/dashboard/HomeProviderTopologySection.tsx
 +++ b/src/app/(dashboard)/dashboard/HomeProviderTopologySection.tsx
 @@ -3,11 +3,11 @@
@@ -103,23 +103,26 @@ index 034088e7b..76fd548c7 100644
  
  type TopologyProvider = {
    id: string;
-@@ -38,8 +38,14 @@ export function HomeProviderTopologySection({
+@@ -38,8 +38,17 @@ export function HomeProviderTopologySection({
    const activeRequests = selectActiveRequests(liveActiveRequests);
    const activeProviderCount = new Set(activeRequests.map(({ provider }) => provider)).size;
  
-+  // No wrapping <Card> here: an opaque card surface behind the diagram would block the
-+  // page's graph-paper wallpaper, and anh Hà wants that grid to show THROUGH the topology
-+  // frame ("xuyên qua"). So the header/legend are plain elements on the page and the
-+  // topology tile carries only a transparent bordered frame — matching 9Router, where this
-+  // section sits directly on the page grid. Recent Requests keeps its own solid Card
-+  // (defined inside HomeRecentRequests) since a live data table needs a readable surface.
++  // The whole section is ONE bordered block (border + rounded + padding) so header,
++  // diagram and Recent Requests read as a single component — but the block's background
++  // stays TRANSPARENT, not an opaque surface. That is the only way to satisfy both of
++  // anh Hà's asks at once: an opaque fill behind the diagram would block the page's
++  // graph-paper wallpaper (the original "làm đéo thấy đâu" bug), so a filled block and a
++  // see-through diagram ("xuyên qua") are physically mutually exclusive unless the grid is
++  // repainted (which he rejected). A transparent bordered block keeps the grouping frame
++  // AND lets the wallpaper pass straight through the diagram. Recent Requests keeps its own
++  // solid Card (inside HomeRecentRequests) since a live data table needs a readable surface.
    return (
 -    <Card>
-+    <div>
++    <div className="rounded-card border border-border p-4">
        <div className="flex items-center justify-between mb-3">
          <div>
            <h2 className="text-base font-semibold">{t("providerTopology")}</h2>
-@@ -62,12 +68,15 @@ export function HomeProviderTopologySection({
+@@ -62,12 +71,15 @@ export function HomeProviderTopologySection({
            </span>
          </div>
        </div>
