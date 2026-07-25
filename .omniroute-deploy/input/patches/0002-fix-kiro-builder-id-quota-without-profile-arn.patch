@@ -1,5 +1,184 @@
+diff --git a/config/quality/eslint-suppressions.json b/config/quality/eslint-suppressions.json
+index 3fce34179..41494159f 100644
+--- a/config/quality/eslint-suppressions.json
++++ b/config/quality/eslint-suppressions.json
+@@ -415,11 +415,6 @@
+       "count": 1
+     }
+   },
+-  "src/shared/components/KiroSocialOAuthModal.tsx": {
+-    "react-hooks/exhaustive-deps": {
+-      "count": 1
+-    }
+-  },
+   "src/shared/components/LanguageSelector.tsx": {
+     "@next/next/no-img-element": {
+       "count": 1
+diff --git a/docs/guides/USER_GUIDE.md b/docs/guides/USER_GUIDE.md
+index 431a31c7a..ff82c1a6b 100644
+--- a/docs/guides/USER_GUIDE.md
++++ b/docs/guides/USER_GUIDE.md
+@@ -572,7 +572,7 @@ For the full environment variable reference, see the [README](../README.md).
+ 
+ **GitHub Copilot (`gh/`)** — OAuth: `gh/gpt-5.5`, `gh/gpt-5.4`, `gh/gpt-5.4-mini`, `gh/gpt-5-mini`, `gh/gpt-5.3-codex`, `gh/claude-opus-4.7`, `gh/claude-opus-4.6`, `gh/claude-opus-4-5-20251101`, `gh/claude-sonnet-4.6`, `gh/claude-sonnet-4.5`, `gh/claude-haiku-4.5`, `gh/gemini-3.1-pro-preview`, `gh/gemini-3-flash-preview`, `gh/oswe-vscode-prime`
+ 
+-**Kiro (`kr/`)** — FREE OAuth: `kr/auto-kiro`, `kr/claude-opus-4.7`, `kr/claude-opus-4.6`, `kr/claude-sonnet-4.6`, `kr/claude-sonnet-4.5`, `kr/claude-haiku-4.5`, `kr/deepseek-3.2`, `kr/minimax-m2.5`, `kr/minimax-m2.1`, `kr/glm-5`, `kr/qwen3-coder-next`
++**Kiro (`kr/`)** — FREE OAuth: use the live catalog shown under **Dashboard → Providers → Kiro → Available Models**. Availability depends on the account and plan.
+ 
+ **Qoder (`if/`)** — FREE OAuth: `if/qwen3.8-max-preview`, `if/qwen3.7-max`, `if/qwen3.7-plus`, `if/kimi-k3`, `if/kimi-k2.7-code`, `if/glm-5.2`, `if/deepseek-v4-pro`, `if/deepseek-v4-flash`, `if/minimax-m3`
+ 
+diff --git a/docs/i18n/zh-CN/docs/guides/USER_GUIDE.md b/docs/i18n/zh-CN/docs/guides/USER_GUIDE.md
+index b5f1f9b09..98a4acf37 100644
+--- a/docs/i18n/zh-CN/docs/guides/USER_GUIDE.md
++++ b/docs/i18n/zh-CN/docs/guides/USER_GUIDE.md
+@@ -565,7 +565,7 @@ post_install() {
+ 
+ **GitHub Copilot (`gh/`)** — OAuth: `gh/gpt-5.5`, `gh/gpt-5.4`, `gh/gpt-5.4-mini`, `gh/gpt-5-mini`, `gh/gpt-5.3-codex`, `gh/claude-opus-4.7`, `gh/claude-opus-4.6`, `gh/claude-opus-4-5-20251101`, `gh/claude-sonnet-4.6`, `gh/claude-sonnet-4.5`, `gh/claude-haiku-4.5`, `gh/gemini-3.1-pro-preview`, `gh/gemini-3-flash-preview`, `gh/oswe-vscode-prime`
+ 
+-**Kiro (`kr/`)** — FREE OAuth: `kr/auto-kiro`, `kr/claude-opus-4.7`, `kr/claude-opus-4.6`, `kr/claude-sonnet-4.6`, `kr/claude-sonnet-4.5`, `kr/claude-haiku-4.5`, `kr/deepseek-3.2`, `kr/minimax-m2.5`, `kr/minimax-m2.1`, `kr/glm-5`, `kr/qwen3-coder-next`
++**Kiro (`kr/`)** — 免费 OAuth：请使用 **控制面板 → 提供商 → Kiro → 可用模型** 中显示的实时目录。可用模型取决于账户和套餐。
+ 
+ **Qoder (`if/`)** — FREE OAuth: `if/kimi-k2-0905`, `if/kimi-k2`, `if/qwen3-coder-plus`, `if/qwen3-max`, `if/qwen3-max-preview`, `if/qwen3-vl-plus`, `if/qwen3-32b`, `if/qwen3-235b-a22b-thinking-2507`, `if/qwen3-235b-a22b-instruct`, `if/qwen3-235b`, `if/deepseek-v3.2`, `if/deepseek-v3`, `if/deepseek-r1`, `if/qoder-rome-30ba3b`
+ 
+diff --git a/docs/i18n/zh-TW/docs/guides/USER_GUIDE.md b/docs/i18n/zh-TW/docs/guides/USER_GUIDE.md
+index f245c5194..e6c7b8405 100644
+--- a/docs/i18n/zh-TW/docs/guides/USER_GUIDE.md
++++ b/docs/i18n/zh-TW/docs/guides/USER_GUIDE.md
+@@ -572,7 +572,7 @@ post_install() {
+ 
+ **GitHub Copilot（`gh/`）** — OAuth：`gh/gpt-5.5`, `gh/gpt-5.4`, `gh/gpt-5.4-mini`, `gh/gpt-5-mini`, `gh/gpt-5.3-codex`, `gh/claude-opus-4.7`, `gh/claude-opus-4.6`, `gh/claude-opus-4-5-20251101`, `gh/claude-sonnet-4.6`, `gh/claude-sonnet-4.5`, `gh/claude-haiku-4.5`, `gh/gemini-3.1-pro-preview`, `gh/gemini-3-flash-preview`, `gh/oswe-vscode-prime`
+ 
+-**Kiro（`kr/`）** — 免費 OAuth：`kr/auto-kiro`, `kr/claude-opus-4.7`, `kr/claude-opus-4.6`, `kr/claude-sonnet-4.6`, `kr/claude-sonnet-4.5`, `kr/claude-haiku-4.5`, `kr/deepseek-3.2`, `kr/minimax-m2.5`, `kr/minimax-m2.1`, `kr/glm-5`, `kr/qwen3-coder-next`
++**Kiro（`kr/`）** — 免費 OAuth：請使用 **控制台 → 供應商 → Kiro → 可用模型** 中顯示的即時目錄。可用模型取決於帳戶與方案。
+ 
+ **Qoder（`if/`）** — 免費 OAuth：`if/qwen3.8-max-preview`, `if/qwen3.7-max`, `if/qwen3.7-plus`, `if/kimi-k3`, `if/kimi-k2.7-code`, `if/glm-5.2`, `if/deepseek-v4-pro`, `if/deepseek-v4-flash`, `if/minimax-m3`
+ 
+diff --git a/open-sse/services/kiroModels.ts b/open-sse/services/kiroModels.ts
+index 717e8bac6..dade38850 100644
+--- a/open-sse/services/kiroModels.ts
++++ b/open-sse/services/kiroModels.ts
+@@ -27,7 +27,13 @@ import { createHash } from "node:crypto";
+ 
+ import { v4 as uuidv4 } from "uuid";
+ 
++import {
++  isExternalIdpAuthMethod,
++  KIRO_EXTERNAL_IDP_TOKEN_TYPE_HEADER,
++  KIRO_EXTERNAL_IDP_TOKEN_TYPE_VALUE,
++} from "./kiroExternalIdp.ts";
+ import { resolveKiroRuntimeRegion } from "./kiroRegion.ts";
++import { supportsKiroAdaptiveThinking } from "../translator/request/openai-to-kiro/adaptiveThinking.ts";
+ 
+ type RawRecord = Record<string, unknown>;
+ 
+@@ -98,13 +104,6 @@ export function parseKiroModels(data: unknown): KiroModel[] {
+   return models;
+ }
+ 
+-function stripSyntheticSuffixes(id: string): string {
+-  let out = id;
+-  if (out.endsWith("-agentic")) out = out.slice(0, -"-agentic".length);
+-  if (out.endsWith("-thinking")) out = out.slice(0, -"-thinking".length);
+-  return out;
+-}
+-
+ function formatDisplayName(modelName: unknown, modelId: string, rateMultiplier: unknown): string {
+   const base = toNonEmptyString(modelName) || modelId;
+   const rate = Number(rateMultiplier);
+@@ -115,42 +114,36 @@ function formatDisplayName(modelName: unknown, modelId: string, rateMultiplier:
+ }
+ 
+ function buildVariants(upstream: string, displayName: string): KiroModel[] {
+-  const safeUpstream = stripSyntheticSuffixes(upstream);
+-  const display = displayName || `Kiro ${safeUpstream}`;
+-  const isAuto = safeUpstream === "auto" || safeUpstream === "auto-kiro";
++  const display = displayName || `Kiro ${upstream}`;
+   const variants: KiroModel[] = [
+     {
+-      id: safeUpstream,
++      id: upstream,
+       name: display,
+       owned_by: "kiro",
+       capabilities: { thinking: false, agentic: false },
+     },
+-    {
+-      id: `${safeUpstream}-thinking`,
+-      name: `${display} (Thinking)`,
+-      owned_by: "kiro",
+-      capabilities: { thinking: true, agentic: false },
+-    },
+   ];
+ 
+-  if (!isAuto) {
+-    variants.push({
+-      id: `${safeUpstream}-agentic`,
+-      name: `${display} (Agentic)`,
+-      owned_by: "kiro",
+-      capabilities: { thinking: false, agentic: true },
+-    });
++  if (supportsKiroAdaptiveThinking(upstream)) {
+     variants.push({
+-      id: `${safeUpstream}-thinking-agentic`,
+-      name: `${display} (Thinking + Agentic)`,
++      id: `${upstream}-thinking`,
++      name: `${display} (Thinking)`,
+       owned_by: "kiro",
+-      capabilities: { thinking: true, agentic: true },
++      capabilities: { thinking: true, agentic: false },
+     });
+   }
+ 
+   return variants;
+ }
+ 
++export function isObsoleteKiroModelAlias(modelId: unknown): boolean {
++  if (typeof modelId !== "string") return false;
++  if (modelId === "auto-kiro" || modelId.endsWith("-agentic")) return true;
++  if (!modelId.endsWith("-thinking")) return false;
++  const upstream = modelId.slice(0, -"-thinking".length);
++  return !supportsKiroAdaptiveThinking(upstream);
++}
++
+ function expandKiroModels(data: unknown): KiroModel[] {
+   const payload = asRecord(data);
+   const items = Array.isArray(payload.models)
+@@ -255,7 +248,7 @@ function buildKiroFingerprintHeaders(providerSpecificData: unknown, accessToken:
+     `api/codewhispererruntime#${KIRO_RUNTIME_SDK_VERSION} m/N,E ` +
+     `KiroIDE-${KIRO_IDE_VERSION}-${machineId}`;
+ 
+-  return {
++  const headers: Record<string, string> = {
+     "User-Agent": userAgent,
+     "x-amz-user-agent": `aws-sdk-js/${KIRO_RUNTIME_SDK_VERSION} KiroIDE-${KIRO_IDE_VERSION}-${machineId}`,
+     "x-amzn-kiro-agent-mode": "vibe",
+@@ -264,6 +257,15 @@ function buildKiroFingerprintHeaders(providerSpecificData: unknown, accessToken:
+     "amz-sdk-invocation-id": uuidv4(),
+     Accept: "application/json",
+   };
++
++  if (psd.authMethod === "api_key") {
++    headers.tokentype = "API_KEY";
++  }
++  if (isExternalIdpAuthMethod(psd.authMethod)) {
++    headers[KIRO_EXTERNAL_IDP_TOKEN_TYPE_HEADER] = KIRO_EXTERNAL_IDP_TOKEN_TYPE_VALUE;
++  }
++
++  return headers;
+ }
+ 
+ function cacheKey(accessToken: string, providerSpecificData: unknown): string {
+@@ -273,7 +275,8 @@ function cacheKey(accessToken: string, providerSpecificData: unknown): string {
+     toNonEmptyString(psd.clientId) ||
+     accessToken ||
+     "anonymous";
+-  return createHash("sha256").update(`kiro:${seed}`).digest("hex");
++  const authMethod = toNonEmptyString(psd.authMethod) || "unknown";
++  return createHash("sha256").update(`kiro:${authMethod}:${seed}`).digest("hex");
+ }
+ 
+ async function tryFetchModels(
 diff --git a/open-sse/services/usage/kiro.ts b/open-sse/services/usage/kiro.ts
-index 6ed5f72ed..3862447f6 100644
+index 6ed5f72ed..91743e926 100644
 --- a/open-sse/services/usage/kiro.ts
 +++ b/open-sse/services/usage/kiro.ts
 @@ -287,6 +287,10 @@ async function runKiroUsageAttempts(
@@ -7,7 +186,7 @@ index 6ed5f72ed..3862447f6 100644
  }
  
 +function supportsProfilelessKiroUsage(authMethod?: string): boolean {
-+  return authMethod === "builder-id" || authMethod === "kiro-cli";
++  return authMethod === "builder-id";
 +}
 +
  /**
@@ -26,9 +205,9 @@ index 6ed5f72ed..3862447f6 100644
      // against it. Without this, the quota card previously showed nothing ("no limits") for such
      // accounts because the single-region lookup at q.{idcRegion} always failed.
 -    if (!profileArn && accessToken) {
-+    // Builder ID and kiro-cli sessions can call GetUsageLimits without a profile ARN. Their
++    // Builder ID sessions can call GetUsageLimits without a profile ARN. Their
 +    // ListAvailableProfiles request may be denied even while profile-less quota requests work, so
-+    // skip discovery for those auth methods and continue with the normal usage attempts.
++    // skip discovery only when the stored identity proves this is Builder ID.
 +    if (!profileArn && accessToken && !supportsProfilelessUsage) {
        profileArn = await discoverKiroProfileArnAcrossRegions(accessToken, storedRegion);
      }
@@ -38,17 +217,1443 @@ index 6ed5f72ed..3862447f6 100644
        return { message: "Kiro connected. Profile ARN not available for quota tracking." };
      }
  
+@@ -384,9 +392,7 @@ export async function getKiroUsage(accessToken?: string, providerSpecificData?:
+     // HTTP-status failure (most informative) over a network-level error.
+     throw new Error(
+       outcome.lastHttpFailure ||
+-        (errors.length > 0
+-          ? errors[errors.length - 1]
+-          : "no usage endpoint responded")
++        (errors.length > 0 ? errors[errors.length - 1] : "no usage endpoint responded")
+     );
+   } catch (error) {
+     const message = error instanceof Error ? error.message : String(error);
+diff --git a/open-sse/translator/request/openai-to-kiro.ts b/open-sse/translator/request/openai-to-kiro.ts
+index 3da0a5934..f6de86b49 100644
+--- a/open-sse/translator/request/openai-to-kiro.ts
++++ b/open-sse/translator/request/openai-to-kiro.ts
+@@ -11,7 +11,10 @@ import {
+   normalizeKiroToolSchema,
+   serializeToolResultContent,
+ } from "./openai-to-kiro/messageHelpers.ts";
+-import { supportsKiroAdaptiveThinking } from "./openai-to-kiro/adaptiveThinking.ts";
++import {
++  resolveKiroModelAlias,
++  supportsKiroAdaptiveThinking,
++} from "./openai-to-kiro/adaptiveThinking.ts";
+ 
+ /**
+  * Anthropic's direct-provider `[1m]` context-1m beta suffix. Kiro is AWS
+@@ -580,26 +583,6 @@ function convertMessages(messages, tools, model) {
+ /** Kiro's accepted reasoning-effort levels (`output_config.effort`). */
+ const KIRO_EFFORT_LEVELS = ["low", "medium", "high", "xhigh", "max"];
+ 
+-function resolveKiroModelAlias(model: string): { upstream: string; thinking: boolean } {
+-  let upstream = String(model || "");
+-  let thinking = false;
+-
+-  if (upstream.endsWith("-agentic")) {
+-    upstream = upstream.slice(0, -"-agentic".length);
+-  }
+-  if (upstream.endsWith("-thinking")) {
+-    upstream = upstream.slice(0, -"-thinking".length);
+-    thinking = true;
+-  }
+-  if (upstream === "auto-kiro") {
+-    upstream = "auto";
+-  }
+-
+-  upstream = upstream.replace(/^(claude-(?:opus|sonnet|haiku|3-\d+)-\d+)-(\d{1,2})$/, "$1.$2");
+-
+-  return { upstream, thinking };
+-}
+-
+ /**
+  * Resolve the Kiro effort level for a request, or "" when no reasoning was asked
+  * for. Effort sources, in priority order:
+@@ -680,15 +663,14 @@ export function buildKiroPayload(model, body, stream, credentials) {
+   if (hasUnsupportedKiroContextSuffix(model)) {
+     throw new Error(KIRO_UNSUPPORTED_CONTEXT_1M_MESSAGE);
+   }
+-
+   // Normalize model name: Claude Code sends dashes (claude-sonnet-4-6),
+   // Kiro API expects dots (claude-sonnet-4.6). Convert trailing version segment.
+   // The minor group is bounded to 1-2 digits so date-suffixed ids (e.g.
+   // claude-opus-4-20250514) are never mistaken for a dash-separated minor
+   // version and corrupted into claude-opus-4.20250514 (upstream 9router #2270).
+-  // Synthetic Kiro selector variants (`-thinking`, `-agentic`) are local aliases:
+-  // strip them before the request leaves OmniRoute so Kiro only receives real
+-  // upstream model IDs. We intentionally do not inject an agentic system prompt here.
++  // The supported `-thinking` selector is a local alias: strip it before the request leaves
++  // OmniRoute so Kiro only receives a real upstream model ID. Non-functional agentic and
++  // auto-kiro aliases are rejected above instead of silently degrading to another model.
+   const { upstream: normalizedModel, thinking: modelRequestsThinking } =
+     resolveKiroModelAlias(model);
+   const messages = body.messages || [];
+diff --git a/open-sse/translator/request/openai-to-kiro/adaptiveThinking.ts b/open-sse/translator/request/openai-to-kiro/adaptiveThinking.ts
+index ba8fefdc9..338768f8d 100644
+--- a/open-sse/translator/request/openai-to-kiro/adaptiveThinking.ts
++++ b/open-sse/translator/request/openai-to-kiro/adaptiveThinking.ts
+@@ -17,3 +17,27 @@ const KIRO_ADAPTIVE_THINKING_MODELS = new Set(["claude-sonnet-5"]);
+ export function supportsKiroAdaptiveThinking(normalizedModel: string): boolean {
+   return KIRO_ADAPTIVE_THINKING_MODELS.has(normalizedModel);
+ }
++
++const KIRO_UNSUPPORTED_AGENTIC_MESSAGE =
++  "Kiro agentic aliases are not supported. The '-agentic' suffix did not change the " +
++  "upstream request; select a real Kiro model instead.";
++const KIRO_UNSUPPORTED_THINKING_MESSAGE =
++  "This Kiro model does not support the '-thinking' alias. Use a model returned by Kiro's " +
++  "live catalog with Thinking capability.";
++const KIRO_REMOVED_AUTO_ALIAS_MESSAGE =
++  "'auto-kiro' is not a real Kiro upstream model. Select a model returned by the live catalog.";
++
++export function resolveKiroModelAlias(model: unknown): { upstream: string; thinking: boolean } {
++  let upstream = String(model || "");
++  if (upstream.endsWith("-agentic")) throw new Error(KIRO_UNSUPPORTED_AGENTIC_MESSAGE);
++  if (upstream === "auto-kiro") throw new Error(KIRO_REMOVED_AUTO_ALIAS_MESSAGE);
++
++  const thinking = upstream.endsWith("-thinking");
++  if (thinking) upstream = upstream.slice(0, -"-thinking".length);
++  upstream = upstream.replace(/^(claude-(?:opus|sonnet|haiku|3-\d+)-\d+)-(\d{1,2})$/, "$1.$2");
++
++  if (thinking && !supportsKiroAdaptiveThinking(upstream)) {
++    throw new Error(KIRO_UNSUPPORTED_THINKING_MESSAGE);
++  }
++  return { upstream, thinking };
++}
+diff --git a/src/app/api/oauth/kiro/api-key/route.ts b/src/app/api/oauth/kiro/api-key/route.ts
+index 0564d0937..96fe095df 100644
+--- a/src/app/api/oauth/kiro/api-key/route.ts
++++ b/src/app/api/oauth/kiro/api-key/route.ts
+@@ -1,6 +1,11 @@
+ import { NextResponse } from "next/server";
+ import { KiroService } from "@/lib/oauth/services/kiro";
+-import { createProviderConnection, isCloudEnabled } from "@/models";
++import {
++  createProviderConnection,
++  getProviderConnections,
++  updateProviderConnection,
++  isCloudEnabled,
++} from "@/models";
+ import { syncToCloud } from "@/lib/cloudSync";
+ import { getConsistentMachineId } from "@/shared/utils/machineId";
+ import { kiroApiKeyImportSchema } from "@/shared/validation/schemas";
+@@ -8,6 +13,7 @@ import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
+ import { isAuthRequired, isAuthenticated } from "@/shared/utils/apiAuth";
+ import { buildKiroImportError } from "../import/route";
+ import { buildKiroApiKeyConnectionName, isKiroApiKeyImportClientError } from "./helpers";
++import { findKiroConnectionByIdentity } from "@/lib/oauth/kiroConnectionIdentity";
+ 
+ async function requireKiroApiKeyImportAuth(request: Request) {
+   if (!(await isAuthRequired(request))) return null;
+@@ -53,11 +59,10 @@ export async function POST(request: Request) {
+     const kiroService = new KiroService();
+     const credential = await kiroService.validateApiKey(apiKey, region || "us-east-1");
+     const email = kiroService.extractEmailFromJWT(credential.accessToken);
++    const name = buildKiroApiKeyConnectionName(targetProvider, credential.region, apiKey);
+ 
+-    const connection: any = await createProviderConnection({
+-      provider: targetProvider,
+-      authType: "apikey",
+-      name: buildKiroApiKeyConnectionName(targetProvider, credential.region, apiKey),
++    const record = {
++      name,
+       apiKey: credential.accessToken,
+       accessToken: credential.accessToken,
+       refreshToken: null,
+@@ -72,7 +77,23 @@ export async function POST(request: Request) {
+         provider: "API Key",
+       },
+       testStatus: "active",
++      isActive: true,
++    };
++    const existing = await getProviderConnections({ provider: targetProvider });
++    const match = findKiroConnectionByIdentity(existing, {
++      authType: "apikey",
++      profileArn: credential.profileArn,
++      email,
++      name,
+     });
++    const connection: any =
++      typeof match?.id === "string"
++        ? await updateProviderConnection(match.id, record)
++        : await createProviderConnection({
++            provider: targetProvider,
++            authType: "apikey",
++            ...record,
++          });
+ 
+     await syncToCloudIfEnabled();
+ 
+diff --git a/src/app/api/oauth/kiro/auto-import/route.ts b/src/app/api/oauth/kiro/auto-import/route.ts
+index d3db08556..40b927b4c 100755
+--- a/src/app/api/oauth/kiro/auto-import/route.ts
++++ b/src/app/api/oauth/kiro/auto-import/route.ts
+@@ -12,6 +12,7 @@ import {
+ import { syncToCloud } from "@/lib/cloudSync";
+ import { getConsistentMachineId } from "@/shared/utils/machineId";
+ import { KiroService } from "@/lib/oauth/services/kiro";
++import { findKiroConnectionByIdentity } from "@/lib/oauth/kiroConnectionIdentity";
+ import { runWithProxyContext } from "@omniroute/open-sse/utils/proxyFetch.ts";
+ import {
+   emailFromExternalIdpToken,
+@@ -73,6 +74,7 @@ async function tryKiroCliSqlite(): Promise<{
+   clientSecret?: string;
+   region?: string;
+   profileArn?: string;
++  authMethod?: "builder-id" | "idc";
+   source?: string;
+ }> {
+   // Build list of candidate DB paths to probe in order.
+@@ -111,8 +113,7 @@ async function tryKiroCliSqlite(): Promise<{
+         for (const table of ["auth_kv", "ItemTable", "storage"]) {
+           try {
+             const row = db.prepare(`SELECT value FROM ${table} WHERE key = ?`).get(key) as
+-              | { value: string }
+-              | undefined;
++              { value: string } | undefined;
+             if (row?.value) {
+               try {
+                 tokenData = JSON.parse(row.value);
+@@ -139,8 +140,7 @@ async function tryKiroCliSqlite(): Promise<{
+         for (const table of ["auth_kv", "ItemTable", "storage"]) {
+           try {
+             const row = db.prepare(`SELECT value FROM ${table} WHERE key = ?`).get(key) as
+-              | { value: string }
+-              | undefined;
++              { value: string } | undefined;
+             if (row?.value) {
+               try {
+                 regData = JSON.parse(row.value);
+@@ -192,6 +192,7 @@ async function tryKiroCliSqlite(): Promise<{
+         clientSecret: regData?.client_secret,
+         region,
+         profileArn,
++        authMethod: resolveKiroCliAuthMethod(profileArn),
+       };
+     } finally {
+       try {
+@@ -417,6 +418,12 @@ export function deriveKiroConnectionName(opts: {
+   return `Kiro (${r})`;
+ }
+ 
++export function resolveKiroCliAuthMethod(
++  profileArn: string | null | undefined
++): "builder-id" | "idc" {
++  return profileArn ? "idc" : "builder-id";
++}
++
+ type ProviderConnectionLike = {
+   id?: unknown;
+   providerSpecificData?: unknown;
+@@ -434,17 +441,7 @@ export function findKiroConnectionByProfileArn(
+   connections: ProviderConnectionLike[],
+   profileArn: string | undefined
+ ): ProviderConnectionLike | null {
+-  if (!profileArn) return null;
+-  for (const conn of connections) {
+-    const psd = conn.providerSpecificData;
+-    if (psd && typeof psd === "object" && !Array.isArray(psd)) {
+-      const stored = (psd as Record<string, unknown>).profileArn;
+-      if (typeof stored === "string" && stored === profileArn) {
+-        return conn;
+-      }
+-    }
+-  }
+-  return null;
++  return findKiroConnectionByIdentity(connections, { profileArn });
+ }
+ 
+ // ── Save to OmniRoute DB ──────────────────────────────────────────────────────
+@@ -505,10 +502,12 @@ async function saveAndRespond(
+       if (profileArn) providerSpecificData.profileArn = profileArn;
+ 
+       const existingConnections = await getProviderConnections({ provider: targetProvider });
+-      const existingByArn = findKiroConnectionByProfileArn(
+-        existingConnections,
+-        profileArn || undefined
+-      );
++      const existingByArn = findKiroConnectionByIdentity(existingConnections, {
++        authType: "oauth",
++        profileArn,
++        clientId: result.clientId,
++        email,
++      });
+       const record = {
+         accessToken: refreshed.accessToken,
+         refreshToken: refreshed.refreshToken || result.refreshToken!,
+@@ -547,13 +546,12 @@ async function saveAndRespond(
+     let expiresAt = result.expiresAt;
+     let profileArn = result.profileArn;
+ 
+-    // Determine authMethod: prefer the value from the SSO cache token (e.g. "idc")
+-    // so that kiroService.refreshToken() takes the correct OIDC path for IDC tokens
+-    // (#2059). Fall back to "kiro-cli" for the SQLite path and "imported" for plain
+-    // social SSO cache tokens (no clientIdHash → no IDC client creds).
++    // `kiro-cli` identifies where credentials came from, not the account type. Persist
++    // the actual auth method so IdC accounts still use their profile ARN and Builder ID
++    // accounts keep the profile-less flow.
+     const resolvedAuthMethod =
+       result.source === "kiro-cli-sqlite"
+-        ? "kiro-cli"
++        ? result.authMethod || resolveKiroCliAuthMethod(profileArn)
+         : result.clientId
+           ? result.authMethod || "idc"
+           : "imported";
+@@ -618,7 +616,12 @@ async function saveAndRespond(
+     // just refresh its tokens instead of inserting a new row. This prevents the
+     // duplicate-row accumulation reported in #3615 (4 rows after 6 days).
+     const existingConnections = await getProviderConnections({ provider: targetProvider });
+-    const existingByArn = findKiroConnectionByProfileArn(existingConnections, profileArn);
++    const existingByArn = findKiroConnectionByIdentity(existingConnections, {
++      authType: "oauth",
++      profileArn,
++      clientId: providerSpecificData.clientId,
++      email,
++    });
+ 
+     if (existingByArn && typeof existingByArn.id === "string") {
+       await updateProviderConnection(existingByArn.id, {
+diff --git a/src/app/api/oauth/kiro/import/route.ts b/src/app/api/oauth/kiro/import/route.ts
+index ffaa4c984..54b63d2f3 100755
+--- a/src/app/api/oauth/kiro/import/route.ts
++++ b/src/app/api/oauth/kiro/import/route.ts
+@@ -1,6 +1,12 @@
+ import { NextResponse } from "next/server";
+ import { KiroService } from "@/lib/oauth/services/kiro";
+-import { createProviderConnection, isCloudEnabled, resolveProxyForProvider } from "@/models";
++import {
++  createProviderConnection,
++  getProviderConnections,
++  updateProviderConnection,
++  isCloudEnabled,
++  resolveProxyForProvider,
++} from "@/models";
+ import { getConsistentMachineId } from "@/shared/utils/machineId";
+ import { syncToCloud } from "@/lib/cloudSync";
+ import { kiroImportSchema } from "@/shared/validation/schemas";
+@@ -8,6 +14,7 @@ import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
+ import { isAuthRequired, isAuthenticated } from "@/shared/utils/apiAuth";
+ import { runWithProxyContext } from "@omniroute/open-sse/utils/proxyFetch.ts";
+ import { sanitizeErrorMessage } from "@omniroute/open-sse/utils/error";
++import { findKiroConnectionByIdentity } from "@/lib/oauth/kiroConnectionIdentity";
+ import {
+   emailFromExternalIdpToken,
+   isExternalIdpAuthMethod,
+@@ -36,6 +43,23 @@ async function requireOAuthImportAuth(request: Request) {
+   return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+ }
+ 
++async function upsertImportedKiroConnection(
++  targetProvider: string,
++  record: Record<string, unknown>,
++  identity: { profileArn?: unknown; clientId?: unknown; email?: unknown; name?: unknown }
++) {
++  const existing = await getProviderConnections({ provider: targetProvider });
++  const match = findKiroConnectionByIdentity(existing, { authType: "oauth", ...identity });
++  if (typeof match?.id === "string") {
++    return updateProviderConnection(match.id, record);
++  }
++  return createProviderConnection({
++    provider: targetProvider,
++    authType: "oauth",
++    ...record,
++  } as any);
++}
++
+ /**
+  * POST /api/oauth/kiro/import
+  * Import and validate refresh token from Kiro IDE
+@@ -95,9 +119,7 @@ export async function POST(request: Request) {
+       const email =
+         emailFromExternalIdpToken(refreshed.accessToken) ||
+         kiroService.extractEmailFromJWT(refreshed.accessToken);
+-      const connection: any = await createProviderConnection({
+-        provider: targetProvider,
+-        authType: "oauth",
++      const record = {
+         accessToken: refreshed.accessToken,
+         refreshToken: refreshed.refreshToken || refreshToken.trim(),
+         expiresAt: new Date(Date.now() + (refreshed.expiresIn || 3600) * 1000).toISOString(),
+@@ -112,7 +134,13 @@ export async function POST(request: Request) {
+           region: region || "us-east-1",
+         },
+         testStatus: "active",
+-      } as any);
++        isActive: true,
++      };
++      const connection: any = await upsertImportedKiroConnection(targetProvider, record, {
++        profileArn,
++        clientId,
++        email,
++      });
+       await syncToCloudIfEnabled();
+       return NextResponse.json({
+         success: true,
+@@ -165,29 +193,34 @@ export async function POST(request: Request) {
+     const resolvedProfileArn = (tokenData as any).profileArn || null;
+ 
+     // Save to database
+-    const connection: any = await createProviderConnection({
+-      provider: targetProvider,
+-      authType: "oauth",
++    const providerSpecificData = {
++      profileArn: resolvedProfileArn,
++      authMethod: resolvedAuthMethod,
++      provider: isIdc ? "Enterprise" : "Imported",
++      ...(tokenData.clientId
++        ? {
++            clientId: tokenData.clientId,
++            clientSecret: tokenData.clientSecret,
++            region: region || "us-east-1",
++            ...(tokenData.clientSecretExpiresAt
++              ? { clientSecretExpiresAt: tokenData.clientSecretExpiresAt }
++              : {}),
++          }
++        : {}),
++    };
++    const record = {
+       accessToken: tokenData.accessToken,
+       refreshToken: tokenData.refreshToken || refreshToken.trim(),
+       expiresAt: new Date(Date.now() + (tokenData.expiresIn || 3600) * 1000).toISOString(),
+       email: email || null,
+-      providerSpecificData: {
+-        profileArn: resolvedProfileArn,
+-        authMethod: resolvedAuthMethod,
+-        provider: isIdc ? "Enterprise" : "Imported",
+-        ...(tokenData.clientId
+-          ? {
+-              clientId: tokenData.clientId,
+-              clientSecret: tokenData.clientSecret,
+-              region: region || "us-east-1",
+-              ...(tokenData.clientSecretExpiresAt
+-                ? { clientSecretExpiresAt: tokenData.clientSecretExpiresAt }
+-                : {}),
+-            }
+-          : {}),
+-      },
++      providerSpecificData,
+       testStatus: "active",
++      isActive: true,
++    };
++    const connection: any = await upsertImportedKiroConnection(targetProvider, record, {
++      profileArn: resolvedProfileArn,
++      clientId: providerSpecificData.clientId,
++      email,
+     });
+ 
+     // Auto sync to Cloud if enabled
+diff --git a/src/app/api/oauth/kiro/social-exchange/route.ts b/src/app/api/oauth/kiro/social-exchange/route.ts
+index d668ed02e..d6d6ffe62 100755
+--- a/src/app/api/oauth/kiro/social-exchange/route.ts
++++ b/src/app/api/oauth/kiro/social-exchange/route.ts
+@@ -1,17 +1,24 @@
+ import { NextResponse } from "next/server";
+ import { z } from "zod";
+ import { KiroService } from "@/lib/oauth/services/kiro";
+-import { createProviderConnection, isCloudEnabled } from "@/models";
++import {
++  createProviderConnection,
++  getProviderConnections,
++  updateProviderConnection,
++  isCloudEnabled,
++} from "@/models";
+ import { getConsistentMachineId } from "@/shared/utils/machineId";
+ import { syncToCloud } from "@/lib/cloudSync";
+ import { isAuthRequired, isAuthenticated } from "@/shared/utils/apiAuth";
+ import { validateBody, isValidationFailure } from "@/shared/validation/helpers";
+ import { KIRO_CONFIG } from "@/lib/oauth/constants/oauth";
++import { findKiroConnectionByIdentity } from "@/lib/oauth/kiroConnectionIdentity";
++import { classifyKiroSocialPoll } from "@/lib/oauth/kiroSocialPoll";
+ 
+ const socialExchangeSchema = z.object({
+   deviceCode: z.string().min(1, "Missing deviceCode or provider"),
+-  provider: z.string().min(1, "Missing deviceCode or provider"),
+-  targetProvider: z.string().optional(),
++  provider: z.enum(["google", "github"]),
++  targetProvider: z.enum(["kiro", "amazon-q"]).optional(),
+ });
+ 
+ /**
+@@ -57,19 +64,25 @@ export async function POST(request: Request) {
+     });
+ 
+     const data = await response.json();
++    const poll = classifyKiroSocialPoll(response.ok, response.status, data);
+ 
+-    if (!response.ok || data.error === "authorization_pending" || data.error === "slow_down") {
++    if (poll.kind === "pending") {
+       return NextResponse.json({
++        success: false,
+         pending: true,
+-        error: data.error || "authorization_pending",
++        error: poll.error,
+       });
+     }
+ 
+-    if (!data.accessToken && !data.refreshToken) {
+-      return NextResponse.json({
+-        pending: true,
+-        error: data.error || "no_tokens",
+-      });
++    if (poll.kind === "error") {
++      return NextResponse.json(
++        {
++          success: false,
++          pending: false,
++          error: poll.error,
++        },
++        { status: poll.status }
++      );
+     }
+ 
+     const kiroService = new KiroService();
+@@ -84,16 +97,30 @@ export async function POST(request: Request) {
+       providerSpecificData.profileArn = data.profileArn;
+     }
+ 
+-    const connection: any = await createProviderConnection({
+-      provider: targetProvider || "kiro",
+-      authType: "oauth",
++    const resolvedProvider = targetProvider || "kiro";
++    const record = {
+       accessToken: data.accessToken,
+       refreshToken: data.refreshToken,
+       expiresAt: new Date(Date.now() + (data.expiresIn || 3600) * 1000).toISOString(),
+       email: email || null,
+       providerSpecificData,
+       testStatus: "active",
++      isActive: true,
++    };
++    const existing = await getProviderConnections({ provider: resolvedProvider });
++    const match = findKiroConnectionByIdentity(existing, {
++      authType: "oauth",
++      profileArn: data.profileArn,
++      email,
+     });
++    const connection: any =
++      typeof match?.id === "string"
++        ? await updateProviderConnection(match.id, record)
++        : await createProviderConnection({
++            provider: resolvedProvider,
++            authType: "oauth",
++            ...record,
++          });
+ 
+     await syncToCloudIfEnabled();
+ 
+diff --git a/src/lib/oauth/kiroConnectionIdentity.ts b/src/lib/oauth/kiroConnectionIdentity.ts
+new file mode 100644
+index 000000000..d5ff76157
+--- /dev/null
++++ b/src/lib/oauth/kiroConnectionIdentity.ts
+@@ -0,0 +1,72 @@
++export type KiroConnectionLike = {
++  id?: unknown;
++  authType?: unknown;
++  name?: unknown;
++  email?: unknown;
++  providerSpecificData?: unknown;
++  [key: string]: unknown;
++};
++
++export type KiroConnectionIdentity = {
++  authType?: unknown;
++  profileArn?: unknown;
++  clientId?: unknown;
++  email?: unknown;
++  name?: unknown;
++};
++
++function trimmed(value: unknown): string {
++  return typeof value === "string" ? value.trim() : "";
++}
++
++function folded(value: unknown): string {
++  return trimmed(value).toLowerCase();
++}
++
++function providerData(connection: KiroConnectionLike): Record<string, unknown> {
++  const value = connection.providerSpecificData;
++  return value && typeof value === "object" && !Array.isArray(value)
++    ? (value as Record<string, unknown>)
++    : {};
++}
++
++/** Find an existing Kiro account without comparing OAuth tokens or API keys. */
++export function findKiroConnectionByIdentity(
++  connections: KiroConnectionLike[],
++  identity: KiroConnectionIdentity
++): KiroConnectionLike | null {
++  const authType = folded(identity.authType);
++  const candidates = authType
++    ? connections.filter((connection) => folded(connection.authType) === authType)
++    : connections;
++
++  const profileArn = trimmed(identity.profileArn);
++  if (profileArn) {
++    const match = candidates.find(
++      (connection) => trimmed(providerData(connection).profileArn) === profileArn
++    );
++    if (match) return match;
++  }
++
++  const clientId = trimmed(identity.clientId);
++  if (clientId) {
++    const match = candidates.find(
++      (connection) => trimmed(providerData(connection).clientId) === clientId
++    );
++    if (match) return match;
++  }
++
++  const email = folded(identity.email);
++  if (email) {
++    const match = candidates.find((connection) => folded(connection.email) === email);
++    if (match) return match;
++  }
++
++  const name = folded(identity.name);
++  if (name) {
++    const match = candidates.find((connection) => folded(connection.name) === name);
++    if (match) return match;
++  }
++
++  return null;
++}
+diff --git a/src/lib/oauth/kiroSocialPoll.ts b/src/lib/oauth/kiroSocialPoll.ts
+new file mode 100644
+index 000000000..e6c332f79
+--- /dev/null
++++ b/src/lib/oauth/kiroSocialPoll.ts
+@@ -0,0 +1,43 @@
++export type KiroSocialPollData = {
++  error?: unknown;
++  accessToken?: unknown;
++  refreshToken?: unknown;
++};
++
++export type KiroSocialPollOutcome =
++  | { kind: "pending"; error: "authorization_pending" | "slow_down" }
++  | { kind: "error"; error: string; status: number }
++  | { kind: "success" };
++
++/**
++ * RFC 8628 requires every later device-code poll to retain a `slow_down`
++ * increase. Keeping this transition pure makes the UI retry behaviour testable.
++ */
++export function getNextKiroSocialPollInterval(currentIntervalMs: number, error: unknown): number {
++  return error === "slow_down" ? currentIntervalMs + 5000 : currentIntervalMs;
++}
++
++function errorCode(value: unknown): string {
++  return typeof value === "string" && value.trim() ? value.trim() : "authorization_failed";
++}
++
++export function classifyKiroSocialPoll(
++  responseOk: boolean,
++  responseStatus: number,
++  data: KiroSocialPollData
++): KiroSocialPollOutcome {
++  if (data.error === "authorization_pending" || data.error === "slow_down") {
++    return { kind: "pending", error: data.error };
++  }
++
++  if (!responseOk || data.error) {
++    const status = responseStatus >= 400 && responseStatus <= 599 ? responseStatus : 400;
++    return { kind: "error", error: errorCode(data.error), status };
++  }
++
++  if (!data.accessToken && !data.refreshToken) {
++    return { kind: "error", error: "invalid_token_response", status: 502 };
++  }
++
++  return { kind: "success" };
++}
+diff --git a/src/lib/oauth/providers/kiro.ts b/src/lib/oauth/providers/kiro.ts
+index f90bbae0f..a5d2df7fc 100644
+--- a/src/lib/oauth/providers/kiro.ts
++++ b/src/lib/oauth/providers/kiro.ts
+@@ -77,6 +77,7 @@ export const kiro = {
+       _clientId: clientInfo.clientId,
+       _clientSecret: clientInfo.clientSecret,
+       _region: resolvedRegion,
++      _authMethod: config.skipIssuerUrlForRegistration ? "idc" : "builder-id",
+     };
+   },
+   pollToken: async (config, deviceCode, codeVerifier, extraData) => {
+@@ -116,6 +117,7 @@ export const kiro = {
+           _clientId: extraData?._clientId,
+           _clientSecret: extraData?._clientSecret,
+           _region: tokenRegion,
++          _authMethod: extraData?._authMethod || "builder-id",
+         },
+       };
+     }
+@@ -140,6 +142,7 @@ export const kiro = {
+   postExchange: async (tokenData) => {
+     const accessToken = tokenData?.access_token;
+     if (!accessToken) return null;
++    if (tokenData?._authMethod === "builder-id") return null;
+     const storedRegion = typeof tokenData?._region === "string" ? tokenData._region : undefined;
+     const arn = await discoverKiroProfileArnAcrossRegions(accessToken, storedRegion);
+     return arn ? { profileArn: arn } : null;
+@@ -152,6 +155,7 @@ export const kiro = {
+       clientId: tokens._clientId,
+       clientSecret: tokens._clientSecret,
+       region: tokens._region,
++      authMethod: tokens._authMethod || (extra?.profileArn ? "idc" : "builder-id"),
+       ...(extra?.profileArn ? { profileArn: extra.profileArn } : {}),
+     },
+   }),
+diff --git a/src/lib/providerModels/modelDiscovery.ts b/src/lib/providerModels/modelDiscovery.ts
+index 7e7d91927..b316081ac 100644
+--- a/src/lib/providerModels/modelDiscovery.ts
++++ b/src/lib/providerModels/modelDiscovery.ts
+@@ -5,6 +5,7 @@ import {
+   type SyncedAvailableModel,
+ } from "@/lib/db/models";
+ import { CANONICAL_EFFORT_VALUES } from "@/shared/reasoning/effortStandardization";
++import { isObsoleteKiroModelAlias } from "@omniroute/open-sse/services/kiroModels.ts";
+ 
+ type JsonRecord = Record<string, unknown>;
+ 
+@@ -201,12 +202,8 @@ export function normalizeDiscoveredModels(models: unknown): SyncedAvailableModel
+         ? { supportsThinking: record.supportsThinking }
+         : {}),
+       ...(record.alwaysThinking === true ? { alwaysThinking: true } : {}),
+-      ...(typeof record.supportsTools === "boolean"
+-        ? { supportsTools: record.supportsTools }
+-        : {}),
+-      ...(typeof record.supportsVideo === "boolean"
+-        ? { supportsVideo: record.supportsVideo }
+-        : {}),
++      ...(typeof record.supportsTools === "boolean" ? { supportsTools: record.supportsTools } : {}),
++      ...(typeof record.supportsVideo === "boolean" ? { supportsVideo: record.supportsVideo } : {}),
+       ...(supportsVision ? { supportsVision: true } : {}),
+     });
+   }
+@@ -218,7 +215,10 @@ export async function getCachedDiscoveredModels(
+   providerId: string,
+   connectionId: string
+ ): Promise<SyncedAvailableModel[]> {
+-  return getSyncedAvailableModelsForConnection(providerId, connectionId);
++  const models = await getSyncedAvailableModelsForConnection(providerId, connectionId);
++  return providerId === "kiro"
++    ? models.filter((model) => !isObsoleteKiroModelAlias(model.id))
++    : models;
+ }
+ 
+ export async function persistDiscoveredModels(
+diff --git a/src/shared/components/KiroAuthModal.tsx b/src/shared/components/KiroAuthModal.tsx
+index bf890af46..42f79a11b 100644
+--- a/src/shared/components/KiroAuthModal.tsx
++++ b/src/shared/components/KiroAuthModal.tsx
+@@ -34,11 +34,17 @@ export default function KiroAuthModal({
+   const [importing, setImporting] = useState(false);
+   const [importingApiKey, setImportingApiKey] = useState(false);
+   const [autoDetecting, setAutoDetecting] = useState(false);
+-  const [autoDetected, setAutoDetected] = useState(false);
+-  // IDC/organization credentials returned by auto-import when the SSO cache token
+-  // has a clientIdHash. Spread into the import POST body so the regional OIDC
+-  // endpoint is used for token refresh instead of the social path (#2059).
+-  const [idcCredentials, setIdcCredentials] = useState<Record<string, string> | null>(null);
++
++  useEffect(() => {
++    if (isOpen) return;
++    setSelectedMethod(null);
++    setIdcStartUrl("");
++    setIdcRegion("us-east-1");
++    setRefreshToken("");
++    setApiKey("");
++    setApiKeyRegion("us-east-1");
++    setError(null);
++  }, [isOpen]);
+ 
+   // Auto-detect token when import method is selected
+   useEffect(() => {
+@@ -47,8 +53,6 @@ export default function KiroAuthModal({
+     const autoDetect = async () => {
+       setAutoDetecting(true);
+       setError(null);
+-      setAutoDetected(false);
+-      setIdcCredentials(null);
+ 
+       try {
+         const res = await fetch(
+@@ -57,18 +61,9 @@ export default function KiroAuthModal({
+         const data = await res.json();
+ 
+         if (data.found) {
+-          setRefreshToken(data.refreshToken);
+-          setAutoDetected(true);
+-          // Store IDC/organization credentials if present in the auto-detect response
+-          if (data.clientId && data.clientSecret) {
+-            setIdcCredentials({
+-              clientId: data.clientId,
+-              clientSecret: data.clientSecret,
+-              ...(data.region ? { region: data.region } : {}),
+-              ...(data.authMethod ? { authMethod: data.authMethod } : {}),
+-              ...(data.profileArn ? { profileArn: data.profileArn } : {}),
+-            });
+-          }
++          onMethodSelect("import");
++          onClose();
++          return;
+         } else {
+           setError(data.error || "Could not auto-detect token");
+         }
+@@ -80,7 +75,7 @@ export default function KiroAuthModal({
+     };
+ 
+     autoDetect();
+-  }, [providerId, selectedMethod, isOpen]);
++  }, [providerId, selectedMethod, isOpen, onMethodSelect, onClose]);
+ 
+   const handleMethodSelect = (method) => {
+     setSelectedMethod(method);
+@@ -109,7 +104,6 @@ export default function KiroAuthModal({
+           headers: { "Content-Type": "application/json" },
+           body: JSON.stringify({
+             refreshToken: refreshToken.trim(),
+-            ...(idcCredentials || {}),
+           }),
+         }
+       );
+@@ -121,9 +115,10 @@ export default function KiroAuthModal({
+       }
+ 
+       // Success - close modal
++      onMethodSelect("import");
+       onClose();
+     } catch (err) {
+-      setError(err.message);
++      setError(err instanceof Error ? err.message : "Import failed");
+     } finally {
+       setImporting(false);
+     }
+@@ -330,68 +325,6 @@ export default function KiroAuthModal({
+           </div>
+         )}
+ 
+-        {/* Social Login Info (Google) */}
+-        {selectedMethod === "social-google" && (
+-          <div className="space-y-4">
+-            <div className="bg-amber-50 dark:bg-amber-900/20 p-4 rounded-lg border border-amber-200 dark:border-amber-800">
+-              <div className="flex gap-2">
+-                <span className="material-symbols-outlined text-amber-600 dark:text-amber-400">
+-                  info
+-                </span>
+-                <div className="flex-1 text-sm">
+-                  <p className="font-medium text-amber-900 dark:text-amber-100 mb-1">
+-                    Manual Callback Required
+-                  </p>
+-                  <p className="text-amber-800 dark:text-amber-200">
+-                    After login, you&apos;ll need to copy the callback URL from your browser and
+-                    paste it back here.
+-                  </p>
+-                </div>
+-              </div>
+-            </div>
+-
+-            <div className="flex gap-2">
+-              <Button onClick={() => handleSocialLogin("google")} fullWidth>
+-                Continue with Google
+-              </Button>
+-              <Button onClick={handleBack} variant="ghost" fullWidth>
+-                Back
+-              </Button>
+-            </div>
+-          </div>
+-        )}
+-
+-        {/* Social Login Info (GitHub) */}
+-        {selectedMethod === "social-github" && (
+-          <div className="space-y-4">
+-            <div className="bg-amber-50 dark:bg-amber-900/20 p-4 rounded-lg border border-amber-200 dark:border-amber-800">
+-              <div className="flex gap-2">
+-                <span className="material-symbols-outlined text-amber-600 dark:text-amber-400">
+-                  info
+-                </span>
+-                <div className="flex-1 text-sm">
+-                  <p className="font-medium text-amber-900 dark:text-amber-100 mb-1">
+-                    Manual Callback Required
+-                  </p>
+-                  <p className="text-amber-800 dark:text-amber-200">
+-                    After login, you&apos;ll need to copy the callback URL from your browser and
+-                    paste it back here.
+-                  </p>
+-                </div>
+-              </div>
+-            </div>
+-
+-            <div className="flex gap-2">
+-              <Button onClick={() => handleSocialLogin("github")} fullWidth>
+-                Continue with GitHub
+-              </Button>
+-              <Button onClick={handleBack} variant="ghost" fullWidth>
+-                Back
+-              </Button>
+-            </div>
+-          </div>
+-        )}
+-
+         {/* Import Token */}
+         {selectedMethod === "import" && (
+           <div className="space-y-4">
+@@ -413,22 +346,8 @@ export default function KiroAuthModal({
+             {/* Form (shown after auto-detect completes) */}
+             {!autoDetecting && (
+               <>
+-                {/* Success message if auto-detected */}
+-                {autoDetected && (
+-                  <div className="bg-green-50 dark:bg-green-900/20 p-3 rounded-lg border border-green-200 dark:border-green-800">
+-                    <div className="flex gap-2">
+-                      <span className="material-symbols-outlined text-green-600 dark:text-green-400">
+-                        check_circle
+-                      </span>
+-                      <p className="text-sm text-green-800 dark:text-green-200">
+-                        Token auto-detected from {providerLabel} successfully!
+-                      </p>
+-                    </div>
+-                  </div>
+-                )}
+-
+                 {/* Info message if not auto-detected */}
+-                {!autoDetected && !error && (
++                {!error && (
+                   <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg border border-blue-200 dark:border-blue-800">
+                     <div className="flex gap-2">
+                       <span className="material-symbols-outlined text-blue-600 dark:text-blue-400">
+@@ -447,6 +366,7 @@ export default function KiroAuthModal({
+                     Refresh Token <span className="text-red-500">*</span>
+                   </label>
+                   <Input
++                    type="password"
+                     value={refreshToken}
+                     onChange={(e) => setRefreshToken(e.target.value)}
+                     placeholder="Token will be auto-filled..."
+@@ -485,6 +405,7 @@ export default function KiroAuthModal({
+                 API Key <span className="text-red-500">*</span>
+               </label>
+               <Input
++                type="password"
+                 value={apiKey}
+                 onChange={(e) => setApiKey(e.target.value)}
+                 placeholder={`Paste your ${providerLabel} API key...`}
+diff --git a/src/shared/components/KiroOAuthWrapper.tsx b/src/shared/components/KiroOAuthWrapper.tsx
+index 19b91ee85..15afd8bbd 100644
+--- a/src/shared/components/KiroOAuthWrapper.tsx
++++ b/src/shared/components/KiroOAuthWrapper.tsx
+@@ -58,11 +58,11 @@ export default function KiroOAuthWrapper({
+     setIdcConfig(null);
+   };
+ 
+-  const handleSocialSuccess = () => {
++  const handleSocialSuccess = useCallback(() => {
+     setAuthMethod(null);
+     setSocialProvider(null);
+     onSuccess?.();
+-  };
++  }, [onSuccess]);
+ 
+   const handleDeviceSuccess = () => {
+     setAuthMethod(null);
+diff --git a/src/shared/components/KiroSocialOAuthModal.tsx b/src/shared/components/KiroSocialOAuthModal.tsx
+index cd8ce5647..9c457683a 100644
+--- a/src/shared/components/KiroSocialOAuthModal.tsx
++++ b/src/shared/components/KiroSocialOAuthModal.tsx
+@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
+ import Modal from "./Modal";
+ import Button from "./Button";
+ import { copyToClipboard } from "@/shared/utils/clipboard";
++import { getNextKiroSocialPollInterval } from "@/lib/oauth/kiroSocialPoll";
+ 
+ type KiroSocialOAuthModalProps = {
+   isOpen: boolean;
+@@ -26,10 +27,28 @@ export default function KiroSocialOAuthModal({
+   const [error, setError] = useState<string | null>(null);
+   const [userCode, setUserCode] = useState("");
+   const [authUrl, setAuthUrl] = useState("");
+-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
++  const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
++  const onSuccessRef = useRef(onSuccess);
++
++  useEffect(() => {
++    onSuccessRef.current = onSuccess;
++  }, [onSuccess]);
+ 
+   useEffect(() => {
+     if (!isOpen || !provider) return;
++    let cancelled = false;
++
++    const stopPolling = () => {
++      if (pollRef.current) clearTimeout(pollRef.current);
++      pollRef.current = null;
++    };
++
++    const fail = (message: string) => {
++      stopPolling();
++      if (cancelled) return;
++      setError(message);
++      setStep("error");
++    };
+ 
+     const initAuth = async () => {
+       try {
+@@ -38,6 +57,7 @@ export default function KiroSocialOAuthModal({
+ 
+         const res = await fetch(`/api/oauth/kiro/social-authorize?provider=${provider}`);
+         const data = await res.json();
++        if (cancelled) return;
+ 
+         if (!res.ok) {
+           throw new Error(data.error || "Failed to start authorization");
+@@ -47,8 +67,23 @@ export default function KiroSocialOAuthModal({
+         setAuthUrl(data.authUrl || "");
+         setStep("polling");
+ 
+-        const interval = (data.interval || 5) * 1000;
+-        pollRef.current = setInterval(async () => {
++        const baseIntervalMs = Math.max(1, Number(data.interval) || 5) * 1000;
++        let currentIntervalMs = baseIntervalMs;
++        const expiresAt = Date.now() + Math.max(1, Number(data.expiresIn) || 300) * 1000;
++
++        const schedule = (delayMs: number) => {
++          if (cancelled) return;
++          pollRef.current = setTimeout(poll, delayMs);
++        };
++
++        const poll = async () => {
++          pollRef.current = null;
++          if (cancelled) return;
++          if (Date.now() >= expiresAt) {
++            fail("Authorization expired. Start the login flow again.");
++            return;
++          }
++
+           try {
+             const pollRes = await fetch("/api/oauth/kiro/social-exchange", {
+               method: "POST",
+@@ -56,36 +91,44 @@ export default function KiroSocialOAuthModal({
+               body: JSON.stringify({ deviceCode: data.deviceCode, provider, targetProvider }),
+             });
+             const pollData = await pollRes.json();
++            if (cancelled) return;
+ 
+             if (pollData.success) {
+-              if (pollRef.current) clearInterval(pollRef.current);
+-              pollRef.current = null;
++              stopPolling();
+               setStep("success");
+-              onSuccess?.();
++              onSuccessRef.current?.();
++              return;
++            }
++
++            if (!pollData.pending) {
++              fail(pollData.error || "Authorization failed");
++              return;
+             }
++
++            currentIntervalMs = getNextKiroSocialPollInterval(currentIntervalMs, pollData.error);
++            schedule(currentIntervalMs);
+           } catch {
+-            // Network error, keep polling
++            schedule(currentIntervalMs);
+           }
+-        }, interval);
++        };
++
++        schedule(baseIntervalMs);
+       } catch (err: any) {
+-        setError(err.message);
+-        setStep("error");
++        fail(err.message);
+       }
+     };
+ 
+     initAuth();
+ 
+     return () => {
+-      if (pollRef.current) {
+-        clearInterval(pollRef.current);
+-        pollRef.current = null;
+-      }
++      cancelled = true;
++      stopPolling();
+     };
+-  }, [isOpen, provider]);
++  }, [isOpen, provider, targetProvider]);
+ 
+   const handleClose = () => {
+     if (pollRef.current) {
+-      clearInterval(pollRef.current);
++      clearTimeout(pollRef.current);
+       pollRef.current = null;
+     }
+     onClose();
+diff --git a/src/shared/constants/pricing/oauth-subscriptions.ts b/src/shared/constants/pricing/oauth-subscriptions.ts
+index bf7f2136c..5dddd003f 100644
+--- a/src/shared/constants/pricing/oauth-subscriptions.ts
++++ b/src/shared/constants/pricing/oauth-subscriptions.ts
+@@ -447,13 +447,6 @@ export const DEFAULT_PRICING_OAUTH = {
+     },
+   },
+   kiro: {
+-    "claude-fable-5": {
+-      input: 15.0,
+-      output: 75.0,
+-      cached: 7.5,
+-      reasoning: 112.5,
+-      cache_creation: 15.0,
+-    },
+     "claude-sonnet-4.5": {
+       input: 3.0,
+       output: 15.0,
+@@ -468,42 +461,6 @@ export const DEFAULT_PRICING_OAUTH = {
+       reasoning: 2.5,
+       cache_creation: 0.5,
+     },
+-    // Models from issue #334
+-    "claude-sonnet-4": {
+-      input: 3.0,
+-      output: 15.0,
+-      cached: 1.5,
+-      reasoning: 15.0,
+-      cache_creation: 3.0,
+-    },
+-    "claude-opus-4.8": {
+-      input: 15.0,
+-      output: 75.0,
+-      cached: 7.5,
+-      reasoning: 75.0,
+-      cache_creation: 15.0,
+-    },
+-    "claude-opus-4.7": {
+-      input: 15.0,
+-      output: 75.0,
+-      cached: 7.5,
+-      reasoning: 75.0,
+-      cache_creation: 15.0,
+-    },
+-    "claude-opus-4.6": {
+-      input: 15.0,
+-      output: 75.0,
+-      cached: 7.5,
+-      reasoning: 75.0,
+-      cache_creation: 15.0,
+-    },
+-    "claude-sonnet-4.6": {
+-      input: 3.0,
+-      output: 15.0,
+-      cached: 1.5,
+-      reasoning: 15.0,
+-      cache_creation: 3.0,
+-    },
+     "claude-sonnet-5": {
+       input: 3.0,
+       output: 15.0,
+@@ -555,22 +512,6 @@ export const DEFAULT_PRICING_OAUTH = {
+       reasoning: 8.0,
+       cache_creation: 2.0,
+     },
+-    // Kiro "Auto" pricing — retained for both the upstream "auto" id and the
+-    // local "auto-kiro" selector. The translator maps auto-kiro back to auto.
+-    auto: {
+-      input: 3.0,
+-      output: 15.0,
+-      cached: 1.5,
+-      reasoning: 15.0,
+-      cache_creation: 3.0,
+-    },
+-    "auto-kiro": {
+-      input: 3.0,
+-      output: 15.0,
+-      cached: 1.5,
+-      reasoning: 15.0,
+-      cache_creation: 3.0,
+-    },
+     // Kiro's GPT-5.6 family (kiro.dev/changelog/models, 2026-07-14) — same
+     // per-tier rates the codex/openai aliases already bill at.
+     "gpt-5.6-sol": GPT_5_6_SOL_PRICING,
+diff --git a/tests/unit/kiro-auto-import-name-dedup-3615.test.ts b/tests/unit/kiro-auto-import-name-dedup-3615.test.ts
+index e491b6d30..f354514ac 100644
+--- a/tests/unit/kiro-auto-import-name-dedup-3615.test.ts
++++ b/tests/unit/kiro-auto-import-name-dedup-3615.test.ts
+@@ -35,8 +35,15 @@ test.after(() => {
+ import {
+   deriveKiroConnectionName,
+   findKiroConnectionByProfileArn,
++  resolveKiroCliAuthMethod,
+ } from "../../src/app/api/oauth/kiro/auto-import/route.ts";
+ 
++test("kiro-cli source keeps Builder ID and IdC as distinct auth methods", () => {
++  assert.equal(resolveKiroCliAuthMethod(undefined), "builder-id");
++  assert.equal(resolveKiroCliAuthMethod(null), "builder-id");
++  assert.equal(resolveKiroCliAuthMethod("arn:aws:codewhisperer:eu-central-1:1:profile/IDC"), "idc");
++});
++
+ // ── (a) Display name derivation ───────────────────────────────────────────────
+ 
+ test("derives email as name when email is present", () => {
+@@ -132,10 +139,7 @@ test("findKiroConnectionByProfileArn returns the matching connection", async ()
+ });
+ 
+ test("findKiroConnectionByProfileArn returns null when no match exists", async () => {
+-  const result = await findKiroConnectionByProfileArn(
+-    [fakeConnectionNoArn],
+-    FAKE_PROFILE_ARN
+-  );
++  const result = await findKiroConnectionByProfileArn([fakeConnectionNoArn], FAKE_PROFILE_ARN);
+   assert.equal(result, null);
+ });
+ 
+@@ -145,9 +149,6 @@ test("findKiroConnectionByProfileArn returns null for empty connection list", as
+ });
+ 
+ test("findKiroConnectionByProfileArn returns null when profileArn arg is undefined", async () => {
+-  const result = await findKiroConnectionByProfileArn(
+-    [fakeConnectionWithArn],
+-    undefined
+-  );
++  const result = await findKiroConnectionByProfileArn([fakeConnectionWithArn], undefined);
+   assert.equal(result, null);
+ });
+diff --git a/tests/unit/kiro-available-models.test.ts b/tests/unit/kiro-available-models.test.ts
+index 58a0841f3..d1cf7ae0c 100644
+--- a/tests/unit/kiro-available-models.test.ts
++++ b/tests/unit/kiro-available-models.test.ts
+@@ -7,9 +7,10 @@ import {
+   buildKiroModelsEndpoints,
+   fetchKiroAvailableModels,
+   clearKiroModelCache,
++  isObsoleteKiroModelAlias,
+ } from "../../open-sse/services/kiroModels.ts";
+ 
+-const FALLBACK = [{ id: "auto-kiro", name: "Auto" }, { id: "claude-sonnet-4.6" }];
++const FALLBACK = [{ id: "claude-sonnet-4.5" }, { id: "deepseek-3.2" }];
+ 
+ beforeEach(() => {
+   clearKiroModelCache();
+@@ -75,14 +76,7 @@ test("fetchKiroAvailableModels: simple (Builder ID) account, us-east-1, origin-o
+   });
+ 
+   assert.equal(result.source, "api");
+-  assert.deepEqual(result.models.map((m) => m.id).sort(), [
+-    "auto",
+-    "auto-thinking",
+-    "claude-sonnet-4.6",
+-    "claude-sonnet-4.6-agentic",
+-    "claude-sonnet-4.6-thinking",
+-    "claude-sonnet-4.6-thinking-agentic",
+-  ]);
++  assert.deepEqual(result.models.map((m) => m.id).sort(), ["auto", "claude-sonnet-4.6"]);
+   assert.deepEqual(calls, [
+     "https://q.us-east-1.amazonaws.com/ListAvailableModels?origin=AI_EDITOR",
+   ]);
+@@ -106,12 +100,7 @@ test("fetchKiroAvailableModels: IAM Identity Center account, region-matched endp
+   assert.equal(result.source, "api");
+   assert.deepEqual(
+     result.models.map((m) => m.id),
+-    [
+-      "claude-opus-4.8",
+-      "claude-opus-4.8-thinking",
+-      "claude-opus-4.8-agentic",
+-      "claude-opus-4.8-thinking-agentic",
+-    ]
++    ["claude-opus-4.8"]
+   );
+   assert.equal(
+     calls[0],
+@@ -142,12 +131,7 @@ test("fetchKiroAvailableModels: retries with profileArn when origin-only fails",
+   assert.equal(result.source, "api");
+   assert.deepEqual(
+     result.models.map((m) => m.id),
+-    [
+-      "claude-sonnet-4.6",
+-      "claude-sonnet-4.6-thinking",
+-      "claude-sonnet-4.6-agentic",
+-      "claude-sonnet-4.6-thinking-agentic",
+-    ]
++    ["claude-sonnet-4.6"]
+   );
+   // origin-only attempted first, then profileArn retry.
+   assert.equal(calls.length, 2);
+@@ -155,6 +139,58 @@ test("fetchKiroAvailableModels: retries with profileArn when origin-only fails",
+   assert.ok(calls[1].includes("profileArn=arn%3Aaws%3Acodewhisperer"));
+ });
+ 
++test("fetchKiroAvailableModels only exposes a functional Thinking alias", async () => {
++  const fetchImpl = (async () =>
++    jsonResponse({
++      models: [
++        { modelId: "claude-sonnet-5" },
++        { modelId: "claude-sonnet-4.5" },
++        { modelId: "deepseek-3.2" },
++      ],
++    })) as unknown as typeof fetch;
++
++  const result = await fetchKiroAvailableModels({
++    accessToken: "tok",
++    providerSpecificData: { authMethod: "builder-id" },
++    fetchImpl,
++  });
++
++  assert.deepEqual(
++    result.models.map((model) => model.id),
++    ["claude-sonnet-5", "claude-sonnet-5-thinking", "claude-sonnet-4.5", "deepseek-3.2"]
++  );
++});
++
++test("isObsoleteKiroModelAlias filters stale cached aliases", () => {
++  assert.equal(isObsoleteKiroModelAlias("auto-kiro"), true);
++  assert.equal(isObsoleteKiroModelAlias("claude-sonnet-5-agentic"), true);
++  assert.equal(isObsoleteKiroModelAlias("claude-sonnet-4.5-thinking"), true);
++  assert.equal(isObsoleteKiroModelAlias("claude-sonnet-5-thinking"), false);
++  assert.equal(isObsoleteKiroModelAlias("claude-sonnet-4.5"), false);
++});
++
++test("fetchKiroAvailableModels sends auth-method headers for API key and External IdP", async () => {
++  const seen: Array<Headers> = [];
++  const fetchImpl = (async (_url: string, init?: RequestInit) => {
++    seen.push(new Headers(init?.headers));
++    return jsonResponse({ models: [{ modelId: "claude-sonnet-5" }] });
++  }) as unknown as typeof fetch;
++
++  await fetchKiroAvailableModels({
++    accessToken: "api-key",
++    providerSpecificData: { authMethod: "api_key", clientId: "api-client" },
++    fetchImpl,
++  });
++  await fetchKiroAvailableModels({
++    accessToken: "external-token",
++    providerSpecificData: { authMethod: "external_idp", clientId: "external-client" },
++    fetchImpl,
++  });
++
++  assert.equal(seen[0].get("tokentype"), "API_KEY");
++  assert.equal(seen[1].get("tokentype"), "EXTERNAL_IDP");
++});
++
+ test("fetchKiroAvailableModels: falls back to static catalog when no token", async () => {
+   const result = await fetchKiroAvailableModels({
+     accessToken: "",
+@@ -164,7 +200,7 @@ test("fetchKiroAvailableModels: falls back to static catalog when no token", asy
+   assert.equal(result.source, "fallback");
+   assert.deepEqual(
+     result.models.map((m) => m.id),
+-    ["auto-kiro", "claude-sonnet-4.6"]
++    ["claude-sonnet-4.5", "deepseek-3.2"]
+   );
+ });
+ 
+@@ -180,6 +216,6 @@ test("fetchKiroAvailableModels: falls back when every upstream attempt fails", a
+   assert.equal(result.source, "fallback");
+   assert.deepEqual(
+     result.models.map((m) => m.id),
+-    ["auto-kiro", "claude-sonnet-4.6"]
++    ["claude-sonnet-4.5", "deepseek-3.2"]
+   );
+ });
+diff --git a/tests/unit/kiro-connection-identity.test.ts b/tests/unit/kiro-connection-identity.test.ts
+new file mode 100644
+index 000000000..c5ac2b134
+--- /dev/null
++++ b/tests/unit/kiro-connection-identity.test.ts
+@@ -0,0 +1,81 @@
++import test from "node:test";
++import assert from "node:assert/strict";
++
++import { findKiroConnectionByIdentity } from "@/lib/oauth/kiroConnectionIdentity";
++
++const connections = [
++  {
++    id: "profile-match",
++    authType: "oauth",
++    name: "Kiro profile",
++    email: "profile@example.com",
++    providerSpecificData: { profileArn: "arn:aws:codewhisperer:us-east-1:1:profile/A" },
++  },
++  {
++    id: "builder-match",
++    authType: "oauth",
++    name: "Kiro Builder ID",
++    providerSpecificData: { clientId: "builder-client" },
++  },
++  {
++    id: "email-match",
++    authType: "oauth",
++    name: "Kiro Social",
++    email: "social@example.com",
++    providerSpecificData: {},
++  },
++  {
++    id: "name-match",
++    authType: "apikey",
++    name: "Kiro API Key (us-east-1, abc123)",
++    providerSpecificData: { authMethod: "api_key" },
++  },
++];
++
++test("findKiroConnectionByIdentity prefers an exact trimmed profile ARN", () => {
++  const match = findKiroConnectionByIdentity(connections, {
++    profileArn: " arn:aws:codewhisperer:us-east-1:1:profile/A ",
++    clientId: "builder-client",
++  });
++  assert.equal(match?.id, "profile-match");
++});
++
++test("findKiroConnectionByIdentity deduplicates profileless Builder ID by clientId", () => {
++  const match = findKiroConnectionByIdentity(connections, { clientId: " builder-client " });
++  assert.equal(match?.id, "builder-match");
++});
++
++test("findKiroConnectionByIdentity falls back to email and API-key fingerprint name", () => {
++  assert.equal(
++    findKiroConnectionByIdentity(connections, { email: "SOCIAL@EXAMPLE.COM" })?.id,
++    "email-match"
++  );
++  assert.equal(
++    findKiroConnectionByIdentity(connections, {
++      name: "kiro api key (us-east-1, ABC123)",
++    })?.id,
++    "name-match"
++  );
++});
++
++test("findKiroConnectionByIdentity never matches empty identity values", () => {
++  assert.equal(findKiroConnectionByIdentity(connections, {}), null);
++});
++
++test("findKiroConnectionByIdentity never overwrites a different authentication type", () => {
++  assert.equal(
++    findKiroConnectionByIdentity(connections, {
++      authType: "apikey",
++      profileArn: "arn:aws:codewhisperer:us-east-1:1:profile/A",
++      email: "profile@example.com",
++    }),
++    null
++  );
++  assert.equal(
++    findKiroConnectionByIdentity(connections, {
++      authType: "oauth",
++      name: "Kiro API Key (us-east-1, abc123)",
++    }),
++    null
++  );
++});
 diff --git a/tests/unit/kiro-iam-profilearn-usage.test.ts b/tests/unit/kiro-iam-profilearn-usage.test.ts
-index 9bfc7f413..b8bb7fa2e 100644
+index 9bfc7f413..50e3f265b 100644
 --- a/tests/unit/kiro-iam-profilearn-usage.test.ts
 +++ b/tests/unit/kiro-iam-profilearn-usage.test.ts
 @@ -131,6 +131,52 @@ test("discoverKiroProfileArn returns undefined for empty profiles or non-ok resp
    }
  });
  
-+test("getKiroUsage fetches Builder ID and kiro-cli quotas without a profile ARN", async () => {
++test("getKiroUsage fetches Builder ID quotas without a profile ARN", async () => {
 +  const originalFetch = globalThis.fetch;
-+  const authMethods = ["builder-id", "kiro-cli"];
++  const authMethods = ["builder-id"];
 +  const requests: Array<{ target: string; body: Record<string, unknown> }> = [];
 +
 +  globalThis.fetch = (async (_url: string, init?: RequestInit) => {
@@ -95,6 +1700,400 @@ index 9bfc7f413..b8bb7fa2e 100644
  // Regression: when a Kiro account added via Google/GitHub social-auth (authMethod "imported"
  // with provider "Google" or "Github" — set by /api/oauth/kiro/social-exchange/route.ts) has its
  // token rejected by the AWS CodeWhisperer quota API (401/403), surface a clear "auth expired,
+diff --git a/tests/unit/kiro-iam-region.test.ts b/tests/unit/kiro-iam-region.test.ts
+index a3e8bf861..180251051 100644
+--- a/tests/unit/kiro-iam-region.test.ts
++++ b/tests/unit/kiro-iam-region.test.ts
+@@ -91,6 +91,27 @@ test("kiro.postExchange returns null when no profile is available (AWS Builder I
+   }
+ });
+ 
++test("kiro.postExchange skips profile discovery for an identified Builder ID flow", async () => {
++  const originalFetch = global.fetch;
++  let calls = 0;
++  global.fetch = (async () => {
++    calls += 1;
++    throw new Error("Builder ID must not probe ListAvailableProfiles");
++  }) as typeof fetch;
++
++  try {
++    const extra = await kiro.postExchange({
++      access_token: "builder-token",
++      _region: "us-east-1",
++      _authMethod: "builder-id",
++    });
++    assert.equal(extra, null);
++    assert.equal(calls, 0);
++  } finally {
++    global.fetch = originalFetch;
++  }
++});
++
+ test("kiro.postExchange never throws on network failure", async () => {
+   const originalFetch = global.fetch;
+   global.fetch = (async () => {
+@@ -112,6 +133,7 @@ test("kiro.mapTokens stores the discovered profileArn from postExchange extra",
+     mapped.providerSpecificData.profileArn,
+     "arn:aws:codewhisperer:eu-central-1:820374639727:profile/RX4VNUHGHGAQ"
+   );
++  assert.equal(mapped.providerSpecificData.authMethod, "idc");
+ });
+ 
+ test("kiro.mapTokens omits profileArn when postExchange found none", () => {
+@@ -120,4 +142,5 @@ test("kiro.mapTokens omits profileArn when postExchange found none", () => {
+     null
+   );
+   assert.equal("profileArn" in mapped.providerSpecificData, false);
++  assert.equal(mapped.providerSpecificData.authMethod, "builder-id");
+ });
+diff --git a/tests/unit/kiro-model-aliases.test.ts b/tests/unit/kiro-model-aliases.test.ts
+new file mode 100644
+index 000000000..b9635719c
+--- /dev/null
++++ b/tests/unit/kiro-model-aliases.test.ts
+@@ -0,0 +1,18 @@
++import test from "node:test";
++import assert from "node:assert/strict";
++
++import { buildKiroPayload } from "../../open-sse/translator/request/openai-to-kiro.ts";
++
++const body = { messages: [{ role: "user", content: "Hello" }] };
++
++test("buildKiroPayload rejects removed or non-functional Kiro aliases", () => {
++  assert.throws(() => buildKiroPayload("auto-kiro", body, true, {}), /not a real Kiro/);
++  assert.throws(
++    () => buildKiroPayload("claude-sonnet-5-agentic", body, true, {}),
++    /agentic aliases are not supported/
++  );
++  assert.throws(
++    () => buildKiroPayload("claude-sonnet-4.5-thinking", body, true, {}),
++    /does not support the '-thinking' alias/
++  );
++});
+diff --git a/tests/unit/kiro-social-poll.test.ts b/tests/unit/kiro-social-poll.test.ts
+new file mode 100644
+index 000000000..359cfa6d0
+--- /dev/null
++++ b/tests/unit/kiro-social-poll.test.ts
+@@ -0,0 +1,46 @@
++import test from "node:test";
++import assert from "node:assert/strict";
++
++import { classifyKiroSocialPoll, getNextKiroSocialPollInterval } from "@/lib/oauth/kiroSocialPoll";
++
++test("slow_down permanently increases the polling interval for this authorization flow", () => {
++  const slowed = getNextKiroSocialPollInterval(5_000, "slow_down");
++  assert.equal(slowed, 10_000);
++  assert.equal(getNextKiroSocialPollInterval(slowed, "authorization_pending"), 10_000);
++  assert.equal(getNextKiroSocialPollInterval(slowed, "network_error"), 10_000);
++});
++
++test("classifyKiroSocialPoll keeps only documented pending states retryable", () => {
++  assert.deepEqual(classifyKiroSocialPoll(false, 400, { error: "authorization_pending" }), {
++    kind: "pending",
++    error: "authorization_pending",
++  });
++  assert.deepEqual(classifyKiroSocialPoll(false, 429, { error: "slow_down" }), {
++    kind: "pending",
++    error: "slow_down",
++  });
++});
++
++test("classifyKiroSocialPoll stops on denied, expired and malformed responses", () => {
++  assert.deepEqual(classifyKiroSocialPoll(false, 403, { error: "access_denied" }), {
++    kind: "error",
++    error: "access_denied",
++    status: 403,
++  });
++  assert.deepEqual(classifyKiroSocialPoll(true, 200, { error: "expired_token" }), {
++    kind: "error",
++    error: "expired_token",
++    status: 400,
++  });
++  assert.deepEqual(classifyKiroSocialPoll(true, 200, {}), {
++    kind: "error",
++    error: "invalid_token_response",
++    status: 502,
++  });
++});
++
++test("classifyKiroSocialPoll accepts a token response", () => {
++  assert.deepEqual(classifyKiroSocialPoll(true, 200, { accessToken: "token" }), {
++    kind: "success",
++  });
++});
+diff --git a/tests/unit/oauth-kiro-idc.test.ts b/tests/unit/oauth-kiro-idc.test.ts
+index 015ffe259..b0e082fa7 100644
+--- a/tests/unit/oauth-kiro-idc.test.ts
++++ b/tests/unit/oauth-kiro-idc.test.ts
+@@ -49,6 +49,7 @@ test("kiro.requestDeviceCode returns resolved region for IDC token endpoint", as
+     });
+ 
+     assert.equal(result._region, "ap-southeast-1");
++    assert.equal(result._authMethod, "idc");
+     assert.equal(result._clientId, "client-ap");
+     assert.equal(result._clientSecret, "secret-ap");
+ 
+@@ -80,13 +81,19 @@ test("kiro.pollToken uses region provided by extraData", async () => {
+       { tokenUrl: "https://oidc.us-east-1.amazonaws.com/token" },
+       "device-code",
+       null,
+-      { _clientId: "cid", _clientSecret: "csecret", _region: "ap-southeast-1" }
++      {
++        _clientId: "cid",
++        _clientSecret: "csecret",
++        _region: "ap-southeast-1",
++        _authMethod: "idc",
++      }
+     );
+ 
+     assert.equal(requestedUrl, "https://oidc.ap-southeast-1.amazonaws.com/token");
+     assert.equal(result.ok, true);
+     assert.equal(result.data.access_token, "access");
+     assert.equal(result.data._region, "ap-southeast-1");
++    assert.equal(result.data._authMethod, "idc");
+   } finally {
+     global.fetch = originalFetch;
+   }
+@@ -100,6 +107,7 @@ test("kiro.mapTokens persists region into providerSpecificData", () => {
+     _clientId: "cid",
+     _clientSecret: "csec",
+     _region: "ap-southeast-1",
++    _authMethod: "idc",
+   });
+ 
+   assert.equal(mapped.accessToken, "at");
+@@ -108,6 +116,7 @@ test("kiro.mapTokens persists region into providerSpecificData", () => {
+   assert.equal(mapped.providerSpecificData.clientId, "cid");
+   assert.equal(mapped.providerSpecificData.clientSecret, "csec");
+   assert.equal(mapped.providerSpecificData.region, "ap-southeast-1");
++  assert.equal(mapped.providerSpecificData.authMethod, "idc");
+ });
+ 
+ test("kiro.mapTokens defaults region to undefined when not provided", () => {
+@@ -120,4 +129,5 @@ test("kiro.mapTokens defaults region to undefined when not provided", () => {
+   });
+ 
+   assert.equal(mapped.providerSpecificData.region, undefined);
++  assert.equal(mapped.providerSpecificData.authMethod, "builder-id");
+ });
+diff --git a/tests/unit/shared/components/KiroAuthModal.test.tsx b/tests/unit/shared/components/KiroAuthModal.test.tsx
+index 948072d21..f363e234e 100644
+--- a/tests/unit/shared/components/KiroAuthModal.test.tsx
++++ b/tests/unit/shared/components/KiroAuthModal.test.tsx
+@@ -2,6 +2,7 @@
+ import React from "react";
+ import { act } from "react";
+ import { createRoot } from "react-dom/client";
++import { NextIntlClientProvider } from "next-intl";
+ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+ 
+ const cleanupCallbacks: Array<() => void> = [];
+@@ -21,6 +22,14 @@ function setInputValue(input: HTMLInputElement, value: string): void {
+   input.dispatchEvent(new Event("input", { bubbles: true }));
+ }
+ 
++function withIntl(children: React.ReactNode) {
++  return (
++    <NextIntlClientProvider locale="en" messages={{ common: { close: "Close" } }}>
++      {children}
++    </NextIntlClientProvider>
++  );
++}
++
+ describe("KiroAuthModal", () => {
+   beforeEach(() => {
+     (
+@@ -43,7 +52,9 @@ describe("KiroAuthModal", () => {
+     const onMethodSelect = vi.fn();
+ 
+     await act(async () => {
+-      root.render(<KiroAuthModal isOpen onClose={vi.fn()} onMethodSelect={onMethodSelect} />);
++      root.render(
++        withIntl(<KiroAuthModal isOpen onClose={vi.fn()} onMethodSelect={onMethodSelect} />)
++      );
+     });
+ 
+     const googleButton = Array.from(container.querySelectorAll("button")).find((button) =>
+@@ -78,7 +89,9 @@ describe("KiroAuthModal", () => {
+ 
+     try {
+       await act(async () => {
+-        root.render(<KiroAuthModal isOpen onClose={onClose} onMethodSelect={onMethodSelect} />);
++        root.render(
++          withIntl(<KiroAuthModal isOpen onClose={onClose} onMethodSelect={onMethodSelect} />)
++        );
+       });
+ 
+       const apiKeyButton = Array.from(container.querySelectorAll("button")).find(
+@@ -98,6 +111,8 @@ describe("KiroAuthModal", () => {
+         setInputValue(apiKeyInput, "ksk_test_key");
+       });
+ 
++      expect(apiKeyInput.type).toBe("password");
++
+       await act(async () => {
+         saveButton?.click();
+       });
+@@ -109,4 +124,93 @@ describe("KiroAuthModal", () => {
+       globalThis.fetch = originalFetch;
+     }
+   });
++
++  it("treats successful auto-import as completed instead of importing twice", async () => {
++    const { default: KiroAuthModal } = await import("@/shared/components/KiroAuthModal");
++    const container = makeContainer();
++    const root = createRoot(container);
++    const calls: string[] = [];
++    const onMethodSelect = vi.fn(() => calls.push("select"));
++    const onClose = vi.fn(() => calls.push("close"));
++    const originalFetch = globalThis.fetch;
++
++    globalThis.fetch = vi.fn(async () => {
++      return new Response(JSON.stringify({ found: true, source: "kiro-cli-sqlite" }), {
++        status: 200,
++        headers: { "Content-Type": "application/json" },
++      });
++    }) as typeof fetch;
++
++    try {
++      await act(async () => {
++        root.render(
++          withIntl(<KiroAuthModal isOpen onClose={onClose} onMethodSelect={onMethodSelect} />)
++        );
++      });
++
++      const importButton = Array.from(container.querySelectorAll("button")).find(
++        (button) => button.querySelector("h3")?.textContent === "Import Token"
++      );
++      await act(async () => {
++        importButton?.click();
++      });
++
++      expect(globalThis.fetch).toHaveBeenCalledTimes(1);
++      expect(globalThis.fetch).toHaveBeenCalledWith(
++        "/api/oauth/kiro/auto-import?targetProvider=kiro"
++      );
++      expect(onMethodSelect).toHaveBeenCalledWith("import");
++      expect(calls).toEqual(["select", "close"]);
++    } finally {
++      globalThis.fetch = originalFetch;
++    }
++  });
++
++  it("does not restart an active social login when the wrapper rerenders", async () => {
++    const { default: KiroOAuthWrapper } = await import("@/shared/components/KiroOAuthWrapper");
++    const container = makeContainer();
++    const root = createRoot(container);
++    const originalFetch = globalThis.fetch;
++    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
++      const url = String(input);
++      if (url.includes("/social-authorize")) {
++        return new Response(
++          JSON.stringify({
++            userCode: "ABCD-EFGH",
++            authUrl: "https://example.test/authorize",
++            deviceCode: "device-code",
++            interval: 60,
++            expiresIn: 300,
++          }),
++          { status: 200, headers: { "Content-Type": "application/json" } }
++        );
++      }
++      throw new Error(`Unexpected fetch: ${url}`);
++    });
++    globalThis.fetch = fetchMock as typeof fetch;
++
++    try {
++      await act(async () => {
++        root.render(withIntl(<KiroOAuthWrapper isOpen onClose={vi.fn()} onSuccess={vi.fn()} />));
++      });
++
++      const googleButton = Array.from(container.querySelectorAll("button")).find((button) =>
++        button.textContent?.includes("Google Account")
++      );
++      await act(async () => {
++        googleButton?.click();
++      });
++
++      await act(async () => {
++        root.render(withIntl(<KiroOAuthWrapper isOpen onClose={vi.fn()} onSuccess={vi.fn()} />));
++      });
++
++      expect(
++        fetchMock.mock.calls.filter(([input]) => String(input).includes("/social-authorize"))
++      ).toHaveLength(1);
++    } finally {
++      await act(async () => root.unmount());
++      globalThis.fetch = originalFetch;
++    }
++  });
+ });
+diff --git a/tests/unit/translator-openai-to-kiro.test.ts b/tests/unit/translator-openai-to-kiro.test.ts
+index 4cf19efeb..803aa39fd 100644
+--- a/tests/unit/translator-openai-to-kiro.test.ts
++++ b/tests/unit/translator-openai-to-kiro.test.ts
+@@ -966,7 +966,7 @@ test("OpenAI -> Kiro serializes non-string role:tool content to non-empty text (
+ });
+ 
+ // Only Claude models support images in Kiro. Non-Claude Kiro models
+-// (deepseek-3.2, minimax-m2.5, glm-5, qwen3-coder-next, auto-kiro) must NOT
++// (deepseek-3.2, minimax-m2.5, glm-5, qwen3-coder-next) must NOT
+ // receive image attachments — attaching them is wrong for those models.
+ const PNG_DATA_URL = "data:image/png;base64,aGVsbG8=";
+ 
+@@ -1016,8 +1016,8 @@ test("OpenAI -> Kiro drops images for non-Claude models (deepseek)", () => {
+   );
+ });
+ 
+-test("OpenAI -> Kiro drops images for non-Claude models (glm / auto-kiro)", () => {
+-  for (const model of ["glm-5", "minimax-m2.5", "qwen3-coder-next", "auto-kiro"]) {
++test("OpenAI -> Kiro drops images for other non-Claude Kiro models", () => {
++  for (const model of ["glm-5", "minimax-m2.5", "qwen3-coder-next"]) {
+     const result = buildImageRequest(model);
+     const images = result.conversationState.currentMessage.userInputMessage.images;
+     assert.ok(
+@@ -1031,7 +1031,7 @@ test("buildKiroPayload rejects the Anthropic-only [1m] context suffix before Bed
+   const body = { messages: [{ role: "user", content: "Hello" }] };
+ 
+   assert.throws(
+-    () => buildKiroPayload("claude-opus-4.7-thinking-agentic[1m]", body, true, {}),
++    () => buildKiroPayload("claude-sonnet-5-thinking[1m]", body, true, {}),
+     /\[1m\]' suffix is not supported by Kiro upstream/,
+     "kr/* model ids carrying [1m] must be rejected, not forwarded to AWS Bedrock"
+   );
+@@ -1046,14 +1046,14 @@ test("buildKiroPayload accepts kr/* model ids without the [1m] suffix", () => {
+   );
+ });
+ 
+-test("buildKiroPayload strips local Kiro selector suffixes before upstream", () => {
++test("buildKiroPayload strips the supported Thinking selector before upstream", () => {
+   const body = { messages: [{ role: "user", content: "Hello" }] };
+ 
+-  const result = buildKiroPayload("claude-sonnet-5-thinking-agentic", body, true, {});
++  const result = buildKiroPayload("claude-sonnet-5-thinking", body, true, {});
+   assert.equal(
+     result.conversationState.currentMessage.userInputMessage.modelId,
+     "claude-sonnet-5",
+-    "local -thinking/-agentic aliases must not be forwarded to Kiro"
++    "the local -thinking alias must not be forwarded to Kiro"
+   );
+   assert.equal(
+     result.additionalModelRequestFields?.output_config?.effort,
+@@ -1062,13 +1062,6 @@ test("buildKiroPayload strips local Kiro selector suffixes before upstream", ()
+   );
+ });
+ 
+-test("buildKiroPayload maps auto-kiro selector to Kiro auto upstream id", () => {
+-  const body = { messages: [{ role: "user", content: "Hello" }] };
+-
+-  const result = buildKiroPayload("auto-kiro", body, true, {});
+-  assert.equal(result.conversationState.currentMessage.userInputMessage.modelId, "auto");
+-});
+-
+ // Regression for upstream decolua/9router PR #2270: the dash->dot normalization's
+ // trailing minor-version group must be bounded (1-2 digits), otherwise a
+ // date-suffixed Claude model id (e.g. claude-opus-4-20250514) gets corrupted into
 diff --git a/tests/unit/usage-service-hardening.test.ts b/tests/unit/usage-service-hardening.test.ts
 index c2185d9e7..111006526 100644
 --- a/tests/unit/usage-service-hardening.test.ts

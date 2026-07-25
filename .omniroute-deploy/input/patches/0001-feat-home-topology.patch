@@ -1,10 +1,10 @@
-diff --git a/changelog.d/features/home-topology-live-feed.md b/changelog.d/features/home-topology-live-feed.md
+diff --git a/changelog.d/features/8450-home-topology-live-feed.md b/changelog.d/features/8450-home-topology-live-feed.md
 new file mode 100644
-index 000000000..209ffe641
+index 000000000..ac47ccfa5
 --- /dev/null
-+++ b/changelog.d/features/home-topology-live-feed.md
++++ b/changelog.d/features/8450-home-topology-live-feed.md
 @@ -0,0 +1 @@
-+- **feat(home):** the home Provider Topology now shows a logo-only router core with an electric "kame beam" on active links, a live **Recent Requests** panel (polls `/api/usage/call-logs` every ~3s, gated by the topology appearance toggle + page visibility), and only surfaces providers with a healthy connection or real traffic — untested/failing connections no longer clutter the map.
++- **feat(home):** the home Provider Topology now shows a logo-only router core with an electric "kame beam" on active links, a live **Recent Requests** panel (polls `/api/usage/call-logs` every ~3s, gated by the topology appearance toggle + page visibility), capacity-bounded concentric rings with stable alphabetical slots so many providers no longer overlap, and only surfaces providers with an enabled connection — untested/failing connections no longer clutter the map. All topology animations honour `prefers-reduced-motion` ([#8450](https://github.com/diegosouzapw/OmniRoute/pull/8450)) — thanks @nguyenha935
 diff --git a/src/app/(dashboard)/dashboard/HomePageClient.tsx b/src/app/(dashboard)/dashboard/HomePageClient.tsx
 index 24cec3140..0b9f66705 100644
 --- a/src/app/(dashboard)/dashboard/HomePageClient.tsx
@@ -359,7 +359,7 @@ index 000000000..abe6f57ed
 +  );
 +}
 diff --git a/src/app/(dashboard)/home/ProviderTopology.tsx b/src/app/(dashboard)/home/ProviderTopology.tsx
-index 1b19cd230..00347798b 100644
+index 2324d93d8..00347798b 100644
 --- a/src/app/(dashboard)/home/ProviderTopology.tsx
 +++ b/src/app/(dashboard)/home/ProviderTopology.tsx
 @@ -2,11 +2,13 @@
@@ -377,19 +377,25 @@ index 1b19cd230..00347798b 100644
  import { edgeStyle, FLOW_EDGE_COLORS } from "@/shared/components/flow/edgeStyles";
  import { getFallbackProviderColor } from "@/shared/utils/providerFallbackColor";
  import { resolveTopologyNodeLabel } from "./topologyLabel";
-@@ -41,28 +43,24 @@ type ProviderNodeData = {
+@@ -41,34 +43,24 @@ type ProviderNodeData = {
    providerId: string;
    active: boolean;
    error: boolean;
 -  /** Connection-health base state: a healthy connection with no in-flight traffic. */
 -  healthy: boolean;
+-  /** Most recently routed provider. Orthogonal to health — it can be last *and* healthy. */
+-  last: boolean;
  };
  
  function ProviderNode({ data }: { data: ProviderNodeData }) {
--  const { label, color, providerId, active, error, healthy } = data;
+-  const { label, color, providerId, active, error, healthy, last } = data;
 +  const { label, color, providerId, active, error } = data;
    const GREEN = FLOW_EDGE_COLORS.active;
    const RED = FLOW_EDGE_COLORS.error;
+-  const AMBER = FLOW_EDGE_COLORS.last;
+-  // "Last routed" is a traffic annotation, not a health state: the border keeps saying
+-  // whether the connection is up, and only the dot turns amber to mark recency.
+-  const dotColor = active ? color : last ? AMBER : GREEN;
  
    return (
      <div
@@ -415,7 +421,7 @@ index 1b19cd230..00347798b 100644
        }}
      >
        <Handle
-@@ -100,13 +98,13 @@ function ProviderNode({ data }: { data: ProviderNodeData }) {
+@@ -106,14 +98,14 @@ function ProviderNode({ data }: { data: ProviderNodeData }) {
        <span
          className="text-xs font-medium truncate flex-1"
          style={{
@@ -426,12 +432,14 @@ index 1b19cd230..00347798b 100644
          {label}
        </span>
  
--      {(active || error || healthy) && (
+-      {(active || error || healthy || last) && (
+-        <StatusDot color={dotColor} error={error} pulse={active || error} />
 +      {(active || error) && (
-         <StatusDot color={active ? color : GREEN} error={error} pulse={active || error} />
++        <StatusDot color={active ? color : GREEN} error={error} pulse={active || error} />
        )}
      </div>
-@@ -116,8 +114,13 @@ function ProviderNode({ data }: { data: ProviderNodeData }) {
+   );
+@@ -122,8 +114,13 @@ function ProviderNode({ data }: { data: ProviderNodeData }) {
  type RouterNodeData = { activeCount: number };
  
  function RouterNode({ data }: { data: RouterNodeData }) {
@@ -446,7 +454,7 @@ index 1b19cd230..00347798b 100644
        <Handle
          type="source"
          position={Position.Top}
-@@ -143,12 +146,12 @@ function RouterNode({ data }: { data: RouterNodeData }) {
+@@ -149,12 +146,12 @@ function RouterNode({ data }: { data: RouterNodeData }) {
          className="!bg-transparent !border-0 !w-0 !h-0"
        />
  
@@ -465,7 +473,7 @@ index 1b19cd230..00347798b 100644
            {data.activeCount}
          </span>
        )}
-@@ -161,6 +164,10 @@ const nodeTypes: NodeTypes = {
+@@ -167,6 +164,10 @@ const nodeTypes: NodeTypes = {
    router: RouterNode as any,
  };
  
@@ -476,7 +484,7 @@ index 1b19cd230..00347798b 100644
  type ProviderHealth = "active" | "error" | "idle";
  type ProviderEntry = { id?: string; provider: string; name?: string; status?: ProviderHealth };
  
-@@ -183,8 +190,8 @@ function buildLayout(
+@@ -189,8 +190,8 @@ function buildLayout(
  ): { nodes: Node[]; edges: Edge[] } {
    const nodeW = 156;
    const nodeH = 28;
@@ -487,7 +495,7 @@ index 1b19cd230..00347798b 100644
  
    const nodes: Node[] = [];
    const edges: Edge[] = [];
-@@ -199,21 +206,13 @@ function buildLayout(
+@@ -205,21 +206,13 @@ function buildLayout(
  
    if (providers.length === 0) return { nodes, edges };
  
@@ -516,7 +524,7 @@ index 1b19cd230..00347798b 100644
  
    let provIdx = 0;
    for (let ri = 0; ri < RINGS.length && provIdx < sorted.length; ri++) {
-@@ -223,15 +222,15 @@ function buildLayout(
+@@ -229,20 +222,15 @@ function buildLayout(
      for (let i = 0; i < count; i++) {
        const p = sorted[provIdx++];
        const pid = p.provider.toLowerCase();
@@ -532,19 +540,25 @@ index 1b19cd230..00347798b 100644
 -      // still reflects "what is connected" at rest instead of going blank after a restart.
 -      const trafficError = !active && errorSet.has(pid);
 -      const last = !active && !trafficError && lastSet.has(pid);
--      const healthError = !active && !trafficError && !last && p.status === "error";
--      const healthy = !active && !trafficError && !last && !healthError && p.status === "active";
+-      // Health is orthogonal to recency: having just served a request does not make a
+-      // connection any less connected. `last` used to suppress `healthy`/`healthError`,
+-      // and because the node had no `last` visual it fell all the way through to the idle
+-      // grey — so the provider you had just used rendered *less* connected than an idle
+-      // peer, while its edge was amber. Health drives the border, `last` only the dot.
+-      const healthError = !active && !trafficError && p.status === "error";
+-      const healthy = !active && !trafficError && !healthError && p.status === "active";
 -      const error = trafficError || healthError;
 +      const error = !active && errorSet.has(pid);
 +      const last = !active && !error && lastSet.has(pid);
        const config = getProviderConfig(p.provider);
        const nodeId = `provider-${p.provider}`;
  
-@@ -250,19 +249,24 @@ function buildLayout(
+@@ -261,20 +249,24 @@ function buildLayout(
            providerId: p.provider,
            active,
            error,
 -          healthy,
+-          last,
          } satisfies ProviderNodeData,
          draggable: false,
        });
@@ -568,7 +582,7 @@ index 1b19cd230..00347798b 100644
        });
      }
    }
-@@ -296,6 +300,17 @@ export default function ProviderTopology({
+@@ -308,6 +300,17 @@ export default function ProviderTopology({
    const lastKey = lastProvider.toLowerCase();
    const errorKey = errorProvider.toLowerCase();
  
@@ -586,7 +600,7 @@ index 1b19cd230..00347798b 100644
    const activeSet = useMemo(
      () => new Set<string>(activeKey ? activeKey.split(",") : []),
      [activeKey]
-@@ -318,8 +333,15 @@ export default function ProviderTopology({
+@@ -330,8 +333,15 @@ export default function ProviderTopology({
      [providers]
    );
  
@@ -603,7 +617,7 @@ index 1b19cd230..00347798b 100644
  
    if (providers.length === 0) {
      return (
-@@ -337,6 +359,7 @@ export default function ProviderTopology({
+@@ -349,6 +359,7 @@ export default function ProviderTopology({
        nodes={nodes}
        edges={edges}
        nodeTypes={nodeTypes}
@@ -626,10 +640,10 @@ index 3b3b8ddcc..0a737ea1f 100644
      const [logs, connections, providerNodes] = await Promise.all([
        getCallLogs(filter),
 diff --git a/src/app/globals.css b/src/app/globals.css
-index 2130bda65..e70db0b34 100644
+index 2130bda65..7650a75ca 100644
 --- a/src/app/globals.css
 +++ b/src/app/globals.css
-@@ -428,6 +428,91 @@ button .material-symbols-outlined,
+@@ -428,6 +428,120 @@ button .material-symbols-outlined,
    animation: border-glow 2s ease-in-out infinite;
  }
  
@@ -718,9 +732,164 @@ index 2130bda65..e70db0b34 100644
 +    topology-edge-flicker 0.22s steps(3) infinite;
 +}
 +
++/* Accessibility: users who ask the OS for reduced motion must not get the pulsing core,
++ * the shaking logo, or the marching/flickering beam. The states themselves stay legible —
++ * the router core keeps its lit border, the beam keeps its colour and stroke — only the
++ * MOTION stops. The beam's SVG orbs/sparks are SMIL (<animate>/<animateMotion>), which
++ * CSS cannot pause, so KameBeamEdge skips rendering those particles entirely under this
++ * query (see PARTICLES_ENABLED there); this block covers the CSS-driven half. */
++@media (prefers-reduced-motion: reduce) {
++  .topology-router-core,
++  .topology-router-icon,
++  .topology-edge-kame,
++  .topology-edge-halo,
++  .topology-edge-plasma {
++    animation: none !important;
++  }
++  /* Without the marching dash these read as solid strands rather than frozen dashes. */
++  .topology-edge-kame,
++  .topology-edge-plasma {
++    stroke-dasharray: none !important;
++  }
++  /* The pulse animated transform/box-shadow; keep a static lit state so "active" is
++   * still obvious at a glance. */
++  .topology-router-core {
++    transform: none !important;
++    box-shadow:
++      0 0 8px #fde047,
++      0 0 16px color-mix(in srgb, var(--color-primary) 60%, transparent) !important;
++  }
++}
++
  /* macOS Vibrancy/Blur Effect */
  .bg-vibrancy {
    backdrop-filter: blur(20px);
+diff --git a/src/i18n/messages/ar.json b/src/i18n/messages/ar.json
+index 79428c358..6b8e29a99 100644
+--- a/src/i18n/messages/ar.json
++++ b/src/i18n/messages/ar.json
+@@ -1723,7 +1723,12 @@
+     "updateAvailableDesc": "نسخة جديدة متاحة. انقر للتحديث.",
+     "updateStarted": "بدأ التحديث...",
+     "reloadingPageAutomatically": "جارٍ إعادة تحميل الصفحة تلقائيًا...",
+-    "providerTopology": "طوبولوجيا الموفر"
++    "providerTopology": "طوبولوجيا الموفر",
++    "recentRequests": "__MISSING__:Recent Requests",
++    "recentRequestsEmpty": "__MISSING__:No requests yet.",
++    "recentRequestsModel": "__MISSING__:Model",
++    "recentRequestsTokens": "__MISSING__:In / Out",
++    "recentRequestsWhen": "__MISSING__:When"
+   },
+   "analytics": {
+     "title": "التحليلات",
+diff --git a/src/i18n/messages/az.json b/src/i18n/messages/az.json
+index be5708867..c31c6b280 100644
+--- a/src/i18n/messages/az.json
++++ b/src/i18n/messages/az.json
+@@ -1723,7 +1723,12 @@
+     "updateAvailableDesc": "A new version is available. Click to update.",
+     "updateStarted": "Update started...",
+     "reloadingPageAutomatically": "Səhifə avtomatik yenidən yüklənir...",
+-    "providerTopology": "Provayder Topologiyası"
++    "providerTopology": "Provayder Topologiyası",
++    "recentRequests": "__MISSING__:Recent Requests",
++    "recentRequestsEmpty": "__MISSING__:No requests yet.",
++    "recentRequestsModel": "__MISSING__:Model",
++    "recentRequestsTokens": "__MISSING__:In / Out",
++    "recentRequestsWhen": "__MISSING__:When"
+   },
+   "analytics": {
+     "title": "Analytics",
+diff --git a/src/i18n/messages/bg.json b/src/i18n/messages/bg.json
+index d193f2266..960a17789 100644
+--- a/src/i18n/messages/bg.json
++++ b/src/i18n/messages/bg.json
+@@ -1723,7 +1723,12 @@
+     "updateAvailableDesc": "Налична е нова версия. Кликнете, за да актуализирате.",
+     "updateStarted": "Актуализацията започна...",
+     "reloadingPageAutomatically": "Страницата се презарежда автоматично...",
+-    "providerTopology": "Топология на доставчика"
++    "providerTopology": "Топология на доставчика",
++    "recentRequests": "__MISSING__:Recent Requests",
++    "recentRequestsEmpty": "__MISSING__:No requests yet.",
++    "recentRequestsModel": "__MISSING__:Model",
++    "recentRequestsTokens": "__MISSING__:In / Out",
++    "recentRequestsWhen": "__MISSING__:When"
+   },
+   "analytics": {
+     "title": "Анализ",
+diff --git a/src/i18n/messages/bn.json b/src/i18n/messages/bn.json
+index 2ce7d6398..29efa46f1 100644
+--- a/src/i18n/messages/bn.json
++++ b/src/i18n/messages/bn.json
+@@ -1723,7 +1723,12 @@
+     "updateAvailableDesc": "A new version is available. Click to update.",
+     "updateStarted": "Update started...",
+     "reloadingPageAutomatically": "স্বয়ংক্রিয়ভাবে পৃষ্ঠা পুনরায় লোড হচ্ছে...",
+-    "providerTopology": "প্রদানকারী টপোলজি"
++    "providerTopology": "প্রদানকারী টপোলজি",
++    "recentRequests": "__MISSING__:Recent Requests",
++    "recentRequestsEmpty": "__MISSING__:No requests yet.",
++    "recentRequestsModel": "__MISSING__:Model",
++    "recentRequestsTokens": "__MISSING__:In / Out",
++    "recentRequestsWhen": "__MISSING__:When"
+   },
+   "analytics": {
+     "title": "Analytics",
+diff --git a/src/i18n/messages/cs.json b/src/i18n/messages/cs.json
+index 1ff0df078..50812d67a 100644
+--- a/src/i18n/messages/cs.json
++++ b/src/i18n/messages/cs.json
+@@ -1723,7 +1723,12 @@
+     "updateAvailableDesc": "K dispozici je nová verze. Kliknutím aktualizujte.",
+     "updateStarted": "Aktualizace začala...",
+     "reloadingPageAutomatically": "Automatické opětovné načítání stránky...",
+-    "providerTopology": "Topologie poskytovatele"
++    "providerTopology": "Topologie poskytovatele",
++    "recentRequests": "__MISSING__:Recent Requests",
++    "recentRequestsEmpty": "__MISSING__:No requests yet.",
++    "recentRequestsModel": "__MISSING__:Model",
++    "recentRequestsTokens": "__MISSING__:In / Out",
++    "recentRequestsWhen": "__MISSING__:When"
+   },
+   "analytics": {
+     "title": "Analytika",
+diff --git a/src/i18n/messages/da.json b/src/i18n/messages/da.json
+index d151871ba..a9efd30a8 100644
+--- a/src/i18n/messages/da.json
++++ b/src/i18n/messages/da.json
+@@ -1723,7 +1723,12 @@
+     "updateAvailableDesc": "En ny version er tilgængelig. Klik for at opdatere.",
+     "updateStarted": "Opdatering startet...",
+     "reloadingPageAutomatically": "Genindlæser siden automatisk...",
+-    "providerTopology": "Udbydertopologi"
++    "providerTopology": "Udbydertopologi",
++    "recentRequests": "__MISSING__:Recent Requests",
++    "recentRequestsEmpty": "__MISSING__:No requests yet.",
++    "recentRequestsModel": "__MISSING__:Model",
++    "recentRequestsTokens": "__MISSING__:In / Out",
++    "recentRequestsWhen": "__MISSING__:When"
+   },
+   "analytics": {
+     "title": "Analytics",
+diff --git a/src/i18n/messages/de.json b/src/i18n/messages/de.json
+index 0ac31fdf3..782aa4006 100644
+--- a/src/i18n/messages/de.json
++++ b/src/i18n/messages/de.json
+@@ -1723,7 +1723,12 @@
+     "updateAvailableDesc": "Eine neue Version ist verfügbar. Klicken Sie zum Aktualisieren.",
+     "updateStarted": "Aktualisierung gestartet...",
+     "reloadingPageAutomatically": "Seite wird automatisch neu geladen...",
+-    "providerTopology": "Anbietertopologie"
++    "providerTopology": "Anbietertopologie",
++    "recentRequests": "__MISSING__:Recent Requests",
++    "recentRequestsEmpty": "__MISSING__:No requests yet.",
++    "recentRequestsModel": "__MISSING__:Model",
++    "recentRequestsTokens": "__MISSING__:In / Out",
++    "recentRequestsWhen": "__MISSING__:When"
+   },
+   "analytics": {
+     "title": "Analytik",
 diff --git a/src/i18n/messages/en.json b/src/i18n/messages/en.json
 index 041809351..b3008d036 100644
 --- a/src/i18n/messages/en.json
@@ -736,6 +905,582 @@ index 041809351..b3008d036 100644
 +    "recentRequestsModel": "Model",
 +    "recentRequestsTokens": "In / Out",
 +    "recentRequestsWhen": "When"
+   },
+   "analytics": {
+     "title": "Analytics",
+diff --git a/src/i18n/messages/es.json b/src/i18n/messages/es.json
+index 2641a717e..95d18f3ab 100644
+--- a/src/i18n/messages/es.json
++++ b/src/i18n/messages/es.json
+@@ -1723,7 +1723,12 @@
+     "updateAvailableDesc": "Hay una nueva versión disponible. Haga clic para actualizar.",
+     "updateStarted": "Actualización iniciada...",
+     "reloadingPageAutomatically": "Recargando página automáticamente...",
+-    "providerTopology": "Topología del proveedor"
++    "providerTopology": "Topología del proveedor",
++    "recentRequests": "__MISSING__:Recent Requests",
++    "recentRequestsEmpty": "__MISSING__:No requests yet.",
++    "recentRequestsModel": "__MISSING__:Model",
++    "recentRequestsTokens": "__MISSING__:In / Out",
++    "recentRequestsWhen": "__MISSING__:When"
+   },
+   "analytics": {
+     "title": "Analítica",
+diff --git a/src/i18n/messages/fa.json b/src/i18n/messages/fa.json
+index 3d104cd0d..aafae10f7 100644
+--- a/src/i18n/messages/fa.json
++++ b/src/i18n/messages/fa.json
+@@ -1723,7 +1723,12 @@
+     "updateAvailableDesc": "A new version is available. Click to update.",
+     "updateStarted": "Update started...",
+     "reloadingPageAutomatically": "بارگیری مجدد صفحه به صورت خودکار...",
+-    "providerTopology": "توپولوژی ارائه دهنده"
++    "providerTopology": "توپولوژی ارائه دهنده",
++    "recentRequests": "__MISSING__:Recent Requests",
++    "recentRequestsEmpty": "__MISSING__:No requests yet.",
++    "recentRequestsModel": "__MISSING__:Model",
++    "recentRequestsTokens": "__MISSING__:In / Out",
++    "recentRequestsWhen": "__MISSING__:When"
+   },
+   "analytics": {
+     "title": "Analytics",
+diff --git a/src/i18n/messages/fi.json b/src/i18n/messages/fi.json
+index d913266f8..4528f163a 100644
+--- a/src/i18n/messages/fi.json
++++ b/src/i18n/messages/fi.json
+@@ -1723,7 +1723,12 @@
+     "updateAvailableDesc": "Uusi versio on saatavilla. Päivitä napsauttamalla.",
+     "updateStarted": "Päivitys aloitettu...",
+     "reloadingPageAutomatically": "Ladataan sivua automaattisesti uudelleen...",
+-    "providerTopology": "Palveluntarjoajan topologia"
++    "providerTopology": "Palveluntarjoajan topologia",
++    "recentRequests": "__MISSING__:Recent Requests",
++    "recentRequestsEmpty": "__MISSING__:No requests yet.",
++    "recentRequestsModel": "__MISSING__:Model",
++    "recentRequestsTokens": "__MISSING__:In / Out",
++    "recentRequestsWhen": "__MISSING__:When"
+   },
+   "analytics": {
+     "title": "Analytics",
+diff --git a/src/i18n/messages/fr.json b/src/i18n/messages/fr.json
+index 693451c4b..fe6952c9f 100644
+--- a/src/i18n/messages/fr.json
++++ b/src/i18n/messages/fr.json
+@@ -1723,7 +1723,12 @@
+     "updateAvailableDesc": "Une nouvelle version est disponible. Cliquez pour mettre à jour.",
+     "updateStarted": "Mise à jour démarrée...",
+     "reloadingPageAutomatically": "Rechargement automatique de la page...",
+-    "providerTopology": "Topologie du fournisseur"
++    "providerTopology": "Topologie du fournisseur",
++    "recentRequests": "__MISSING__:Recent Requests",
++    "recentRequestsEmpty": "__MISSING__:No requests yet.",
++    "recentRequestsModel": "__MISSING__:Model",
++    "recentRequestsTokens": "__MISSING__:In / Out",
++    "recentRequestsWhen": "__MISSING__:When"
+   },
+   "analytics": {
+     "title": "Analyse",
+diff --git a/src/i18n/messages/gu.json b/src/i18n/messages/gu.json
+index 84d66c855..58bbc66b2 100644
+--- a/src/i18n/messages/gu.json
++++ b/src/i18n/messages/gu.json
+@@ -1723,7 +1723,12 @@
+     "updateAvailableDesc": "A new version is available. Click to update.",
+     "updateStarted": "Update started...",
+     "reloadingPageAutomatically": "પૃષ્ઠને આપમેળે ફરીથી લોડ કરી રહ્યું છે...",
+-    "providerTopology": "પ્રદાતા ટોપોલોજી"
++    "providerTopology": "પ્રદાતા ટોપોલોજી",
++    "recentRequests": "__MISSING__:Recent Requests",
++    "recentRequestsEmpty": "__MISSING__:No requests yet.",
++    "recentRequestsModel": "__MISSING__:Model",
++    "recentRequestsTokens": "__MISSING__:In / Out",
++    "recentRequestsWhen": "__MISSING__:When"
+   },
+   "analytics": {
+     "title": "Analytics",
+diff --git a/src/i18n/messages/he.json b/src/i18n/messages/he.json
+index cb08730ea..469cc5487 100644
+--- a/src/i18n/messages/he.json
++++ b/src/i18n/messages/he.json
+@@ -1723,7 +1723,12 @@
+     "updateAvailableDesc": "גרסה חדשה זמינה. לחץ לעדכון.",
+     "updateStarted": "העדכון התחיל...",
+     "reloadingPageAutomatically": "טוען מחדש את הדף באופן אוטומטי...",
+-    "providerTopology": "טופולוגיה של ספק"
++    "providerTopology": "טופולוגיה של ספק",
++    "recentRequests": "__MISSING__:Recent Requests",
++    "recentRequestsEmpty": "__MISSING__:No requests yet.",
++    "recentRequestsModel": "__MISSING__:Model",
++    "recentRequestsTokens": "__MISSING__:In / Out",
++    "recentRequestsWhen": "__MISSING__:When"
+   },
+   "analytics": {
+     "title": "אנליטיקס",
+diff --git a/src/i18n/messages/hi.json b/src/i18n/messages/hi.json
+index 16559f3dd..4357cd1f7 100644
+--- a/src/i18n/messages/hi.json
++++ b/src/i18n/messages/hi.json
+@@ -1723,7 +1723,12 @@
+     "updateAvailableDesc": "A new version is available. Click to update.",
+     "updateStarted": "Update started...",
+     "reloadingPageAutomatically": "पृष्ठ स्वचालित रूप से पुनः लोड हो रहा है...",
+-    "providerTopology": "प्रदाता टोपोलॉजी"
++    "providerTopology": "प्रदाता टोपोलॉजी",
++    "recentRequests": "__MISSING__:Recent Requests",
++    "recentRequestsEmpty": "__MISSING__:No requests yet.",
++    "recentRequestsModel": "__MISSING__:Model",
++    "recentRequestsTokens": "__MISSING__:In / Out",
++    "recentRequestsWhen": "__MISSING__:When"
+   },
+   "analytics": {
+     "title": "विश्लेषिकी",
+diff --git a/src/i18n/messages/hu.json b/src/i18n/messages/hu.json
+index 6c3937f50..a001d7c62 100644
+--- a/src/i18n/messages/hu.json
++++ b/src/i18n/messages/hu.json
+@@ -1723,7 +1723,12 @@
+     "updateAvailableDesc": "Új verzió érhető el. Kattintson a frissítéshez.",
+     "updateStarted": "Frissítés elindult...",
+     "reloadingPageAutomatically": "Oldal automatikus újratöltése...",
+-    "providerTopology": "Szolgáltató topológia"
++    "providerTopology": "Szolgáltató topológia",
++    "recentRequests": "__MISSING__:Recent Requests",
++    "recentRequestsEmpty": "__MISSING__:No requests yet.",
++    "recentRequestsModel": "__MISSING__:Model",
++    "recentRequestsTokens": "__MISSING__:In / Out",
++    "recentRequestsWhen": "__MISSING__:When"
+   },
+   "analytics": {
+     "title": "Analytics",
+diff --git a/src/i18n/messages/id.json b/src/i18n/messages/id.json
+index c9f9c1579..a06aff2a3 100644
+--- a/src/i18n/messages/id.json
++++ b/src/i18n/messages/id.json
+@@ -1723,7 +1723,12 @@
+     "updateAvailableDesc": "Versi baru tersedia. Klik untuk memperbarui.",
+     "updateStarted": "Pembaruan dimulai...",
+     "reloadingPageAutomatically": "Memuat ulang halaman secara otomatis...",
+-    "providerTopology": "Topologi Penyedia"
++    "providerTopology": "Topologi Penyedia",
++    "recentRequests": "__MISSING__:Recent Requests",
++    "recentRequestsEmpty": "__MISSING__:No requests yet.",
++    "recentRequestsModel": "__MISSING__:Model",
++    "recentRequestsTokens": "__MISSING__:In / Out",
++    "recentRequestsWhen": "__MISSING__:When"
+   },
+   "analytics": {
+     "title": "Analisis",
+diff --git a/src/i18n/messages/in.json b/src/i18n/messages/in.json
+index 0599aa60b..8c3dc06ea 100644
+--- a/src/i18n/messages/in.json
++++ b/src/i18n/messages/in.json
+@@ -1723,7 +1723,12 @@
+     "updateAvailableDesc": "A new version is available. Click to update.",
+     "updateStarted": "Update started...",
+     "reloadingPageAutomatically": "Memuat ulang halaman secara otomatis...",
+-    "providerTopology": "Topologi Penyedia"
++    "providerTopology": "Topologi Penyedia",
++    "recentRequests": "__MISSING__:Recent Requests",
++    "recentRequestsEmpty": "__MISSING__:No requests yet.",
++    "recentRequestsModel": "__MISSING__:Model",
++    "recentRequestsTokens": "__MISSING__:In / Out",
++    "recentRequestsWhen": "__MISSING__:When"
+   },
+   "analytics": {
+     "title": "Analytics",
+diff --git a/src/i18n/messages/it.json b/src/i18n/messages/it.json
+index 654d58432..9a9f92be4 100644
+--- a/src/i18n/messages/it.json
++++ b/src/i18n/messages/it.json
+@@ -1723,7 +1723,12 @@
+     "updateAvailableDesc": "Una nuova versione è disponibile. Fai clic per aggiornare.",
+     "updateStarted": "Aggiornamento avviato...",
+     "reloadingPageAutomatically": "Ricaricamento pagina automaticamente...",
+-    "providerTopology": "Topologia del fornitore"
++    "providerTopology": "Topologia del fornitore",
++    "recentRequests": "__MISSING__:Recent Requests",
++    "recentRequestsEmpty": "__MISSING__:No requests yet.",
++    "recentRequestsModel": "__MISSING__:Model",
++    "recentRequestsTokens": "__MISSING__:In / Out",
++    "recentRequestsWhen": "__MISSING__:When"
+   },
+   "analytics": {
+     "title": "Analitica",
+diff --git a/src/i18n/messages/ja.json b/src/i18n/messages/ja.json
+index 2ef17f122..b65e2f7a7 100644
+--- a/src/i18n/messages/ja.json
++++ b/src/i18n/messages/ja.json
+@@ -1723,7 +1723,12 @@
+     "updateAvailableDesc": "新しいバージョンが利用可能です。クリックして更新。",
+     "updateStarted": "更新を開始しました...",
+     "reloadingPageAutomatically": "ページを自動的に再読み込みしています...",
+-    "providerTopology": "プロバイダー トポロジ"
++    "providerTopology": "プロバイダー トポロジ",
++    "recentRequests": "__MISSING__:Recent Requests",
++    "recentRequestsEmpty": "__MISSING__:No requests yet.",
++    "recentRequestsModel": "__MISSING__:Model",
++    "recentRequestsTokens": "__MISSING__:In / Out",
++    "recentRequestsWhen": "__MISSING__:When"
+   },
+   "analytics": {
+     "title": "分析",
+diff --git a/src/i18n/messages/ko.json b/src/i18n/messages/ko.json
+index 523ed7586..912490f59 100644
+--- a/src/i18n/messages/ko.json
++++ b/src/i18n/messages/ko.json
+@@ -1723,7 +1723,12 @@
+     "updateAvailableDesc": "새 버전을 사용할 수 있습니다. 클릭하여 업데이트하세요.",
+     "updateStarted": "업데이트 시작됨...",
+     "reloadingPageAutomatically": "페이지를 자동으로 새로고침하는 중...",
+-    "providerTopology": "공급자 토폴로지"
++    "providerTopology": "공급자 토폴로지",
++    "recentRequests": "__MISSING__:Recent Requests",
++    "recentRequestsEmpty": "__MISSING__:No requests yet.",
++    "recentRequestsModel": "__MISSING__:Model",
++    "recentRequestsTokens": "__MISSING__:In / Out",
++    "recentRequestsWhen": "__MISSING__:When"
+   },
+   "analytics": {
+     "title": "분석",
+diff --git a/src/i18n/messages/mr.json b/src/i18n/messages/mr.json
+index d7bd5ddef..c7d4e0854 100644
+--- a/src/i18n/messages/mr.json
++++ b/src/i18n/messages/mr.json
+@@ -1723,7 +1723,12 @@
+     "updateAvailableDesc": "A new version is available. Click to update.",
+     "updateStarted": "Update started...",
+     "reloadingPageAutomatically": "पृष्ठ स्वयंचलितपणे रीलोड करत आहे...",
+-    "providerTopology": "प्रदाता टोपोलॉजी"
++    "providerTopology": "प्रदाता टोपोलॉजी",
++    "recentRequests": "__MISSING__:Recent Requests",
++    "recentRequestsEmpty": "__MISSING__:No requests yet.",
++    "recentRequestsModel": "__MISSING__:Model",
++    "recentRequestsTokens": "__MISSING__:In / Out",
++    "recentRequestsWhen": "__MISSING__:When"
+   },
+   "analytics": {
+     "title": "Analytics",
+diff --git a/src/i18n/messages/ms.json b/src/i18n/messages/ms.json
+index b6d2d3bf0..d596787dc 100644
+--- a/src/i18n/messages/ms.json
++++ b/src/i18n/messages/ms.json
+@@ -1723,7 +1723,12 @@
+     "updateAvailableDesc": "Versi baharu tersedia. Klik untuk mengemas kini.",
+     "updateStarted": "Kemas kini bermula...",
+     "reloadingPageAutomatically": "Memuat semula halaman secara automatik...",
+-    "providerTopology": "Topologi Pembekal"
++    "providerTopology": "Topologi Pembekal",
++    "recentRequests": "__MISSING__:Recent Requests",
++    "recentRequestsEmpty": "__MISSING__:No requests yet.",
++    "recentRequestsModel": "__MISSING__:Model",
++    "recentRequestsTokens": "__MISSING__:In / Out",
++    "recentRequestsWhen": "__MISSING__:When"
+   },
+   "analytics": {
+     "title": "Analitis",
+diff --git a/src/i18n/messages/nl.json b/src/i18n/messages/nl.json
+index 8234d8482..3e8b9625f 100644
+--- a/src/i18n/messages/nl.json
++++ b/src/i18n/messages/nl.json
+@@ -1723,7 +1723,12 @@
+     "updateAvailableDesc": "Er is een nieuwe versie beschikbaar. Klik om bij te werken.",
+     "updateStarted": "Update gestart...",
+     "reloadingPageAutomatically": "Pagina automatisch herladen...",
+-    "providerTopology": "Provider-topologie"
++    "providerTopology": "Provider-topologie",
++    "recentRequests": "__MISSING__:Recent Requests",
++    "recentRequestsEmpty": "__MISSING__:No requests yet.",
++    "recentRequestsModel": "__MISSING__:Model",
++    "recentRequestsTokens": "__MISSING__:In / Out",
++    "recentRequestsWhen": "__MISSING__:When"
+   },
+   "analytics": {
+     "title": "Analyses",
+diff --git a/src/i18n/messages/no.json b/src/i18n/messages/no.json
+index 3959147a0..e90e3daad 100644
+--- a/src/i18n/messages/no.json
++++ b/src/i18n/messages/no.json
+@@ -1723,7 +1723,12 @@
+     "updateAvailableDesc": "En ny versjon er tilgjengelig. Klikk for å oppdatere.",
+     "updateStarted": "Oppdatering startet...",
+     "reloadingPageAutomatically": "Laster siden automatisk på nytt...",
+-    "providerTopology": "Leverandørtopologi"
++    "providerTopology": "Leverandørtopologi",
++    "recentRequests": "__MISSING__:Recent Requests",
++    "recentRequestsEmpty": "__MISSING__:No requests yet.",
++    "recentRequestsModel": "__MISSING__:Model",
++    "recentRequestsTokens": "__MISSING__:In / Out",
++    "recentRequestsWhen": "__MISSING__:When"
+   },
+   "analytics": {
+     "title": "Analytics",
+diff --git a/src/i18n/messages/phi.json b/src/i18n/messages/phi.json
+index e60e94c78..d8c546b49 100644
+--- a/src/i18n/messages/phi.json
++++ b/src/i18n/messages/phi.json
+@@ -1723,7 +1723,12 @@
+     "updateAvailableDesc": "Available ang isang bagong bersyon. I-click para mag-update.",
+     "updateStarted": "Nagsimula ang pag-update...",
+     "reloadingPageAutomatically": "Awtomatikong nire-reload ang page...",
+-    "providerTopology": "Topology ng Provider"
++    "providerTopology": "Topology ng Provider",
++    "recentRequests": "__MISSING__:Recent Requests",
++    "recentRequestsEmpty": "__MISSING__:No requests yet.",
++    "recentRequestsModel": "__MISSING__:Model",
++    "recentRequestsTokens": "__MISSING__:In / Out",
++    "recentRequestsWhen": "__MISSING__:When"
+   },
+   "analytics": {
+     "title": "Analytics",
+diff --git a/src/i18n/messages/pl.json b/src/i18n/messages/pl.json
+index 66f92a026..03fc24ea1 100644
+--- a/src/i18n/messages/pl.json
++++ b/src/i18n/messages/pl.json
+@@ -1723,7 +1723,12 @@
+     "updateAvailableDesc": "Dostępna jest nowa wersja. Kliknij, aby zaktualizować.",
+     "updateStarted": "Rozpoczęto aktualizację...",
+     "reloadingPageAutomatically": "Automatyczne przeładowywanie strony...",
+-    "providerTopology": "Topologia Provider"
++    "providerTopology": "Topologia Provider",
++    "recentRequests": "__MISSING__:Recent Requests",
++    "recentRequestsEmpty": "__MISSING__:No requests yet.",
++    "recentRequestsModel": "__MISSING__:Model",
++    "recentRequestsTokens": "__MISSING__:In / Out",
++    "recentRequestsWhen": "__MISSING__:When"
+   },
+   "analytics": {
+     "title": "Analityka",
+diff --git a/src/i18n/messages/pt-BR.json b/src/i18n/messages/pt-BR.json
+index 717dd612c..95a09a552 100644
+--- a/src/i18n/messages/pt-BR.json
++++ b/src/i18n/messages/pt-BR.json
+@@ -1723,7 +1723,12 @@
+     "updateAvailableDesc": "Uma nova versão está disponível. Clique para atualizar.",
+     "updateStarted": "Atualização iniciada...",
+     "reloadingPageAutomatically": "Recarregando a página automaticamente...",
+-    "providerTopology": "Topologia do provedor"
++    "providerTopology": "Topologia do provedor",
++    "recentRequests": "__MISSING__:Recent Requests",
++    "recentRequestsEmpty": "__MISSING__:No requests yet.",
++    "recentRequestsModel": "__MISSING__:Model",
++    "recentRequestsTokens": "__MISSING__:In / Out",
++    "recentRequestsWhen": "__MISSING__:When"
+   },
+   "analytics": {
+     "title": "Análises",
+diff --git a/src/i18n/messages/pt.json b/src/i18n/messages/pt.json
+index 7134c1faf..1a9678010 100644
+--- a/src/i18n/messages/pt.json
++++ b/src/i18n/messages/pt.json
+@@ -1723,7 +1723,12 @@
+     "updateAvailableDesc": "Uma nova versão está disponível. Clique para atualizar.",
+     "updateStarted": "Atualização iniciada...",
+     "reloadingPageAutomatically": "Recarregando a página automaticamente...",
+-    "providerTopology": "Topologia do provedor"
++    "providerTopology": "Topologia do provedor",
++    "recentRequests": "__MISSING__:Recent Requests",
++    "recentRequestsEmpty": "__MISSING__:No requests yet.",
++    "recentRequestsModel": "__MISSING__:Model",
++    "recentRequestsTokens": "__MISSING__:In / Out",
++    "recentRequestsWhen": "__MISSING__:When"
+   },
+   "analytics": {
+     "title": "Análise",
+diff --git a/src/i18n/messages/ro.json b/src/i18n/messages/ro.json
+index 0ef4582ac..2f905ccbc 100644
+--- a/src/i18n/messages/ro.json
++++ b/src/i18n/messages/ro.json
+@@ -1723,7 +1723,12 @@
+     "updateAvailableDesc": "Este disponibilă o nouă versiune. Faceți clic pentru a actualiza.",
+     "updateStarted": "Actualizarea a început...",
+     "reloadingPageAutomatically": "Se reîncarcă pagina automat...",
+-    "providerTopology": "Topologia furnizorului"
++    "providerTopology": "Topologia furnizorului",
++    "recentRequests": "__MISSING__:Recent Requests",
++    "recentRequestsEmpty": "__MISSING__:No requests yet.",
++    "recentRequestsModel": "__MISSING__:Model",
++    "recentRequestsTokens": "__MISSING__:In / Out",
++    "recentRequestsWhen": "__MISSING__:When"
+   },
+   "analytics": {
+     "title": "Analytics",
+diff --git a/src/i18n/messages/ru.json b/src/i18n/messages/ru.json
+index 24aa47343..32cda1e36 100644
+--- a/src/i18n/messages/ru.json
++++ b/src/i18n/messages/ru.json
+@@ -1723,7 +1723,12 @@
+     "updateAvailableDesc": "Доступна новая версия. Нажмите для обновления.",
+     "updateStarted": "Обновление начато...",
+     "reloadingPageAutomatically": "Автоматическая перезагрузка страницы...",
+-    "providerTopology": "Топология провайдера"
++    "providerTopology": "Топология провайдера",
++    "recentRequests": "__MISSING__:Recent Requests",
++    "recentRequestsEmpty": "__MISSING__:No requests yet.",
++    "recentRequestsModel": "__MISSING__:Model",
++    "recentRequestsTokens": "__MISSING__:In / Out",
++    "recentRequestsWhen": "__MISSING__:When"
+   },
+   "analytics": {
+     "title": "Аналитика",
+diff --git a/src/i18n/messages/sk.json b/src/i18n/messages/sk.json
+index 09e2184ce..9296ca282 100644
+--- a/src/i18n/messages/sk.json
++++ b/src/i18n/messages/sk.json
+@@ -1723,7 +1723,12 @@
+     "updateAvailableDesc": "K dispozícii je nová verzia. Kliknutím aktualizujte.",
+     "updateStarted": "Aktualizácia spustená...",
+     "reloadingPageAutomatically": "Automaticky sa znova načítava stránka...",
+-    "providerTopology": "Topológia poskytovateľa"
++    "providerTopology": "Topológia poskytovateľa",
++    "recentRequests": "__MISSING__:Recent Requests",
++    "recentRequestsEmpty": "__MISSING__:No requests yet.",
++    "recentRequestsModel": "__MISSING__:Model",
++    "recentRequestsTokens": "__MISSING__:In / Out",
++    "recentRequestsWhen": "__MISSING__:When"
+   },
+   "analytics": {
+     "title": "Analytics",
+diff --git a/src/i18n/messages/sv.json b/src/i18n/messages/sv.json
+index 1b5119477..746229052 100644
+--- a/src/i18n/messages/sv.json
++++ b/src/i18n/messages/sv.json
+@@ -1723,7 +1723,12 @@
+     "updateAvailableDesc": "En ny version finns tillgänglig. Klicka för att uppdatera.",
+     "updateStarted": "Uppdatering startade...",
+     "reloadingPageAutomatically": "Laddar om sidan automatiskt...",
+-    "providerTopology": "Leverantörstopologi"
++    "providerTopology": "Leverantörstopologi",
++    "recentRequests": "__MISSING__:Recent Requests",
++    "recentRequestsEmpty": "__MISSING__:No requests yet.",
++    "recentRequestsModel": "__MISSING__:Model",
++    "recentRequestsTokens": "__MISSING__:In / Out",
++    "recentRequestsWhen": "__MISSING__:When"
+   },
+   "analytics": {
+     "title": "Analytics",
+diff --git a/src/i18n/messages/sw.json b/src/i18n/messages/sw.json
+index 021b604f4..c23d4b6da 100644
+--- a/src/i18n/messages/sw.json
++++ b/src/i18n/messages/sw.json
+@@ -1723,7 +1723,12 @@
+     "updateAvailableDesc": "A new version is available. Click to update.",
+     "updateStarted": "Update started...",
+     "reloadingPageAutomatically": "Inapakia upya ukurasa kiotomatiki...",
+-    "providerTopology": "Topolojia ya mtoaji"
++    "providerTopology": "Topolojia ya mtoaji",
++    "recentRequests": "__MISSING__:Recent Requests",
++    "recentRequestsEmpty": "__MISSING__:No requests yet.",
++    "recentRequestsModel": "__MISSING__:Model",
++    "recentRequestsTokens": "__MISSING__:In / Out",
++    "recentRequestsWhen": "__MISSING__:When"
+   },
+   "analytics": {
+     "title": "Analytics",
+diff --git a/src/i18n/messages/ta.json b/src/i18n/messages/ta.json
+index cb91eea30..49e875332 100644
+--- a/src/i18n/messages/ta.json
++++ b/src/i18n/messages/ta.json
+@@ -1723,7 +1723,12 @@
+     "updateAvailableDesc": "A new version is available. Click to update.",
+     "updateStarted": "Update started...",
+     "reloadingPageAutomatically": "தானாக பக்கத்தை மீண்டும் ஏற்றுகிறது...",
+-    "providerTopology": "வழங்குநர் இடவியல்"
++    "providerTopology": "வழங்குநர் இடவியல்",
++    "recentRequests": "__MISSING__:Recent Requests",
++    "recentRequestsEmpty": "__MISSING__:No requests yet.",
++    "recentRequestsModel": "__MISSING__:Model",
++    "recentRequestsTokens": "__MISSING__:In / Out",
++    "recentRequestsWhen": "__MISSING__:When"
+   },
+   "analytics": {
+     "title": "Analytics",
+diff --git a/src/i18n/messages/te.json b/src/i18n/messages/te.json
+index 65b74c02c..94dbe550b 100644
+--- a/src/i18n/messages/te.json
++++ b/src/i18n/messages/te.json
+@@ -1723,7 +1723,12 @@
+     "updateAvailableDesc": "A new version is available. Click to update.",
+     "updateStarted": "Update started...",
+     "reloadingPageAutomatically": "పేజీని స్వయంచాలకంగా రీలోడ్ చేస్తోంది...",
+-    "providerTopology": "ప్రొవైడర్ టోపాలజీ"
++    "providerTopology": "ప్రొవైడర్ టోపాలజీ",
++    "recentRequests": "__MISSING__:Recent Requests",
++    "recentRequestsEmpty": "__MISSING__:No requests yet.",
++    "recentRequestsModel": "__MISSING__:Model",
++    "recentRequestsTokens": "__MISSING__:In / Out",
++    "recentRequestsWhen": "__MISSING__:When"
+   },
+   "analytics": {
+     "title": "Analytics",
+diff --git a/src/i18n/messages/th.json b/src/i18n/messages/th.json
+index 2c3403dd9..67facd289 100644
+--- a/src/i18n/messages/th.json
++++ b/src/i18n/messages/th.json
+@@ -1723,7 +1723,12 @@
+     "updateAvailableDesc": "มีเวอร์ชันใหม่ให้ใช้งานแล้ว คลิกเพื่ออัปเดต",
+     "updateStarted": "เริ่มการอัพเดต...",
+     "reloadingPageAutomatically": "กำลังโหลดหน้าซ้ำโดยอัตโนมัติ...",
+-    "providerTopology": "โทโพโลยีของผู้ให้บริการ"
++    "providerTopology": "โทโพโลยีของผู้ให้บริการ",
++    "recentRequests": "__MISSING__:Recent Requests",
++    "recentRequestsEmpty": "__MISSING__:No requests yet.",
++    "recentRequestsModel": "__MISSING__:Model",
++    "recentRequestsTokens": "__MISSING__:In / Out",
++    "recentRequestsWhen": "__MISSING__:When"
+   },
+   "analytics": {
+     "title": "การวิเคราะห์",
+diff --git a/src/i18n/messages/tr.json b/src/i18n/messages/tr.json
+index 997857b82..40e8e5e24 100644
+--- a/src/i18n/messages/tr.json
++++ b/src/i18n/messages/tr.json
+@@ -1723,7 +1723,12 @@
+     "updateAvailableDesc": "Yeni bir sürüm mevcut. Güncellemek için tıklayın.",
+     "updateStarted": "Güncelleme başladı...",
+     "reloadingPageAutomatically": "Sayfa otomatik olarak yeniden yükleniyor...",
+-    "providerTopology": "Sağlayıcı Topolojisi"
++    "providerTopology": "Sağlayıcı Topolojisi",
++    "recentRequests": "__MISSING__:Recent Requests",
++    "recentRequestsEmpty": "__MISSING__:No requests yet.",
++    "recentRequestsModel": "__MISSING__:Model",
++    "recentRequestsTokens": "__MISSING__:In / Out",
++    "recentRequestsWhen": "__MISSING__:When"
+   },
+   "analytics": {
+     "title": "Analitik",
+diff --git a/src/i18n/messages/uk-UA.json b/src/i18n/messages/uk-UA.json
+index 1c866707f..33e3f742e 100644
+--- a/src/i18n/messages/uk-UA.json
++++ b/src/i18n/messages/uk-UA.json
+@@ -1723,7 +1723,12 @@
+     "updateAvailableDesc": "Доступна нова версія. Натисніть, щоб оновити.",
+     "updateStarted": "Оновлення розпочато...",
+     "reloadingPageAutomatically": "Автоматичне перезавантаження сторінки...",
+-    "providerTopology": "Топологія провайдера"
++    "providerTopology": "Топологія провайдера",
++    "recentRequests": "__MISSING__:Recent Requests",
++    "recentRequestsEmpty": "__MISSING__:No requests yet.",
++    "recentRequestsModel": "__MISSING__:Model",
++    "recentRequestsTokens": "__MISSING__:In / Out",
++    "recentRequestsWhen": "__MISSING__:When"
+   },
+   "analytics": {
+     "title": "Аналітика",
+diff --git a/src/i18n/messages/ur.json b/src/i18n/messages/ur.json
+index d2e06a7d4..e26376af9 100644
+--- a/src/i18n/messages/ur.json
++++ b/src/i18n/messages/ur.json
+@@ -1723,7 +1723,12 @@
+     "updateAvailableDesc": "A new version is available. Click to update.",
+     "updateStarted": "Update started...",
+     "reloadingPageAutomatically": "صفحہ خودکار طور پر دوبارہ لوڈ ہو رہا ہے...",
+-    "providerTopology": "فراہم کنندہ ٹوپولوجی"
++    "providerTopology": "فراہم کنندہ ٹوپولوجی",
++    "recentRequests": "__MISSING__:Recent Requests",
++    "recentRequestsEmpty": "__MISSING__:No requests yet.",
++    "recentRequestsModel": "__MISSING__:Model",
++    "recentRequestsTokens": "__MISSING__:In / Out",
++    "recentRequestsWhen": "__MISSING__:When"
    },
    "analytics": {
      "title": "Analytics",
@@ -757,6 +1502,42 @@ index 620248b46..c78b74b7d 100644
    },
    "analytics": {
      "title": "Phân tích",
+diff --git a/src/i18n/messages/zh-CN.json b/src/i18n/messages/zh-CN.json
+index 51440180c..f576e8b0f 100644
+--- a/src/i18n/messages/zh-CN.json
++++ b/src/i18n/messages/zh-CN.json
+@@ -1723,7 +1723,12 @@
+     "updateAvailableDesc": "有新版本可用。点击更新。",
+     "updateStarted": "更新已开始...",
+     "reloadingPageAutomatically": "自动重新加载页面...",
+-    "providerTopology": "提供者拓扑"
++    "providerTopology": "提供者拓扑",
++    "recentRequests": "__MISSING__:Recent Requests",
++    "recentRequestsEmpty": "__MISSING__:No requests yet.",
++    "recentRequestsModel": "__MISSING__:Model",
++    "recentRequestsTokens": "__MISSING__:In / Out",
++    "recentRequestsWhen": "__MISSING__:When"
+   },
+   "analytics": {
+     "title": "分析",
+diff --git a/src/i18n/messages/zh-TW.json b/src/i18n/messages/zh-TW.json
+index 6b7bd75ae..9bbc1b8bf 100644
+--- a/src/i18n/messages/zh-TW.json
++++ b/src/i18n/messages/zh-TW.json
+@@ -1723,7 +1723,12 @@
+     "updateAvailableDesc": "有新版本可用。點選更新。",
+     "updateStarted": "更新已開始...",
+     "reloadingPageAutomatically": "自動重新載入頁面...",
+-    "providerTopology": "提供者拓撲"
++    "providerTopology": "提供者拓撲",
++    "recentRequests": "__MISSING__:Recent Requests",
++    "recentRequestsEmpty": "__MISSING__:No requests yet.",
++    "recentRequestsModel": "__MISSING__:Model",
++    "recentRequestsTokens": "__MISSING__:In / Out",
++    "recentRequestsWhen": "__MISSING__:When"
+   },
+   "analytics": {
+     "title": "分析",
 diff --git a/src/lib/db/callLogStats.ts b/src/lib/db/callLogStats.ts
 index 7a8ef741b..75ca23cd4 100644
 --- a/src/lib/db/callLogStats.ts
@@ -811,34 +1592,31 @@ index 7a8ef741b..75ca23cd4 100644
      )
      .all() as ProviderMetricRow[];
 diff --git a/src/lib/usage/callLogs.ts b/src/lib/usage/callLogs.ts
-index 7f555b779..ba53cb3de 100644
+index 26ed4f687..88b322f3c 100644
 --- a/src/lib/usage/callLogs.ts
 +++ b/src/lib/usage/callLogs.ts
-@@ -807,6 +807,18 @@ export async function getCallLogs(filter: any = {}) {
+@@ -824,6 +824,14 @@ export async function getCallLogs(filter: any = {}) {
    if (filter.combo) {
      conditions.push("cl.combo_name IS NOT NULL");
    }
 +  if (filter.excludeTests) {
-+    // Drop provider "Test connection" probe rows (model connection-test /
-+    // path /api/providers/test / source_format test) at the SQL layer so they
-+    // never consume LIMIT slots. Filtering these client-side after the DB has
-+    // already applied LIMIT let a burst of tests starve the feed of real
-+    // traffic — the "Recent Requests jumps around / loses history" report.
-+    conditions.push(
-+      `(cl.model IS NULL OR cl.model != 'connection-test')
-+       AND (cl.source_format IS NULL OR cl.source_format != 'test')
-+       AND (cl.path IS NULL OR cl.path != '/api/providers/test')`
-+    );
++    // Home "Recent Requests" is an allowlist of real provider inference, not a
++    // blacklist of known backend log types. Persisted provider requests enter via
++    // the public gateway namespaces (/v1/* or /api/v1/*); internal management work
++    // (connection tests, model sync, and future /api/providers/* jobs) does not.
++    // Apply this before LIMIT so backend rows can never displace real traffic.
++    conditions.push(`(cl.path LIKE '/v1/%' OR cl.path LIKE '/api/v1/%')`);
 +  }
    if (filter.since) {
      conditions.push("cl.timestamp >= @since");
      params.since = filter.since instanceof Date ? filter.since.toISOString() : String(filter.since);
 diff --git a/src/shared/components/flow/KameBeamEdge.tsx b/src/shared/components/flow/KameBeamEdge.tsx
 new file mode 100644
-index 000000000..b4f4569eb
+index 000000000..5ed4d39c3
 --- /dev/null
 +++ b/src/shared/components/flow/KameBeamEdge.tsx
-@@ -0,0 +1,154 @@
+@@ -0,0 +1,188 @@
++import { useEffect, useState } from "react";
 +import { BaseEdge, getBezierPath, type EdgeProps } from "@xyflow/react";
 +
 +/**
@@ -861,6 +1639,34 @@ index 000000000..b4f4569eb
 +  active?: boolean;
 +};
 +
++const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
++
++/**
++ * The travelling orbs/sparks and the turbulence wobble are SMIL animations
++ * (`<animate>` / `<animateMotion>`), which a CSS `animation: none` cannot pause — so
++ * honouring `prefers-reduced-motion` has to happen here, by not rendering them at all.
++ * The beam's static layers (halo / plasma / core) still draw, so an active link stays
++ * just as visible; only the movement is dropped. The CSS-driven half of the effect is
++ * disabled by the matching @media block in globals.css.
++ *
++ * Starts `false` so server render and first paint agree (no hydration mismatch), then
++ * resolves on mount and follows later changes to the OS setting.
++ */
++function usePrefersReducedMotion(): boolean {
++  const [reduced, setReduced] = useState(false);
++
++  useEffect(() => {
++    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
++    const query = window.matchMedia(REDUCED_MOTION_QUERY);
++    setReduced(query.matches);
++    const onChange = (event: MediaQueryListEvent) => setReduced(event.matches);
++    query.addEventListener("change", onChange);
++    return () => query.removeEventListener("change", onChange);
++  }, []);
++
++  return reduced;
++}
++
 +export function KameBeamEdge({
 +  id,
 +  sourceX,
@@ -882,6 +1688,7 @@ index 000000000..b4f4569eb
 +  });
 +
 +  const active = !!(data as KameEdgeData | undefined)?.active;
++  const reducedMotion = usePrefersReducedMotion();
 +
 +  // Idle / last-used / error / healthy: flat stroke resolved by edgeStyle() upstream.
 +  if (!active) {
@@ -903,12 +1710,14 @@ index 000000000..b4f4569eb
 +            seed="2"
 +            result="noise"
 +          >
-+            <animate
-+              attributeName="baseFrequency"
-+              values="0.8;1.4;0.8"
-+              dur="0.25s"
-+              repeatCount="indefinite"
-+            />
++            {!reducedMotion && (
++              <animate
++                attributeName="baseFrequency"
++                values="0.8;1.4;0.8"
++                dur="0.25s"
++                repeatCount="indefinite"
++              />
++            )}
 +          </feTurbulence>
 +          <feDisplacementMap
 +            in="SourceGraphic"
@@ -952,42 +1761,44 @@ index 000000000..b4f4569eb
 +        className="topology-edge-kame"
 +      />
 +
-+      {/* Energy orbs */}
-+      {Array.from({ length: KAME_PARTICLE_COUNT }, (_, i) => (
-+        <circle
-+          key={`${id}-p-${i}`}
-+          r={i % 2 === 0 ? 4 : 2.5}
-+          fill={i % 3 === 0 ? "#fde047" : i % 3 === 1 ? "#67e8f9" : "#fff"}
-+          opacity={0.95}
-+          style={{ filter: "drop-shadow(0 0 4px #22d3ee)" }}
-+        >
-+          <animateMotion
-+            dur={`${0.4 + i * 0.08}s`}
-+            repeatCount="indefinite"
-+            path={edgePath}
-+            begin={`${i * 0.09}s`}
-+          />
-+        </circle>
-+      ))}
++      {/* Energy orbs — pure motion, so they are dropped entirely under reduced motion. */}
++      {!reducedMotion &&
++        Array.from({ length: KAME_PARTICLE_COUNT }, (_, i) => (
++          <circle
++            key={`${id}-p-${i}`}
++            r={i % 2 === 0 ? 4 : 2.5}
++            fill={i % 3 === 0 ? "#fde047" : i % 3 === 1 ? "#67e8f9" : "#fff"}
++            opacity={0.95}
++            style={{ filter: "drop-shadow(0 0 4px #22d3ee)" }}
++          >
++            <animateMotion
++              dur={`${0.4 + i * 0.08}s`}
++              repeatCount="indefinite"
++              path={edgePath}
++              begin={`${i * 0.09}s`}
++            />
++          </circle>
++        ))}
 +
-+      {/* Electric sparks (short-lived blink along path) */}
-+      {Array.from({ length: SPARK_COUNT }, (_, i) => (
-+        <circle key={`${id}-s-${i}`} r={1.8} fill="#e0f2fe" opacity={0}>
-+          <animate
-+            attributeName="opacity"
-+            values="0;1;0;0;1;0"
-+            dur={`${0.35 + (i % 3) * 0.1}s`}
-+            begin={`${i * 0.07}s`}
-+            repeatCount="indefinite"
-+          />
-+          <animateMotion
-+            dur={`${0.28 + i * 0.05}s`}
-+            repeatCount="indefinite"
-+            path={edgePath}
-+            begin={`${i * 0.11}s`}
-+          />
-+        </circle>
-+      ))}
++      {/* Electric sparks (short-lived blink along path) — also motion-only. */}
++      {!reducedMotion &&
++        Array.from({ length: SPARK_COUNT }, (_, i) => (
++          <circle key={`${id}-s-${i}`} r={1.8} fill="#e0f2fe" opacity={0}>
++            <animate
++              attributeName="opacity"
++              values="0;1;0;0;1;0"
++              dur={`${0.35 + (i % 3) * 0.1}s`}
++              begin={`${i * 0.07}s`}
++              repeatCount="indefinite"
++            />
++            <animateMotion
++              dur={`${0.28 + i * 0.05}s`}
++              repeatCount="indefinite"
++              path={edgePath}
++              begin={`${i * 0.11}s`}
++            />
++          </circle>
++        ))}
 +    </g>
 +  );
 +}
@@ -1013,3 +1824,611 @@ index 6d20f2f8a..1bb7af14e 100644
 +  if (healthy) return { stroke: FLOW_EDGE_COLORS.active, strokeWidth: 1.25, opacity: 0.22 };
 +  return { stroke: FLOW_EDGE_COLORS.idle, strokeWidth: 1, opacity: 0.12 };
  }
+diff --git a/tests/unit/call-logs-exclude-tests-allowlist.test.ts b/tests/unit/call-logs-exclude-tests-allowlist.test.ts
+new file mode 100644
+index 000000000..78aa5728a
+--- /dev/null
++++ b/tests/unit/call-logs-exclude-tests-allowlist.test.ts
+@@ -0,0 +1,132 @@
++import test from "node:test";
++import assert from "node:assert/strict";
++import fs from "node:fs";
++import os from "node:os";
++import path from "node:path";
++
++/**
++ * Home "Recent Requests" feed passes `excludeTests` to getCallLogs so the panel shows
++ * ONLY real provider inference — never backend/management log rows. The filter is an
++ * ALLOWLIST of the public gateway namespaces (`/v1/%` and `/api/v1/%`), applied before
++ * LIMIT, rather than a blacklist of individual known noise types. This guards against
++ * the reported regression where model-sync rows (request_type 'model-sync', path
++ * `/api/providers/*`) leaked into the feed because the old blacklist only dropped
++ * connection-test rows.
++ */
++
++const TEST_DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "omniroute-calllogs-allowlist-"));
++process.env.DATA_DIR = TEST_DATA_DIR;
++process.env.CALL_LOG_RETENTION_DAYS = "3650";
++
++const core = await import("../../src/lib/db/core.ts");
++const callLogs = await import("../../src/lib/usage/callLogs.ts");
++
++type SeedRow = {
++  id: string;
++  timestamp: string;
++  path: string;
++  model: string;
++  provider: string;
++  source_format?: string;
++  request_type?: string | null;
++};
++
++function insertCallLog(row: SeedRow) {
++  const db = core.getDbInstance();
++  db.prepare(
++    `
++    INSERT INTO call_logs (
++      id, timestamp, method, path, status, model, provider, source_format, request_type, detail_state
++    )
++    VALUES (
++      @id, @timestamp, 'POST', @path, 200, @model, @provider, @source_format, @request_type, 'none'
++    )
++  `
++  ).run({
++    source_format: row.source_format ?? null,
++    request_type: row.request_type ?? null,
++    ...row,
++  });
++}
++
++test.beforeEach(() => {
++  core.resetDbInstance();
++  fs.rmSync(TEST_DATA_DIR, { recursive: true, force: true });
++  fs.mkdirSync(TEST_DATA_DIR, { recursive: true });
++});
++
++test.after(() => {
++  core.resetDbInstance();
++  fs.rmSync(TEST_DATA_DIR, { recursive: true, force: true });
++});
++
++test("excludeTests keeps only /v1 and /api/v1 inference rows, drops all backend/management rows", async () => {
++  const base = Date.parse("2026-01-01T00:00:00.000Z");
++  const iso = (i: number) => new Date(base + i * 1000).toISOString();
++
++  // Two REAL provider inference rows — the only rows the feed should keep.
++  insertCallLog({
++    id: "real-v1",
++    timestamp: iso(4),
++    path: "/v1/chat/completions",
++    model: "openai/gpt-4.1",
++    provider: "openai",
++  });
++  insertCallLog({
++    id: "real-api-v1",
++    timestamp: iso(3),
++    path: "/api/v1/chat/completions",
++    model: "anthropic/claude-opus-4-8",
++    provider: "anthropic",
++  });
++
++  // Backend/management NOISE — must never appear in the feed.
++  insertCallLog({
++    id: "noise-model-sync",
++    timestamp: iso(2),
++    path: "/api/providers/openai/models",
++    model: "model-sync",
++    provider: "openai",
++    source_format: "-",
++    request_type: "model-sync",
++  });
++  insertCallLog({
++    id: "noise-connection-test",
++    timestamp: iso(1),
++    path: "/api/providers/test",
++    model: "connection-test",
++    provider: "openai",
++    source_format: "test",
++  });
++
++  const rows = await callLogs.getCallLogs({ excludeTests: true, limit: 50 });
++  const ids = rows.map((row) => row.id).sort();
++
++  assert.deepEqual(
++    ids,
++    ["real-api-v1", "real-v1"],
++    "only the /v1 and /api/v1 inference rows survive the allowlist"
++  );
++});
++
++test("without excludeTests every row is returned (allowlist is opt-in)", async () => {
++  const base = Date.parse("2026-02-01T00:00:00.000Z");
++  insertCallLog({
++    id: "real",
++    timestamp: new Date(base).toISOString(),
++    path: "/v1/chat/completions",
++    model: "openai/gpt-4.1",
++    provider: "openai",
++  });
++  insertCallLog({
++    id: "sync",
++    timestamp: new Date(base + 1000).toISOString(),
++    path: "/api/providers/openai/models",
++    model: "model-sync",
++    provider: "openai",
++    request_type: "model-sync",
++  });
++
++  const rows = await callLogs.getCallLogs({ limit: 50 });
++  assert.equal(rows.length, 2, "no allowlist → backend rows are not filtered out");
++});
+diff --git a/tests/unit/topology-connection-health.test.ts b/tests/unit/topology-connection-health.test.ts
+index 3b2db2f3e..8a5af13b1 100644
+--- a/tests/unit/topology-connection-health.test.ts
++++ b/tests/unit/topology-connection-health.test.ts
+@@ -3,28 +3,62 @@ import assert from "node:assert/strict";
+ import { readFileSync } from "node:fs";
+ import { fileURLToPath } from "node:url";
+ 
+-// The topology used to colour nodes only from live/recent traffic, so between requests
+-// (and right after a restart) the map went blank even though connections were healthy.
+-// These guard the connection-health base layer that keeps "what is connected" visible.
++/**
++ * Topology rest-state contract.
++ *
++ * HISTORY — this file originally guarded #7672, which painted a connection-health base
++ * layer onto the nodes: a healthy-but-idle provider was drawn with a green border and a
++ * static dot so the map never "went blank" between requests.
++ *
++ * That base layer is DELIBERATELY REPLACED here by a calm-at-rest map: only a live
++ * in-flight request (or a real error) lights a node or a beam, and a healthy-but-quiet
++ * connection stays muted. The reasoning is signal economy at scale — with many providers,
++ * painting every healthy connection green makes the steady state a wall of green, and the
++ * two things an operator actually needs to spot (what is routing right now, what is
++ * failing) have to compete with it.
++ *
++ * The legibility concern that motivated #7672 (and #8409) is preserved by *structure*
++ * instead of by colour:
++ *   - a node exists ONLY for a provider with at least one enabled connection, so presence
++ *     in the map already means "configured and enabled" — and absence is meaningful;
++ *   - ring slots are stable and alphabetical, so a node never moves because of traffic.
++ *
++ * These tests therefore assert the CURRENT contract. They are not a relaxation of #7672:
++ * each assertion below pins a specific behaviour that must not silently regress.
++ */
+ 
+-const read = (rel: string) =>
+-  readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
++const read = (rel: string) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
+ 
+ const homePageClientSrc = read("../../src/app/(dashboard)/dashboard/HomePageClient.tsx");
+ const providerTopologySrc = read("../../src/app/(dashboard)/home/ProviderTopology.tsx");
+ const sectionSrc = read("../../src/app/(dashboard)/dashboard/HomeProviderTopologySection.tsx");
+ 
+-test("HomePageClient derives per-provider health from connection testStatus counts", () => {
+-  assert.match(homePageClientSrc, /healthByProvider/, "must build a per-provider health map");
++test("HomePageClient draws a node only for providers with an enabled connection", () => {
++  // `connected` + `errors` counts only enabled connections (isActive !== false), so a
++  // provider whose connections are all disabled must be skipped entirely. This is what
++  // keeps untested / disabled / removed providers from lingering as ghost nodes.
+   assert.match(
+     homePageClientSrc,
+-    /stat\.connected > 0 \? "active" : stat\.errors > 0 \? "error" : "idle"/,
+-    "healthy = has a working connection; error = only failing ones; else idle"
++    /const enabled = stat\.connected \+ stat\.errors;/,
++    "enabled-connection count must drive node inclusion"
+   );
++  assert.match(homePageClientSrc, /if \(enabled <= 0\) continue;/, "no enabled connection → no node");
++  // Nodes must NOT be seeded from all-time call_logs aggregates, which have no time
++  // window and no connection check (the ghost-node source before this change).
++  assert.doesNotMatch(
++    homePageClientSrc,
++    /Object\.keys\(providerMetrics\)\.forEach\(\(provider\) => addProvider\(provider\)\)/,
++    "providerMetrics must not resurrect providers that no longer have a connection"
++  );
++});
++
++test("HomePageClient still resolves a per-provider health status for each node", () => {
++  // Health is no longer painted as a green rest colour, but the status is still computed
++  // and carried so the section/graph (and any future health affordance) can use it.
+   assert.match(
+     homePageClientSrc,
+-    /status:\s*healthByProvider\.get\(canonicalProviderId\)\s*\?\?\s*"idle"/,
+-    "each topology entry must carry the resolved health status"
++    /status:\s*stat\.connected > 0 \? "active" : "error"/,
++    "each topology entry must still carry a resolved health status"
+   );
+ });
+ 
+@@ -36,53 +70,47 @@ test("HomeProviderTopologySection forwards the status field on each provider", (
+   );
+ });
+ 
+-test("ProviderTopology renders a connection-health base layer under the traffic signals", () => {
+-  // Live traffic and traffic errors still take precedence over the static health colour,
+-  // but `last` (most recently routed) must NOT: it used to null out `healthy`, and since
+-  // the node had no `last` visual the just-used provider rendered as idle grey with an
+-  // amber edge — less connected-looking than an untouched peer. Health owns the border,
+-  // recency owns the dot.
++test("ProviderTopology keeps the map calm at rest — only traffic or a real error lights a node", () => {
++  // Node state is derived purely from transient traffic: active (in-flight) beats a live
++  // error beats the most-recent call. Connection health must NOT be a fourth colour here.
+   assert.match(
+     providerTopologySrc,
+-    /const healthy =\s*!active && !trafficError && !healthError && p\.status === "active"/,
+-    "healthy must survive the last-used annotation"
++    /const active = activeSet\.has\(pid\);/,
++    "active state comes from the live in-flight set"
+   );
+   assert.doesNotMatch(
+     providerTopologySrc,
+-    /const healthy =[^;]*!last/,
+-    "last-used must not suppress the health colour"
++    /p\.status === "active"/,
++    "connection health must not paint the node at rest (replaces the #7672 base layer)"
+   );
++  // The rest border falls through to the neutral token — not green — when idle.
+   assert.match(
+     providerTopologySrc,
+-    /const healthError =\s*!active && !trafficError && p\.status === "error"/,
+-    "healthError must survive the last-used annotation"
++    /borderColor: error \? RED : active \? color : "var\(--color-border\)"/,
++    "an idle node keeps the neutral border, even when its connection is healthy"
+   );
++  // A dot is rendered only for a live request or a real error.
+   assert.match(
+     providerTopologySrc,
+-    /edgeStyle\(active, last, error, healthy\)/,
+-    "the healthy state must reach the edge palette"
++    /\{\(active \|\| error\) && \(/,
++    "no status dot for a healthy-but-idle provider"
+   );
+-
+-  // The node must render the health state (green border / static dot) — a non-pulsing dot
+-  // distinguishes "connected" from "active".
+-  assert.match(providerTopologySrc, /pulse=\{active \|\| error\}/);
+-  assert.match(providerTopologySrc, /active \|\| error \|\| healthy \|\| last/);
+ });
+ 
+-test("ProviderTopology marks the last-routed provider with an amber dot, not a grey node", () => {
+-  assert.match(
+-    providerTopologySrc,
+-    /const AMBER = FLOW_EDGE_COLORS\.last/,
+-    "recency reuses the shared amber from the edge palette"
+-  );
++test("ProviderTopology node position never depends on activity", () => {
++  // Stable alphabetical ring slots are what preserve legibility now that colour no longer
++  // encodes health: a provider must keep its slot whether or not it is mid-request, so the
++  // map cannot reshuffle ("jump") every time a call lands.
+   assert.match(
+     providerTopologySrc,
+-    /const dotColor = active \? color : last \? AMBER : GREEN/,
+-    "the dot encodes recency while the border keeps encoding health"
++    /a\.provider\.toLowerCase\(\)\.localeCompare\(b\.provider\.toLowerCase\(\)\)/,
++    "providers must be laid out in stable alphabetical order"
+   );
++  // Concentric rings with fixed per-ring capacity are what stop nodes from overlapping
++  // once a deployment has many providers.
+   assert.match(
+     providerTopologySrc,
+-    /borderColor: error \? RED : active \? color : healthy \? GREEN : "var\(--color-border\)"/,
+-    "border stays health-driven — grey is reserved for genuinely idle/unconfigured"
++    /const RINGS: \[number, number, number\]\[\]/,
++    "layout must use capacity-bounded concentric rings, not a single ring"
+   );
+ });
+diff --git a/tests/unit/topology-reduced-motion.test.ts b/tests/unit/topology-reduced-motion.test.ts
+new file mode 100644
+index 000000000..e7417abe9
+--- /dev/null
++++ b/tests/unit/topology-reduced-motion.test.ts
+@@ -0,0 +1,101 @@
++import test from "node:test";
++import assert from "node:assert/strict";
++import { readFileSync } from "node:fs";
++import { fileURLToPath } from "node:url";
++
++/**
++ * Accessibility: the topology's animations must honour `prefers-reduced-motion: reduce`.
++ *
++ * The effect has two halves that have to be disabled separately:
++ *   - CSS keyframes (router-core pulse, logo shake, marching/flickering beam strokes) —
++ *     switched off by an @media (prefers-reduced-motion: reduce) block in globals.css;
++ *   - SMIL animations inside the SVG beam (<animate> / <animateMotion> driving the
++ *     turbulence wobble, energy orbs and sparks) — CSS cannot pause these, so
++ *     KameBeamEdge must not render them at all.
++ *
++ * In both cases the STATE must stay legible: an active link keeps its lit border and
++ * coloured beam layers, only the movement stops.
++ */
++
++const read = (rel: string) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
++
++const globalsCss = read("../../src/app/globals.css");
++const kameEdgeSrc = read("../../src/shared/components/flow/KameBeamEdge.tsx");
++
++test("globals.css disables every topology CSS animation under reduced motion", () => {
++  const match = globalsCss.match(
++    /@media \(prefers-reduced-motion: reduce\)\s*\{[\s\S]*?\n\}/
++  );
++  assert.ok(match, "a prefers-reduced-motion block must exist");
++  const block = match![0];
++
++  for (const cls of [
++    "topology-router-core",
++    "topology-router-icon",
++    "topology-edge-kame",
++    "topology-edge-halo",
++    "topology-edge-plasma",
++  ]) {
++    assert.ok(
++      block.includes(`.${cls}`),
++      `${cls} animates, so it must be listed in the reduced-motion block`
++    );
++  }
++  assert.match(block, /animation:\s*none\s*!important/, "animations must be switched off");
++});
++
++test("every animated topology class is covered by the reduced-motion block", () => {
++  // Guard against a future class gaining an animation without being added above.
++  const animatedClasses = [
++    ...globalsCss.matchAll(/\.(topology-[a-z-]+)\s*\{[^}]*animation:/g),
++  ].map((m) => m[1]);
++  assert.ok(animatedClasses.length > 0, "expected to find animated topology classes");
++
++  const block = globalsCss.match(/@media \(prefers-reduced-motion: reduce\)\s*\{[\s\S]*?\n\}/)![0];
++  const uncovered = animatedClasses.filter((cls) => !block.includes(`.${cls}`));
++  assert.deepEqual(uncovered, [], "these animated classes are not disabled under reduced motion");
++});
++
++test("KameBeamEdge reads the reduced-motion preference reactively", () => {
++  assert.match(
++    kameEdgeSrc,
++    /\(prefers-reduced-motion: reduce\)/,
++    "must query the reduced-motion media feature"
++  );
++  assert.match(
++    kameEdgeSrc,
++    /addEventListener\("change"/,
++    "must follow later changes to the OS setting, not just read it once"
++  );
++  assert.match(
++    kameEdgeSrc,
++    /removeEventListener\("change"/,
++    "the media-query listener must be cleaned up"
++  );
++  // Must default to false so SSR and first client paint agree.
++  assert.match(
++    kameEdgeSrc,
++    /useState\(false\)/,
++    "initial state must be false to avoid a hydration mismatch"
++  );
++});
++
++test("KameBeamEdge drops all SMIL motion under reduced motion but keeps the beam visible", () => {
++  // The three SMIL sites (turbulence wobble, orbs, sparks) must each be gated.
++  const gated = [...kameEdgeSrc.matchAll(/!reducedMotion/g)];
++  assert.ok(
++    gated.length >= 3,
++    `expected the turbulence, orbs and sparks to each be gated; found ${gated.length}`
++  );
++  // The static beam layers must NOT be gated — an active edge stays clearly visible.
++  assert.match(
++    kameEdgeSrc,
++    /className="topology-edge-kame"/,
++    "the core beam layer must still render"
++  );
++  assert.doesNotMatch(
++    kameEdgeSrc,
++    /!reducedMotion && \(?\s*<path/,
++    "the beam's static stroke layers must not be removed, only the motion"
++  );
++});
+diff --git a/tests/unit/ui/edgeStyles.test.ts b/tests/unit/ui/edgeStyles.test.ts
+index a9305273a..7aad96ebb 100644
+--- a/tests/unit/ui/edgeStyles.test.ts
++++ b/tests/unit/ui/edgeStyles.test.ts
+@@ -3,6 +3,22 @@ import assert from "node:assert/strict";
+ 
+ import { edgeStyle, FLOW_EDGE_COLORS } from "../../../src/shared/components/flow/edgeStyles.ts";
+ 
++/**
++ * Shared flow edge palette + the calm-at-rest stroke contract.
++ *
++ * HISTORY — the at-rest opacities used to be much heavier (`last` 0.6, `idle` 0.3, and a
++ * `healthy` base layer at 0.4) so that a configured-and-healthy connection stayed visibly
++ * green between requests. That is deliberately retuned here: only a live call (`active`) or
++ * a real `error` is allowed to stand out, and everything at rest collapses to a faint
++ * hairline. With many providers the old values kept every connector prominent long after
++ * traffic stopped, so "what is routing right now" had to compete with a wall of green.
++ *
++ * The colour language is unchanged (green = active, red = error, amber = last-used,
++ * muted = idle) — only the weight of the resting states moved. The tests below pin the
++ * exact values AND the relationships that make the design work, so a future retune cannot
++ * quietly bring back a loud rest state.
++ */
++
+ describe("flow edgeStyles (U0 — extracted from ProviderTopology)", () => {
+   it("exposes the shared flow palette", () => {
+     assert.equal(FLOW_EDGE_COLORS.active, "#22c55e");
+@@ -27,36 +43,34 @@ describe("flow edgeStyles (U0 — extracted from ProviderTopology)", () => {
+     });
+   });
+ 
+-  it("styles a last-used edge", () => {
++  it("styles a last-used edge as a fading amber hairline", () => {
+     assert.deepEqual(edgeStyle(false, true, false), {
+       stroke: "#f59e0b",
+-      strokeWidth: 1.5,
+-      opacity: 0.6,
++      strokeWidth: 1.25,
++      opacity: 0.3,
+     });
+   });
+ 
+-  it("styles an idle edge", () => {
++  it("styles an idle edge as a barely-there muted hairline", () => {
+     assert.deepEqual(edgeStyle(false, false, false), {
+       stroke: "var(--color-text-muted)",
+       strokeWidth: 1,
+-      opacity: 0.3,
++      opacity: 0.12,
+     });
+   });
+ 
+-  it("styles a healthy (connected, no in-flight traffic) edge as static dim green", () => {
++  it("keeps a healthy-but-quiet edge faint rather than a green rest layer", () => {
++    // The param survives for callers that still distinguish "configured and healthy" from
++    // "unknown", but it must NOT reintroduce a prominent green at rest.
+     assert.deepEqual(edgeStyle(false, false, false, true), {
+       stroke: "#22c55e",
+-      strokeWidth: 1.5,
+-      opacity: 0.4,
++      strokeWidth: 1.25,
++      opacity: 0.22,
+     });
+   });
+ 
+   it("defaults healthy to false so 3-arg callers stay idle", () => {
+-    assert.deepEqual(edgeStyle(false, false, false), {
+-      stroke: "var(--color-text-muted)",
+-      strokeWidth: 1,
+-      opacity: 0.3,
+-    });
++    assert.deepEqual(edgeStyle(false, false, false), edgeStyle(false, false, false, false));
+   });
+ 
+   it("applies precedence error > active > last > healthy", () => {
+@@ -64,8 +78,28 @@ describe("flow edgeStyles (U0 — extracted from ProviderTopology)", () => {
+     assert.equal(edgeStyle(true, true, false).stroke, "#22c55e"); // active beats last
+     assert.equal(edgeStyle(false, false, true, true).stroke, "#ef4444"); // error beats healthy
+     assert.equal(edgeStyle(false, true, false, true).stroke, "#f59e0b"); // last beats healthy
+-    // healthy green is dimmer/thinner than the active pulse green
+-    assert.equal(edgeStyle(false, false, false, true).opacity, 0.4);
+     assert.equal(edgeStyle(true, false, false, true).opacity, 1); // active still wins
+   });
++
++  it("keeps every resting state quieter than live traffic", () => {
++    // This is the actual calm-at-rest invariant: whatever the tuned numbers are, a live
++    // call and a real error must dominate, and nothing at rest may approach them.
++    const live = [edgeStyle(true, false, false), edgeStyle(false, false, true)];
++    const resting = [
++      edgeStyle(false, true, false), // last-used afterglow
++      edgeStyle(false, false, false, true), // healthy, no traffic
++      edgeStyle(false, false, false), // idle
++    ];
++    const quietestLive = Math.min(...live.map((s) => s.opacity));
++    for (const style of resting) {
++      assert.ok(
++        style.opacity < quietestLive / 2,
++        `a resting edge (opacity ${style.opacity}) must stay well below live traffic (${quietestLive})`
++      );
++      assert.ok(
++        style.strokeWidth < Math.min(...live.map((s) => s.strokeWidth)),
++        "a resting edge must also be thinner than any live edge"
++      );
++    }
++  });
+ });
+diff --git a/tests/unit/ui/home-provider-topology-section-4606.test.tsx b/tests/unit/ui/home-provider-topology-section-4606.test.tsx
+index cd9885a26..a8435affc 100644
+--- a/tests/unit/ui/home-provider-topology-section-4606.test.tsx
++++ b/tests/unit/ui/home-provider-topology-section-4606.test.tsx
+@@ -3,8 +3,15 @@
+ // #4606: the provider-topology card was extracted into HomeProviderTopologySection
+ // and its activity fetch gated behind widget visibility in HomePageClient
+ // (`appearanceSettingsLoaded && showProviderTopologyOnHome`). This guards the
+-// extracted section: it renders the topology card and feeds live active-requests
++// extracted section: it renders the topology block and feeds live active-requests
+ // through selectActiveRequests into ProviderTopology (Rule #18 for the change).
++//
++// The section's outer wrapper is deliberately NO LONGER a `Card`: an opaque surface behind
++// the diagram hides the page's graph-paper wallpaper, so the grouping frame is now a
++// bordered but TRANSPARENT div and the wallpaper shows through the graph. The framing
++// contract is asserted below (border + radius, no opaque surface class) instead of by
++// looking for a Card. Recent Requests keeps its own solid Card internally, since a live
++// data table needs a readable background — it is mocked here as a separate child.
+ import React from "react";
+ import { act } from "react";
+ import { createRoot } from "react-dom/client";
+@@ -13,16 +20,18 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
+ vi.mock("next-intl", () => ({
+   useTranslations: () => (key: string) => key,
+ }));
++// Both lazy children (ProviderTopology, HomeRecentRequests) come through next/dynamic.
++// Distinguish them by the props each receives: only the topology gets `providers`.
+ vi.mock("next/dynamic", () => ({
+-  default: () => (props: Record<string, unknown>) => (
+-    <div
+-      data-testid="provider-topology"
+-      data-providers={String((props.providers as unknown[])?.length ?? 0)}
+-    />
+-  ),
+-}));
+-vi.mock("@/shared/components", () => ({
+-  Card: ({ children }: { children: React.ReactNode }) => <div data-testid="card">{children}</div>,
++  default: () => (props: Record<string, unknown>) =>
++    props.providers !== undefined ? (
++      <div
++        data-testid="provider-topology"
++        data-providers={String((props.providers as unknown[])?.length ?? 0)}
++      />
++    ) : (
++      <div data-testid="recent-requests" data-enabled={String(props.enabled)} />
++    ),
+ }));
+ const liveRequestsMock = vi.fn(() => ({ activeRequests: [] as unknown[] }));
+ vi.mock("@/hooks/useLiveDashboard", () => ({
+@@ -47,7 +56,7 @@ afterEach(() => {
+   vi.clearAllMocks();
+ });
+ 
+-it("renders the topology card and forwards providers to ProviderTopology", () => {
++const render = (enabled?: boolean) =>
+   act(() => {
+     root.render(
+       <HomeProviderTopologySection
+@@ -57,11 +66,14 @@ it("renders the topology card and forwards providers to ProviderTopology", () =>
+         ]}
+         lastProvider="openai"
+         errorProvider=""
++        {...(enabled === undefined ? {} : { enabled })}
+       />
+     );
+   });
+ 
+-  expect(container.querySelector("[data-testid='card']")).not.toBeNull();
++it("renders the topology block and forwards providers to ProviderTopology", () => {
++  render();
++
+   const topology = container.querySelector("[data-testid='provider-topology']");
+   expect(topology).not.toBeNull();
+   expect(topology?.getAttribute("data-providers")).toBe("2");
+@@ -70,3 +82,27 @@ it("renders the topology card and forwards providers to ProviderTopology", () =>
+   expect(container.textContent).toContain("recent");
+   expect(container.textContent).toContain("modelStatusError");
+ });
++
++it("frames the section with a bordered but transparent block, not an opaque card", () => {
++  render();
++
++  // One grouping frame around header + diagram + feed…
++  const frame = container.firstElementChild as HTMLElement | null;
++  expect(frame).not.toBeNull();
++  const frameClass = frame?.className ?? "";
++  expect(frameClass).toMatch(/\bborder-2\b/);
++  expect(frameClass).toMatch(/\brounded-card\b/);
++  // …but no opaque fill: an opaque surface here would hide the page's graph-paper
++  // wallpaper behind the graph, which is the regression this replaced.
++  expect(frameClass).not.toMatch(/\bbg-(card|surface|white)\b/);
++});
++
++it("renders Recent Requests beside the diagram and passes the gate flag through", () => {
++  render(false);
++
++  const feed = container.querySelector("[data-testid='recent-requests']");
++  expect(feed).not.toBeNull();
++  // The feed polls on an interval, so it must receive the same visibility gate as the
++  // WS subscription — otherwise a hidden widget keeps fetching.
++  expect(feed?.getAttribute("data-enabled")).toBe("false");
++});
