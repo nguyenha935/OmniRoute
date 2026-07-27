@@ -168,6 +168,10 @@
     "noModelsFound": "No models found",
     "clear": "Clear",
     "done": "Done",
+    "selectAll": "सभी चुनें",
+    "unselectAll": "चयन हटाएँ",
+    "visibleModels": "दृश्यमान",
+    "selectAllConfirm": "इस कॉम्बो में {count} मॉडल जोड़ें?",
     "errorOccurred": "Error Occurred",
     "comboDeleted": "Combo Deleted",
     "hide": "Hide",
@@ -933,6 +937,7 @@
   "disabled": "अक्षम",
   "featureFlagOmnirouteEmergencyFallbackDescription": "बजट समाप्त हो चुके अनुरोधों को आपातकालीन निःशुल्क फ़ॉलबैक प्रदाता/मॉडल पर रूट करें।",
   "featureFlagArenaEloSyncEnabledDescription": "मॉडल इंटेलिजेंस रैंकिंग के लिए आवधिक Arena AI लीडरबोर्ड ELO सिंक सक्षम करें।",
+  "featureFlagExposeCcDiscoveryAliasesDescription": "__MISSING__:Advertise claude/&lt;provider&gt;/&lt;model&gt; mirror ids on /v1/models so Claude Code gateway model discovery lists non-Claude models. Warning: doubles catalog entries for all clients when enabled globally.",
   "sidebar": {
     "home": "घर",
     "dashboard": "डैशबोर्ड",
@@ -1113,6 +1118,7 @@
     "providerQuota": "Provider Quota",
     "runtime": "Runtime",
     "consoleLogs": "Console Logs",
+    "logsTimeline": "Timeline",
     "globalRouting": "Global Routing",
     "mitmProxy": "MITM Proxy",
     "oneProxy": "1Proxy",
@@ -1158,6 +1164,7 @@
     "logsSubtitle": "Application logs",
     "logsProxySubtitle": "Proxy traffic logs",
     "consoleLogsSubtitle": "Console output",
+    "logsTimelineSubtitle": "__MISSING__:Visual request timeline",
     "logsActivitySubtitle": "User activity log",
     "healthSubtitle": "System health check",
     "costsPricingSubtitle": "Per-model pricing rules",
@@ -2938,7 +2945,15 @@
     "copilotPasteInto": "इसमें चिपकाएँ:",
     "copilotReloadInstruction": "फिर VS Code को पुनः लोड करें और इनपुट प्रॉम्प्ट में API कुंजी सेट करें।",
     "wireApiChatCompletions": "चैट पूर्णताएँ (/चैट/पूर्णियाँ)",
-    "wireApiResponses": "प्रतिक्रियाएँ एपीआई (/प्रतिक्रियाएँ)"
+    "wireApiResponses": "प्रतिक्रियाएँ एपीआई (/प्रतिक्रियाएँ)",
+    "ccDiscoveryInfoButton": "__MISSING__:How to enable discovery in Claude Code",
+    "ccDiscoveryInfoTooltip": "__MISSING__:Advertise non-Claude models under claude/&lt;provider&gt;/&lt;model&gt; mirror ids so Claude Code's gateway model discovery can list them. Doubles catalog entries for all clients when enabled globally.",
+    "ccDiscoveryInfoLink": "__MISSING__:Open Feature Flags",
+    "ccOnboardingTitle": "__MISSING__:settings.json for gateway model discovery",
+    "ccOnboardingCopy": "__MISSING__:Copy",
+    "ccOnboardingCopied": "__MISSING__:Copied",
+    "ccOnboardingKeyPlaceholder": "__MISSING__:<your OmniRoute API key>",
+    "ccOnboardingWindowNote": "__MISSING__:Claude Code assumes a 200K context window for any model id it does not recognize. For a model with a different real window, add CLAUDE_CODE_AUTO_COMPACT_WINDOW just under it so auto-compaction does not fire too early."
   },
   "combos": {
     "title": "संयोजन",
@@ -5961,7 +5976,19 @@
     "lmarenaWebCookieHint": "arena.ai खोलें, साइन इन करें, फिर Network अनुरोध से पूरा Cookie हेडर कॉपी करें। arena-auth-prod-v1.0 और arena-auth-prod-v1.1 (और यदि मौजूद हों तो आगे के हिस्से) शामिल करें, अधिमानतः cf_clearance के साथ। केवल खाली arena-auth-prod-v1 कुकी पेस्ट न करें। वैकल्पिक: providerSpecificData.recaptchaV3Token यदि create-evaluation अभी भी 403 लौटाता है।",
     "kimiOfficialSupporterBadge": "संस्थापक मित्र",
     "kimiOfficialSupporterTooltip": "Kimi (Moonshot AI), OmniRoute का संस्थापक ओपन सोर्स मित्र है",
-    "kimiPartnerLinkNote": "पार्टनर लिंक — बिना किसी अतिरिक्त लागत के OmniRoute का समर्थन करता है"
+    "kimiPartnerLinkNote": "पार्टनर लिंक — बिना किसी अतिरिक्त लागत के OmniRoute का समर्थन करता है",
+    "ccAliasSectionTitle": "__MISSING__:Expose in Claude Code (claude/…)",
+    "ccAliasSectionHint": "__MISSING__:Advertise this provider's models under claude/&lt;provider&gt;/&lt;model&gt; mirror ids so Claude Code's gateway model discovery can list them. Off by default — enabling this doubles catalog entries for all clients.",
+    "ccAliasProviderLevelLabel": "__MISSING__:Provider default",
+    "ccAliasModelOverridesLabel": "__MISSING__:Per-model overrides",
+    "ccAliasModelOverrideAriaLabel": "__MISSING__:Override for {modelId}",
+    "ccAliasStateInherit": "__MISSING__:Inherit",
+    "ccAliasStateOn": "__MISSING__:On",
+    "ccAliasStateOff": "__MISSING__:Off",
+    "ccAliasAddModelPlaceholder": "__MISSING__:Model id (e.g. gpt-4o)",
+    "ccAliasAddModelButton": "__MISSING__:Add override",
+    "ccAliasLoadError": "__MISSING__:Failed to load discovery-alias settings: {error}",
+    "ccAliasSaveError": "__MISSING__:Failed to save discovery-alias setting: {error}"
   },
   "settings": {
     "title": "सेटिंग्स",
@@ -9688,8 +9715,23 @@
     "deviceCodeVerificationUrl": "सत्यापन यूआरएल",
     "deviceCodeYourCode": "आपका कोड",
     "deviceCodeWaiting": "प्राधिकरण की प्रतीक्षा है...",
-    "googleOAuthWarning": "रिमोट एक्सेस + Google OAuth: डिफ़ॉल्ट क्रेडेंशियल केवल <code>localhost</code> पर रीडायरेक्ट स्वीकार करते हैं। अधिकृत करने के बाद, आपका ब्राउज़र <code>localhost</code> खोलने का प्रयास करेगा - उस पूर्ण URL को कॉपी करें और नीचे पेस्ट करें। इस मैन्युअल चरण के बिना पूरी तरह से दूरस्थ उपयोग के लिए, <a>अपने स्वयं के OAuth क्रेडेंशियल्स कॉन्फ़िगर करें</a>।",
+    "googleLoopbackTitle": "__MISSING__:Google sign-in can't complete from this address",
+    "googleLoopbackWhatHappens": "__MISSING__:Google only releases the authorization code once <code>{redirectUri}</code> is reachable from the browser that approves the sign-in. Here that address points at this computer, not at the OmniRoute server — so the consent screen hangs instead of redirecting, and there is no callback URL to copy.",
+    "googleLoopbackRecommended": "__MISSING__:Recommended — run this on your own computer, then paste the result below:",
+    "googleLoopbackHelperNote": "__MISSING__:It opens the Google consent locally (where 127.0.0.1 works) and prints a one-line omniroute-cred-v1.… blob. Paste that blob into the Step 2 field below — it accepts a credential blob as well as a callback URL.",
+    "googleLoopbackTunnelLabel": "__MISSING__:Or forward the dashboard port over SSH and reload OmniRoute through the tunnel:",
+    "googleLoopbackTunnelNote": "__MISSING__:Replace {userPlaceholder} with your SSH username, keep the terminal open, then open {localUrl} and connect again from there.",
+    "googleLoopbackHeadlessAlt": "__MISSING__:For fully headless use with no local callback at all, <a>configure your own Google OAuth credentials</a> plus a public base URL.",
     "remoteAccessInfo": "रिमोट एक्सेस: चूंकि आप ओमनीरूट को दूरस्थ रूप से एक्सेस कर रहे हैं, प्राधिकरण के बाद आपको एक त्रुटि पृष्ठ दिखाई देगा (लोकलहोस्ट नहीं मिला)। यह सामान्य है - बस अपने ब्राउज़र एड्रेस बार से पूरा यूआरएल कॉपी करें और नीचे पेस्ट करें।",
+    "loopbackMismatchTitle": "__MISSING__:Sign-in can't complete from this address",
+    "loopbackMismatchWhatHappened": "__MISSING__:What's happening",
+    "loopbackMismatchExplanation": "__MISSING__:After you approve the login, {providerName} always sends the browser back to <code>{redirectUri}</code>. That address points at the computer running this browser, not at the OmniRoute server — so the authorization code never reaches OmniRoute and the provider fails the sign-in without showing an error.",
+    "loopbackMismatchHowToFix": "__MISSING__:How to fix it",
+    "loopbackMismatchStep1": "__MISSING__:On this computer, open a terminal and start an SSH tunnel to the OmniRoute server:",
+    "loopbackMismatchStep1Note": "__MISSING__:Replace {userPlaceholder} with your SSH username. Keep this terminal open until the connection shows as active — both ports are needed: one serves the dashboard, the other receives the callback.",
+    "loopbackMismatchStep2": "__MISSING__:In this browser, reopen OmniRoute through the tunnel:",
+    "loopbackMismatchStep3": "__MISSING__:Then connect {providerName} again from the new tab. The callback now reaches the server and the login completes normally.",
+    "loopbackMismatchAlternative": "__MISSING__:No SSH access? If this provider offers a token import tab, connect with a token instead — that path doesn't use a loopback callback.",
     "step1OpenUrl": "चरण 1: इस URL को अपने ब्राउज़र में खोलें",
     "copy": "प्रतिलिपि",
     "step2PasteCallback": "चरण 2: यहां कॉलबैक यूआरएल या प्राधिकरण कोड चिपकाएं",
@@ -11784,7 +11826,8 @@
       "SKILLS_SANDBOX_NETWORK_ENABLED": {
         "description": "स्किल्स सैंडबॉक्स में नेटवर्क एक्सेस सक्षम करें।"
       }
-    }
+    },
+    "ccDiscoveryAliasesEnvWarning": "__MISSING__:Active via environment variable (EXPOSE_CC_DISCOVERY_ALIASES) — this overrides any dashboard toggle below."
   },
   "comboControl": {
     "title": "कॉम्बो कंट्रोल सेंटर",

@@ -485,7 +485,7 @@ function getClaudeEventType(payload: unknown): string | null {
   return typeof type === "string" ? type : null;
 }
 
-function isClaudeEventPayload(payload: unknown): payload is JsonRecord {
+function isClaudeEventPayload(payload: unknown): boolean {
   return getClaudeEventType(payload) !== null;
 }
 

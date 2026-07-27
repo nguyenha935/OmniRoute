@@ -410,11 +410,6 @@
       "count": 1
     }
   },
-  "src/shared/components/KiroSocialOAuthModal.tsx": {
-    "react-hooks/exhaustive-deps": {
-      "count": 1
-    }
-  },
   "src/shared/components/LanguageSelector.tsx": {
     "@next/next/no-img-element": {
       "count": 1
@@ -1157,7 +1152,7 @@
   },
   "tests/unit/combo-routing-engine.test.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 271
+      "count": 267
     }
   },
   "tests/unit/combo-same-provider-cascade.test.ts": {
@@ -1937,7 +1932,7 @@
   },
   "tests/unit/proxy-registry.test.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 55
+      "count": 54
     }
   },
   "tests/unit/proxy-resolution-status-filter.test.ts": {

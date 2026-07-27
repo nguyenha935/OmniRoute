@@ -23,6 +23,7 @@ import { errorResponse } from "@omniroute/open-sse/utils/error.ts";
 import { getImageModelEntry } from "@omniroute/open-sse/config/imageRegistry.ts";
 import { acceptHeaderForcesStream } from "@omniroute/open-sse/utils/aiSdkCompat.ts";
 import { applyNoThinkingAlias } from "@omniroute/open-sse/utils/noThinkingAlias.ts";
+import { resolveCcDiscoveryAliasStrip } from "@/lib/ccDiscoveryAliasResolve";
 import { handleComboChat, shouldSkipConnDisable } from "@omniroute/open-sse/services/combo.ts";
 import { mergeAbortSignals } from "@omniroute/open-sse/executors/base.ts";
 import { resolveRequestAutoControls } from "@omniroute/open-sse/services/autoCombo/requestControls.ts";
@@ -102,7 +103,7 @@ import { generateRequestId } from "../../shared/utils/requestId";
 import { logAuditEvent } from "../../lib/compliance/index";
 import { enforceApiKeyPolicy } from "../../shared/utils/apiKeyPolicy";
 import { hasProviderQuotaBypassScope } from "../../shared/constants/apiKeyPolicyScopes";
-import { cloneLogPayload } from "@/lib/logPayloads";
+import { cloneBoundedForLog } from "@omniroute/open-sse/utils/requestLogger.ts";
 import { handleInternalUsageCommand } from "@/lib/usage/internalUsageCommand";
 import {
   applyTaskAwareRouting,
@@ -392,6 +393,17 @@ export async function handleChat(
   // resolveRoutingModel). The resolved model still passes through
   // enforceApiKeyPolicy below, so it cannot bypass per-key allowlists.
   let modelStr = resolveRoutingModel(request, body);
+
+  // cc discovery alias (`claude/<provider>/<model>`, `claude/combo/<name>`):
+  // resolve back to the real id before any combo lookup / resolveModelOrError()
+  // sees it — see resolveCcDiscoveryAliasStrip. A genuine claude/ model id (the
+  // real Claude OAuth provider namespace) is always left untouched.
+  const ccAliasStrip = await resolveCcDiscoveryAliasStrip(modelStr);
+  if (ccAliasStrip.stripped) {
+    log.debug("CC_DISCOVERY", `Resolved cc discovery alias: ${modelStr} → ${ccAliasStrip.model}`);
+    modelStr = ccAliasStrip.model;
+  }
+
   // Freeze the client-facing model and reasoning intent before automatic routers
   // mutate the working request. Reasoning policies always match this stable input.
   const reasoningIntent = extractReasoningIntent(modelStr, body);
@@ -958,42 +970,10 @@ export async function handleChat(
   return withCorrelationId(withSessionHeader(response, sessionId), reqId);
 }
 
-export function buildClientRawRequest(request: Request, body: unknown) {
-  const url = new URL(request.url);
-  return {
-    endpoint: url.pathname,
-    body: cloneLogPayload(body),
-    headers: Object.fromEntries(request.headers.entries()),
-    signal: request.signal ?? null,
-  };
-}
-
-/**
- * #7360 follow-up: chatCore.ts's createStreamController (and, downstream,
- * withRateLimit/acquireAccountSemaphore) only ever watches
- * clientRawRequest.signal — the ORIGINAL client's request signal, which stays
- * open for as long as the overall combo keeps retrying elsewhere. A target
- * abandoned by comboTargetTimeoutMs (open-sse/services/combo/targetTimeoutRunner.ts)
- * never learns it was abandoned, and hangs forever (leaking a permanent
- * "pending" dashboard entry — trackPendingRequest(false) never runs; live
- * incident, log id 1784418258231-14961a). Merges the per-target
- * modelAbortSignal (when present) into clientRawRequest.signal so an
- * abandoned dispatch can actually observe its own abort and reach its
- * cleanup path — returns clientRawRequest unchanged when there's no
- * modelAbortSignal to merge in (the non-combo / non-timed-out common case).
- */
-export function resolveDispatchClientRawRequest(
-  clientRawRequest: { signal?: AbortSignal | null } | null | undefined,
-  modelAbortSignal: AbortSignal | null | undefined
-): typeof clientRawRequest {
-  if (!modelAbortSignal) return clientRawRequest;
-  return {
-    ...clientRawRequest,
-    signal: clientRawRequest?.signal
-      ? mergeAbortSignals(clientRawRequest.signal, modelAbortSignal)
-      : modelAbortSignal,
-  };
-}
+// The clientRawRequest envelope lives in ./chat/clientRawRequest.ts. Imported for local use
+// below and re-exported for the historical public surface.
+import { buildClientRawRequest, resolveDispatchClientRawRequest } from "./chat/clientRawRequest.ts";
+export { buildClientRawRequest, resolveDispatchClientRawRequest };
 
 /**
  * Handle single model chat request

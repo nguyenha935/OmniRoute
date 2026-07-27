@@ -80,6 +80,9 @@ import {
   reportPollinationsAnonOutcome,
 } from "./imageGeneration/pollinationsAnonAuth.ts";
 
+// Re-export so /v1/images/edits can dispatch Firefly reference-image edits.
+export { handleAdobeFireflyImageGeneration };
+
 interface KieImageOptions {
   model: string;
   provider: string;

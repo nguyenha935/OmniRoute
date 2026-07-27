@@ -102,6 +102,12 @@ const nextConfig = {
   // keeps operating on un-prefixed paths — see src/server/authz/pipeline.ts for
   // the two redirect call sites that re-add it via `request.nextUrl.basePath`.
   basePath: process.env.OMNIROUTE_BASE_PATH || "",
+  // Mirror OMNIROUTE_BASE_PATH into a NEXT_PUBLIC_* so client display helpers
+  // (useDisplayBaseUrl) can append the subpath to window.location.origin when
+  // building curl/endpoint examples. Empty by default (root deploys unchanged).
+  env: {
+    NEXT_PUBLIC_OMNIROUTE_BASE_PATH: process.env.OMNIROUTE_BASE_PATH || "",
+  },
   distDir,
   // Turbopack config: redirect native modules to stubs at build time
   turbopack: {

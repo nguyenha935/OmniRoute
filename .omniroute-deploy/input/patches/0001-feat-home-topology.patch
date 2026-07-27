@@ -6,10 +6,72 @@ index 000000000..ac47ccfa5
 @@ -0,0 +1 @@
 +- **feat(home):** the home Provider Topology now shows a logo-only router core with an electric "kame beam" on active links, a live **Recent Requests** panel (polls `/api/usage/call-logs` every ~3s, gated by the topology appearance toggle + page visibility), capacity-bounded concentric rings with stable alphabetical slots so many providers no longer overlap, and only surfaces providers with an enabled connection — untested/failing connections no longer clutter the map. All topology animations honour `prefers-reduced-motion` ([#8450](https://github.com/diegosouzapw/OmniRoute/pull/8450)) — thanks @nguyenha935
 diff --git a/src/app/(dashboard)/dashboard/HomePageClient.tsx b/src/app/(dashboard)/dashboard/HomePageClient.tsx
-index 24cec3140..0b9f66705 100644
+index 24cec3140..41f5951a8 100644
 --- a/src/app/(dashboard)/dashboard/HomePageClient.tsx
 +++ b/src/app/(dashboard)/dashboard/HomePageClient.tsx
-@@ -471,48 +471,42 @@ export default function HomePageClient({ machineId }: HomePageClientProps) {
+@@ -425,7 +425,11 @@ export default function HomePageClient({ machineId }: HomePageClientProps) {
+   }, [providerConnections, t, tp, router]);
+ 
+   const providerStats = useMemo(() => {
+-    return Object.entries(AI_PROVIDERS).map(([providerId, providerInfo]) => {
++    const statFor = (
++      providerId: string,
++      providerInfo: { name?: string; alias?: string },
++      extraModelKeys: readonly string[] = []
++    ) => {
+       const connections = providerConnections.filter((conn) => conn.provider === providerId);
+       const connected = connections.filter((connection) =>
+         isProviderConnectionConnected(connection)
+@@ -434,7 +438,9 @@ export default function HomePageClient({ machineId }: HomePageClientProps) {
+         isProviderConnectionErrored(connection)
+       ).length;
+ 
+-      const providerKeys = new Set([providerId, providerInfo.alias].filter(Boolean));
++      const providerKeys = new Set(
++        [providerId, providerInfo.alias, ...extraModelKeys].filter(Boolean) as string[]
++      );
+       const providerModels = models.filter((m) => providerKeys.has(m.provider));
+ 
+       const authType = NOAUTH_PROVIDERS[providerId]
+@@ -452,8 +458,35 @@ export default function HomePageClient({ machineId }: HomePageClientProps) {
+         modelCount: providerModels.length,
+         authType,
+       };
+-    });
+-  }, [providerConnections, models]);
++    };
++
++    const builtIn = Object.entries(AI_PROVIDERS).map(([providerId, providerInfo]) =>
++      statFor(providerId, providerInfo)
++    );
++
++    // Custom compatible providers are `provider_nodes` ROWS, not entries in the static
++    // `AI_PROVIDERS` registry — their id is generated (`openai-compatible-chat-<uuid>`,
++    // `anthropic-compatible-<uuid>`, …). Iterating AI_PROVIDERS alone therefore matched
++    // none of their connections (measured: one active compatible connection, 0 of 298
++    // static providers matched it), so an operator's own gateway never appeared as a
++    // topology node at rest no matter how healthy it was.
++    //
++    // Their models are published under the node PREFIX, so that name is accepted as a
++    // model key alongside the raw node id — the same accept-wide contract the catalog
++    // surfaces use.
++    const compatible = providerNodes
++      .map((node) => ({ id: (node.id || "").trim(), prefix: (node.prefix || "").trim(), name: node.name }))
++      .filter((node) => node.id && !AI_PROVIDERS[node.id])
++      .map((node) =>
++        statFor(
++          node.id,
++          { name: node.name?.trim() || node.prefix || node.id, alias: node.prefix || undefined },
++          node.prefix ? [node.prefix] : []
++        )
++      );
++
++    return [...builtIn, ...compatible];
++  }, [providerConnections, models, providerNodes]);
+ 
+   const selectedProviderModels = useMemo(() => {
+     if (!selectedProvider) return [];
+@@ -471,48 +504,42 @@ export default function HomePageClient({ machineId }: HomePageClientProps) {
      >();
      const providerConfig = AI_PROVIDERS as Record<string, { name?: string }>;
  
@@ -87,7 +149,7 @@ index 24cec3140..0b9f66705 100644
    const { lastProvider, errorProvider } = providerTopology;
  
 diff --git a/src/app/(dashboard)/dashboard/HomeProviderTopologySection.tsx b/src/app/(dashboard)/dashboard/HomeProviderTopologySection.tsx
-index 034088e7b..b8ec65069 100644
+index 034088e7b..13cc5ec01 100644
 --- a/src/app/(dashboard)/dashboard/HomeProviderTopologySection.tsx
 +++ b/src/app/(dashboard)/dashboard/HomeProviderTopologySection.tsx
 @@ -3,11 +3,11 @@
@@ -109,13 +171,13 @@ index 034088e7b..b8ec65069 100644
  
 +  // The whole section is ONE bordered block (border + rounded + padding) so header,
 +  // diagram and Recent Requests read as a single component — but the block's background
-+  // stays TRANSPARENT, not an opaque surface. That is the only way to satisfy both of
-+  // anh Hà's asks at once: an opaque fill behind the diagram would block the page's
-+  // graph-paper wallpaper (the original "làm đéo thấy đâu" bug), so a filled block and a
-+  // see-through diagram ("xuyên qua") are physically mutually exclusive unless the grid is
-+  // repainted (which he rejected). A transparent bordered block keeps the grouping frame
-+  // AND lets the wallpaper pass straight through the diagram. Recent Requests keeps its own
-+  // solid Card (inside HomeRecentRequests) since a live data table needs a readable surface.
++  // stays TRANSPARENT, not an opaque surface. Both requirements can only hold together
++  // this way: an opaque fill behind the diagram would block the page's graph-paper
++  // wallpaper (the original "can't see through the diagram" bug), so a filled block and a
++  // see-through diagram are mutually exclusive unless the grid is repainted, which is out
++  // of scope. A transparent bordered block keeps the grouping frame AND lets the wallpaper
++  // pass straight through the diagram. Recent Requests keeps its own solid Card (inside
++  // HomeRecentRequests) since a live data table needs a readable surface.
    return (
 -    <Card>
 +    <div className="rounded-card border-2 border-black/12 dark:border-white/12 shadow-soft p-4">
@@ -359,15 +421,22 @@ index 000000000..abe6f57ed
 +  );
 +}
 diff --git a/src/app/(dashboard)/home/ProviderTopology.tsx b/src/app/(dashboard)/home/ProviderTopology.tsx
-index 2324d93d8..00347798b 100644
+index 2324d93d8..8499c542c 100644
 --- a/src/app/(dashboard)/home/ProviderTopology.tsx
 +++ b/src/app/(dashboard)/home/ProviderTopology.tsx
-@@ -2,11 +2,13 @@
+@@ -2,13 +2,23 @@
  
  import { useMemo } from "react";
  import { useTranslations } from "next-intl";
 -import { Handle, Position, type Node, type Edge, type NodeTypes } from "@xyflow/react";
-+import { Handle, Position, type Node, type Edge, type NodeTypes, type EdgeTypes } from "@xyflow/react";
++import {
++  Handle,
++  Position,
++  type Node,
++  type Edge,
++  type NodeTypes,
++  type EdgeTypes,
++} from "@xyflow/react";
  import { AI_PROVIDERS } from "@/shared/constants/providers";
  import ProviderIcon from "@/shared/components/ProviderIcon";
 +import OmniRouteLogo from "@/shared/components/OmniRouteLogo";
@@ -376,8 +445,11 @@ index 2324d93d8..00347798b 100644
 +import { KameBeamEdge } from "@/shared/components/flow/KameBeamEdge";
  import { edgeStyle, FLOW_EDGE_COLORS } from "@/shared/components/flow/edgeStyles";
  import { getFallbackProviderColor } from "@/shared/utils/providerFallbackColor";
++import { getTopologyHandles } from "./topologyHandles";
  import { resolveTopologyNodeLabel } from "./topologyLabel";
-@@ -41,34 +43,24 @@ type ProviderNodeData = {
+ 
+ // Rings: [capacity, rx, ry]. Each successive ring fits ~6 more nodes.
+@@ -41,59 +51,49 @@ type ProviderNodeData = {
    providerId: string;
    active: boolean;
    error: boolean;
@@ -413,15 +485,44 @@ index 2324d93d8..00347798b 100644
 -        minWidth: "136px",
 +        // Idle providers (including healthy-but-quiet connections) sit muted with the
 +        // default border and no glow — only live traffic (active) or a real error
-+        // lights a node up, matching 9Router's calm-at-rest map. This kills the
-+        // "everything glows green" clutter anh Hà flagged.
++        // lights a node up, matching 9Router's calm-at-rest map. Without this, every
++        // configured provider glowed green at rest and the map carried no signal.
 +        borderColor: error ? RED : active ? color : "var(--color-border)",
 +        boxShadow: error ? `0 0 10px ${RED}26` : active ? `0 0 10px ${color}26` : "none",
 +        minWidth: "128px",
        }}
      >
        <Handle
-@@ -106,14 +98,14 @@ function ProviderNode({ data }: { data: ProviderNodeData }) {
+         type="target"
+         position={Position.Top}
+         id="top"
+-        className="!bg-transparent !border-0 !w-0 !h-0"
++        className="topology-connector-handle"
+       />
+       <Handle
+         type="target"
+         position={Position.Bottom}
+         id="bottom"
+-        className="!bg-transparent !border-0 !w-0 !h-0"
++        className="topology-connector-handle"
+       />
+       <Handle
+         type="target"
+         position={Position.Left}
+         id="left"
+-        className="!bg-transparent !border-0 !w-0 !h-0"
++        className="topology-connector-handle"
+       />
+       <Handle
+         type="target"
+         position={Position.Right}
+         id="right"
+-        className="!bg-transparent !border-0 !w-0 !h-0"
++        className="topology-connector-handle"
+       />
+ 
+       <div
+@@ -106,14 +106,14 @@ function ProviderNode({ data }: { data: ProviderNodeData }) {
        <span
          className="text-xs font-medium truncate flex-1"
          style={{
@@ -439,7 +540,7 @@ index 2324d93d8..00347798b 100644
        )}
      </div>
    );
-@@ -122,8 +114,13 @@ function ProviderNode({ data }: { data: ProviderNodeData }) {
+@@ -122,39 +122,41 @@ function ProviderNode({ data }: { data: ProviderNodeData }) {
  type RouterNodeData = { activeCount: number };
  
  function RouterNode({ data }: { data: RouterNodeData }) {
@@ -454,8 +555,30 @@ index 2324d93d8..00347798b 100644
        <Handle
          type="source"
          position={Position.Top}
-@@ -149,12 +146,12 @@ function RouterNode({ data }: { data: RouterNodeData }) {
-         className="!bg-transparent !border-0 !w-0 !h-0"
+         id="top"
+-        className="!bg-transparent !border-0 !w-0 !h-0"
++        className="topology-connector-handle"
+       />
+       <Handle
+         type="source"
+         position={Position.Bottom}
+         id="bottom"
+-        className="!bg-transparent !border-0 !w-0 !h-0"
++        className="topology-connector-handle"
+       />
+       <Handle
+         type="source"
+         position={Position.Left}
+         id="left"
+-        className="!bg-transparent !border-0 !w-0 !h-0"
++        className="topology-connector-handle"
+       />
+       <Handle
+         type="source"
+         position={Position.Right}
+         id="right"
+-        className="!bg-transparent !border-0 !w-0 !h-0"
++        className="topology-connector-handle"
        />
  
 -      <div className="flex items-center justify-center size-7 rounded-md bg-primary/15 shrink-0">
@@ -464,16 +587,13 @@ index 2324d93d8..00347798b 100644
 -      <span className="text-sm font-bold text-primary">OmniRoute</span>
 -      {data.activeCount > 0 && (
 -        <span className="ml-1 px-1.5 py-0.5 rounded-full bg-primary text-white text-[10px] font-bold leading-none">
-+      <OmniRouteLogo
-+        size={24}
-+        className={`text-primary${active ? " topology-router-icon" : ""}`}
-+      />
++      <OmniRouteLogo size={24} className={`text-primary${active ? " topology-router-icon" : ""}`} />
 +      {active && (
 +        <span className="topology-router-badge absolute -top-2 -right-2 flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-primary text-white text-[10px] font-bold leading-none">
            {data.activeCount}
          </span>
        )}
-@@ -167,6 +164,10 @@ const nodeTypes: NodeTypes = {
+@@ -167,20 +169,13 @@ const nodeTypes: NodeTypes = {
    router: RouterNode as any,
  };
  
@@ -484,7 +604,21 @@ index 2324d93d8..00347798b 100644
  type ProviderHealth = "active" | "error" | "idle";
  type ProviderEntry = { id?: string; provider: string; name?: string; status?: ProviderHealth };
  
-@@ -189,8 +190,8 @@ function buildLayout(
+-function getHandles(angle: number, cx: number): { sourceHandle: string; targetHandle: string } {
+-  const rel = (((angle + Math.PI / 2) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+-  if (rel < Math.PI / 4 || rel > (7 * Math.PI) / 4)
+-    return { sourceHandle: "top", targetHandle: "bottom" };
+-  if (rel > (3 * Math.PI) / 4 && rel < (5 * Math.PI) / 4)
+-    return { sourceHandle: "bottom", targetHandle: "top" };
+-  return cx > 0
+-    ? { sourceHandle: "right", targetHandle: "left" }
+-    : { sourceHandle: "left", targetHandle: "right" };
+-}
+-
+ function buildLayout(
+   providers: ProviderEntry[],
+   activeSet: Set<string>,
+@@ -189,8 +184,8 @@ function buildLayout(
  ): { nodes: Node[]; edges: Edge[] } {
    const nodeW = 156;
    const nodeH = 28;
@@ -495,7 +629,7 @@ index 2324d93d8..00347798b 100644
  
    const nodes: Node[] = [];
    const edges: Edge[] = [];
-@@ -205,21 +206,13 @@ function buildLayout(
+@@ -205,21 +200,13 @@ function buildLayout(
  
    if (providers.length === 0) return { nodes, edges };
  
@@ -524,14 +658,14 @@ index 2324d93d8..00347798b 100644
  
    let provIdx = 0;
    for (let ri = 0; ri < RINGS.length && provIdx < sorted.length; ri++) {
-@@ -229,20 +222,15 @@ function buildLayout(
+@@ -229,27 +216,22 @@ function buildLayout(
      for (let i = 0; i < count; i++) {
        const p = sorted[provIdx++];
        const pid = p.provider.toLowerCase();
 +      // Edge/node state is driven PURELY by transient traffic, exactly like 9Router:
 +      //   active (in-flight) > last (single most-recent) > error (a live failed request).
 +      // Connection-health (`p.status`) is deliberately NOT painted onto the edge — that
-+      // was an Omni-only addition that kept a line lit forever ("hiện mãi") for a quiet
++      // was an Omni-only addition that kept a line lit permanently for a quiet
 +      // or test-failed connection. With it gone the connector changes and then fades to
 +      // the muted idle stroke once traffic stops, matching 9Router's calm-at-rest map.
        const active = activeSet.has(pid);
@@ -553,7 +687,15 @@ index 2324d93d8..00347798b 100644
        const config = getProviderConfig(p.provider);
        const nodeId = `provider-${p.provider}`;
  
-@@ -261,20 +249,24 @@ function buildLayout(
+       const angle = -Math.PI / 2 + (2 * Math.PI * i) / count;
+       const cx = rx * Math.cos(angle);
+       const cy = ry * Math.sin(angle);
+-      const { sourceHandle, targetHandle } = getHandles(angle, cx);
++      const { sourceHandle, targetHandle } = getTopologyHandles(angle, cx);
+ 
+       nodes.push({
+         id: nodeId,
+@@ -261,20 +243,24 @@ function buildLayout(
            providerId: p.provider,
            active,
            error,
@@ -582,7 +724,7 @@ index 2324d93d8..00347798b 100644
        });
      }
    }
-@@ -308,6 +300,17 @@ export default function ProviderTopology({
+@@ -308,6 +294,17 @@ export default function ProviderTopology({
    const lastKey = lastProvider.toLowerCase();
    const errorKey = errorProvider.toLowerCase();
  
@@ -600,24 +742,24 @@ index 2324d93d8..00347798b 100644
    const activeSet = useMemo(
      () => new Set<string>(activeKey ? activeKey.split(",") : []),
      [activeKey]
-@@ -330,8 +333,15 @@ export default function ProviderTopology({
+@@ -330,8 +327,15 @@ export default function ProviderTopology({
      [providers]
    );
  
-+  // The diagram keeps its rounded border frame (the "khung" anh Hà wants kept) but its
-+  // background is fully TRANSPARENT — the page's fixed graph-paper wallpaper (body::before)
-+  // must show straight THROUGH the frame ("xuyên qua"), not be repainted or covered by an
-+  // opaque fill. This only works because the section no longer wraps the tile in an opaque
-+  // Card (see HomeProviderTopologySection) — with a solid surface behind it the wallpaper
-+  // could never bleed through. Matches 9Router, where the topology tile sits directly on
-+  // the page grid and only Recent Requests is a solid card.
++  // The diagram keeps its rounded border frame but its background is fully TRANSPARENT —
++  // the page's fixed graph-paper wallpaper (body::before) must show straight through the
++  // frame, not be repainted or covered by an opaque fill. This only works because the
++  // section no longer wraps the tile in an opaque Card (see HomeProviderTopologySection):
++  // with a solid surface behind it the wallpaper could never bleed through. Matches
++  // 9Router, where the topology tile sits directly on the page grid and only Recent
++  // Requests is a solid card.
    const containerClass =
 -    "h-[300px] w-full min-w-0 rounded-xl border border-border bg-bg-subtle/20 overflow-hidden sm:h-[420px]";
 +    "h-[300px] w-full min-w-0 rounded-xl border border-border bg-transparent overflow-hidden sm:h-[420px]";
  
    if (providers.length === 0) {
      return (
-@@ -349,6 +359,7 @@ export default function ProviderTopology({
+@@ -349,6 +353,7 @@ export default function ProviderTopology({
        nodes={nodes}
        edges={edges}
        nodeTypes={nodeTypes}
@@ -625,25 +767,109 @@ index 2324d93d8..00347798b 100644
        fitKey={providersKey}
        className={containerClass}
      />
+diff --git a/src/app/(dashboard)/home/topologyHandles.ts b/src/app/(dashboard)/home/topologyHandles.ts
+new file mode 100644
+index 000000000..e388af953
+--- /dev/null
++++ b/src/app/(dashboard)/home/topologyHandles.ts
+@@ -0,0 +1,29 @@
++export type TopologyHandles = {
++  sourceHandle: "top" | "bottom" | "left" | "right";
++  targetHandle: "top" | "bottom" | "left" | "right";
++};
++
++const DIRECTION_EPSILON = 1e-12;
++
++/**
++ * Pick the router/provider sides that face each other on the topology ellipse.
++ *
++ * The four diagonal positions belong to the vertical regions. This makes an eight-node
++ * ring resolve to three providers above, two beside, and three below the router. Keeping
++ * the 45-degree boundaries inclusive also prevents a node from changing its connector
++ * side only because the ring happens to contain exactly eight providers.
++ */
++export function getTopologyHandles(angle: number, cx: number): TopologyHandles {
++  const horizontalMagnitude = Math.abs(Math.cos(angle));
++  const verticalMagnitude = Math.abs(Math.sin(angle));
++
++  if (verticalMagnitude + DIRECTION_EPSILON >= horizontalMagnitude) {
++    return Math.sin(angle) < 0
++      ? { sourceHandle: "top", targetHandle: "bottom" }
++      : { sourceHandle: "bottom", targetHandle: "top" };
++  }
++
++  return cx > 0
++    ? { sourceHandle: "right", targetHandle: "left" }
++    : { sourceHandle: "left", targetHandle: "right" };
++}
 diff --git a/src/app/api/usage/call-logs/route.ts b/src/app/api/usage/call-logs/route.ts
-index 3b3b8ddcc..0a737ea1f 100644
+index 3b3b8ddcc..99f69f51a 100644
 --- a/src/app/api/usage/call-logs/route.ts
 +++ b/src/app/api/usage/call-logs/route.ts
-@@ -143,6 +143,9 @@ export async function GET(request: Request) {
-     if (searchParams.get("correlationId")) filter.correlationId = searchParams.get("correlationId");
-     if (searchParams.get("limit")) filter.limit = parseInt(searchParams.get("limit"));
-     if (searchParams.get("offset")) filter.offset = parseInt(searchParams.get("offset"));
-+    // Home Recent Requests feed sets excludeTests=1 so connection-test probe rows
-+    // are dropped at the SQL layer (before LIMIT), not client-side after slicing.
-+    if (searchParams.get("excludeTests") === "1") filter.excludeTests = true;
+@@ -125,24 +125,46 @@ export function buildCallLogListRows({
+   });
+ }
+ 
++/**
++ * Reads the query string into a `getCallLogs` filter.
++ *
++ * Extracted from GET: one `if` per supported parameter is a straight-line mapping, but
++ * it is also 13 branches, which is what pushed GET over the cyclomatic ratchet.
++ */
++const STRING_FILTER_KEYS = [
++  "status",
++  "model",
++  "provider",
++  "account",
++  "apiKey",
++  "combo",
++  "search",
++  "correlationId",
++] as const;
++
++function parseCallLogFilter(searchParams: URLSearchParams): Record<string, any> {
++  const filter: Record<string, any> = {};
++  for (const key of STRING_FILTER_KEYS) {
++    const value = searchParams.get(key);
++    if (value) filter[key] = value;
++  }
++  for (const key of ["limit", "offset"] as const) {
++    const value = searchParams.get(key);
++    if (value) filter[key] = parseInt(value);
++  }
++  // Home Recent Requests feed sets excludeTests=1 so connection-test probe rows
++  // are dropped at the SQL layer (before LIMIT), not client-side after slicing.
++  if (searchParams.get("excludeTests") === "1") filter.excludeTests = true;
++  return filter;
++}
++
+ export async function GET(request: Request) {
+   try {
+     const authError = await requireManagementAuth(request);
+     if (authError) return authError;
+ 
+     const { searchParams } = new URL(request.url);
+-
+-    const filter: Record<string, any> = {};
+-    if (searchParams.get("status")) filter.status = searchParams.get("status");
+-    if (searchParams.get("model")) filter.model = searchParams.get("model");
+-    if (searchParams.get("provider")) filter.provider = searchParams.get("provider");
+-    if (searchParams.get("account")) filter.account = searchParams.get("account");
+-    if (searchParams.get("apiKey")) filter.apiKey = searchParams.get("apiKey");
+-    if (searchParams.get("combo")) filter.combo = searchParams.get("combo");
+-    if (searchParams.get("search")) filter.search = searchParams.get("search");
+-    if (searchParams.get("correlationId")) filter.correlationId = searchParams.get("correlationId");
+-    if (searchParams.get("limit")) filter.limit = parseInt(searchParams.get("limit"));
+-    if (searchParams.get("offset")) filter.offset = parseInt(searchParams.get("offset"));
++    const filter = parseCallLogFilter(searchParams);
  
      const [logs, connections, providerNodes] = await Promise.all([
        getCallLogs(filter),
 diff --git a/src/app/globals.css b/src/app/globals.css
-index 2130bda65..7650a75ca 100644
+index 2130bda65..0e2bd7a05 100644
 --- a/src/app/globals.css
 +++ b/src/app/globals.css
-@@ -428,6 +428,120 @@ button .material-symbols-outlined,
+@@ -428,6 +428,131 @@ button .material-symbols-outlined,
    animation: border-glow 2s ease-in-out infinite;
  }
  
@@ -717,6 +943,17 @@ index 2130bda65..7650a75ca 100644
 +  box-shadow:
 +    0 0 10px #fde047,
 +    0 0 16px rgba(34, 211, 238, 0.6);
++}
++/* React Flow's base stylesheet gives every handle a 5px minimum size. These handles are
++ * visual anchors only, so that invisible box makes each connector stop 2.5px outside the
++ * node border. The canvas-scoped selector deliberately outranks the later library rule. */
++.react-flow.omniroute-flow .topology-connector-handle {
++  width: 0;
++  height: 0;
++  min-width: 0;
++  min-height: 0;
++  border: 0;
++  background: transparent;
 +}
 +.topology-edge-kame {
 +  stroke-dasharray: 8 6;
@@ -1592,10 +1829,65 @@ index 7a8ef741b..75ca23cd4 100644
      )
      .all() as ProviderMetricRow[];
 diff --git a/src/lib/usage/callLogs.ts b/src/lib/usage/callLogs.ts
-index 26ed4f687..88b322f3c 100644
+index 26ed4f687..423311e30 100644
 --- a/src/lib/usage/callLogs.ts
 +++ b/src/lib/usage/callLogs.ts
-@@ -824,6 +824,14 @@ export async function getCallLogs(filter: any = {}) {
+@@ -776,6 +776,33 @@ function pushLikeFilter(
+   params[paramKey] = `%${value}%`;
+ }
+ 
++/**
++ * Pushes the `status` filter condition ("error" / "ok" / an explicit numeric code).
++ * Extracted for the same reason as `pushLikeFilter` above: getCallLogs sits directly
++ * on the max-lines-per-function ratchet, and this branch is the largest self-contained
++ * block in it.
++ */
++function pushStatusFilter(
++  conditions: string[],
++  params: Record<string, unknown>,
++  status: unknown
++) {
++  if (!status) return;
++  if (status === "error") {
++    conditions.push("(cl.status >= 400 OR cl.error_summary IS NOT NULL)");
++    return;
++  }
++  if (status === "ok") {
++    conditions.push("cl.status >= 200 AND cl.status < 300");
++    return;
++  }
++  const statusCode = Number.parseInt(String(status), 10);
++  if (!Number.isNaN(statusCode)) {
++    conditions.push("cl.status = @statusCode");
++    params.statusCode = statusCode;
++  }
++}
++
+ export async function getCallLogs(filter: any = {}) {
+   const db = getDbInstance();
+   let sql = `
+@@ -789,19 +816,7 @@ export async function getCallLogs(filter: any = {}) {
+   const conditions: string[] = [];
+   const params: Record<string, unknown> = {};
+ 
+-  if (filter.status) {
+-    if (filter.status === "error") {
+-      conditions.push("(cl.status >= 400 OR cl.error_summary IS NOT NULL)");
+-    } else if (filter.status === "ok") {
+-      conditions.push("cl.status >= 200 AND cl.status < 300");
+-    } else {
+-      const statusCode = Number.parseInt(filter.status, 10);
+-      if (!Number.isNaN(statusCode)) {
+-        conditions.push("cl.status = @statusCode");
+-        params.statusCode = statusCode;
+-      }
+-    }
+-  }
++  pushStatusFilter(conditions, params, filter.status);
+ 
+   if (filter.model) {
+     conditions.push("(cl.model LIKE @modelQ OR cl.requested_model LIKE @modelQ)");
+@@ -824,6 +839,14 @@ export async function getCallLogs(filter: any = {}) {
    if (filter.combo) {
      conditions.push("cl.combo_name IS NOT NULL");
    }
@@ -1612,11 +1904,11 @@ index 26ed4f687..88b322f3c 100644
      params.since = filter.since instanceof Date ? filter.since.toISOString() : String(filter.since);
 diff --git a/src/shared/components/flow/KameBeamEdge.tsx b/src/shared/components/flow/KameBeamEdge.tsx
 new file mode 100644
-index 000000000..5ed4d39c3
+index 000000000..d63a1543d
 --- /dev/null
 +++ b/src/shared/components/flow/KameBeamEdge.tsx
-@@ -0,0 +1,188 @@
-+import { useEffect, useState } from "react";
+@@ -0,0 +1,196 @@
++import { useCallback, useSyncExternalStore } from "react";
 +import { BaseEdge, getBezierPath, type EdgeProps } from "@xyflow/react";
 +
 +/**
@@ -1649,22 +1941,30 @@ index 000000000..5ed4d39c3
 + * just as visible; only the movement is dropped. The CSS-driven half of the effect is
 + * disabled by the matching @media block in globals.css.
 + *
-+ * Starts `false` so server render and first paint agree (no hydration mismatch), then
-+ * resolves on mount and follows later changes to the OS setting.
++ * Read through `useSyncExternalStore` rather than a `useState` + `useEffect` pair: the
++ * media query IS an external store, and seeding state from inside an effect is a
++ * synchronous setState in an effect (react-hooks/set-state-in-effect) that costs an extra
++ * render pass on every mounted edge. The server snapshot is `false` so SSR and first paint
++ * agree (no hydration mismatch); the client snapshot resolves immediately and the
++ * subscription follows later changes to the OS setting. Same pattern as `useTheme` /
++ * `useElectron`.
 + */
++function subscribeToReducedMotion(onChange: () => void): () => void {
++  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return () => {};
++  const query = window.matchMedia(REDUCED_MOTION_QUERY);
++  query.addEventListener("change", onChange);
++  return () => query.removeEventListener("change", onChange);
++}
++
 +function usePrefersReducedMotion(): boolean {
-+  const [reduced, setReduced] = useState(false);
-+
-+  useEffect(() => {
-+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
-+    const query = window.matchMedia(REDUCED_MOTION_QUERY);
-+    setReduced(query.matches);
-+    const onChange = (event: MediaQueryListEvent) => setReduced(event.matches);
-+    query.addEventListener("change", onChange);
-+    return () => query.removeEventListener("change", onChange);
-+  }, []);
-+
-+  return reduced;
++  const getSnapshot = useCallback(
++    () =>
++      typeof window !== "undefined" && typeof window.matchMedia === "function"
++        ? window.matchMedia(REDUCED_MOTION_QUERY).matches
++        : false,
++    []
++  );
++  return useSyncExternalStore(subscribeToReducedMotion, getSnapshot, () => false);
 +}
 +
 +export function KameBeamEdge({
@@ -1805,7 +2105,7 @@ index 000000000..5ed4d39c3
 +
 +export default KameBeamEdge;
 diff --git a/src/shared/components/flow/edgeStyles.ts b/src/shared/components/flow/edgeStyles.ts
-index 6d20f2f8a..1bb7af14e 100644
+index 6d20f2f8a..93de22797 100644
 --- a/src/shared/components/flow/edgeStyles.ts
 +++ b/src/shared/components/flow/edgeStyles.ts
 @@ -36,7 +36,12 @@ export function edgeStyle(
@@ -1818,8 +2118,8 @@ index 6d20f2f8a..1bb7af14e 100644
 +  // At rest the connectors must read as faint hairlines — only a live call (active)
 +  // or a real error is allowed to stand out. `last` is a brief amber afterglow of the
 +  // most-recent call that then fades; `idle` is barely-there. These were far too dark
-+  // before (last 0.6 / idle 0.3), keeping every line prominent after traffic stopped —
-+  // the "đường truyền vẫn đậm chưa nhạt bớt" report.
++  // before (last 0.6 / idle 0.3), so every connector stayed dark and never faded back
++  // once traffic stopped.
 +  if (last) return { stroke: FLOW_EDGE_COLORS.last, strokeWidth: 1.25, opacity: 0.3 };
 +  if (healthy) return { stroke: FLOW_EDGE_COLORS.active, strokeWidth: 1.25, opacity: 0.22 };
 +  return { stroke: FLOW_EDGE_COLORS.idle, strokeWidth: 1, opacity: 0.12 };
@@ -2117,12 +2417,83 @@ index 3b2db2f3e..8a5af13b1 100644
 +    "layout must use capacity-bounded concentric rings, not a single ring"
    );
  });
+diff --git a/tests/unit/topology-handle-placement.test.ts b/tests/unit/topology-handle-placement.test.ts
+new file mode 100644
+index 000000000..cabb2329a
+--- /dev/null
++++ b/tests/unit/topology-handle-placement.test.ts
+@@ -0,0 +1,65 @@
++import test from "node:test";
++import assert from "node:assert/strict";
++import { readFileSync } from "node:fs";
++import { fileURLToPath } from "node:url";
++
++import { getTopologyHandles } from "../../src/app/(dashboard)/home/topologyHandles.ts";
++
++const read = (rel: string) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
++
++test("an eight-provider ring uses three top, two side, and three bottom connectors", () => {
++  const count = 8;
++  const actual = Array.from({ length: count }, (_, index) => {
++    const angle = -Math.PI / 2 + (2 * Math.PI * index) / count;
++    return getTopologyHandles(angle, Math.cos(angle));
++  });
++
++  assert.deepEqual(
++    actual,
++    [
++      { sourceHandle: "top", targetHandle: "bottom" },
++      { sourceHandle: "top", targetHandle: "bottom" },
++      { sourceHandle: "right", targetHandle: "left" },
++      { sourceHandle: "bottom", targetHandle: "top" },
++      { sourceHandle: "bottom", targetHandle: "top" },
++      { sourceHandle: "bottom", targetHandle: "top" },
++      { sourceHandle: "left", targetHandle: "right" },
++      { sourceHandle: "top", targetHandle: "bottom" },
++    ],
++    "the four 45-degree boundary nodes must stay in the upper/lower regions"
++  );
++});
++
++test("horizontal providers still connect through their inward-facing side", () => {
++  assert.deepEqual(getTopologyHandles(0, 1), {
++    sourceHandle: "right",
++    targetHandle: "left",
++  });
++  assert.deepEqual(getTopologyHandles(Math.PI, -1), {
++    sourceHandle: "left",
++    targetHandle: "right",
++  });
++});
++
++test("topology handles override React Flow's minimum box without Tailwind utilities", () => {
++  const providerTopologySrc = read("../../src/app/(dashboard)/home/ProviderTopology.tsx");
++  const globalsCss = read("../../src/app/globals.css");
++  const handleUses = providerTopologySrc.match(/className="topology-connector-handle"/g) ?? [];
++  const rule = globalsCss.match(
++    /\.react-flow\.omniroute-flow \.topology-connector-handle\s*\{([^}]*)\}/
++  );
++
++  assert.equal(handleUses.length, 8, "all provider and router handles must use the scoped class");
++  assert.ok(rule, "the scoped connector-handle rule must exist");
++
++  for (const declaration of [
++    "width: 0",
++    "height: 0",
++    "min-width: 0",
++    "min-height: 0",
++    "border: 0",
++    "background: transparent",
++  ]) {
++    assert.ok(rule[1].includes(declaration), `connector handle must declare ${declaration}`);
++  }
++});
 diff --git a/tests/unit/topology-reduced-motion.test.ts b/tests/unit/topology-reduced-motion.test.ts
 new file mode 100644
-index 000000000..e7417abe9
+index 000000000..45f960f1d
 --- /dev/null
 +++ b/tests/unit/topology-reduced-motion.test.ts
-@@ -0,0 +1,101 @@
+@@ -0,0 +1,117 @@
 +import test from "node:test";
 +import assert from "node:assert/strict";
 +import { readFileSync } from "node:fs";
@@ -2197,11 +2568,27 @@ index 000000000..e7417abe9
 +    /removeEventListener\("change"/,
 +    "the media-query listener must be cleaned up"
 +  );
-+  // Must default to false so SSR and first client paint agree.
++  // The server-side value must be `false` so SSR and first client paint agree. This
++  // pinned `useState(false)` literally, but seeding that state from inside an effect is a
++  // synchronous setState in an effect (react-hooks/set-state-in-effect — the one warning
++  // the lint gate reported) and costs an extra render pass per mounted edge. The media
++  // query IS an external store, so it is read through `useSyncExternalStore` with a
++  // `false` server snapshot, which satisfies the same requirement. Assert the REQUIREMENT
++  // (a false server-side default) rather than the hook that used to implement it.
 +  assert.match(
 +    kameEdgeSrc,
-+    /useState\(false\)/,
-+    "initial state must be false to avoid a hydration mismatch"
++    /useSyncExternalStore\([\s\S]*?\)\s*;|useState\(false\)/,
++    "the preference must be read through a store subscription (or state seeded false)"
++  );
++  assert.match(
++    kameEdgeSrc,
++    /\(\)\s*=>\s*false/,
++    "the server-side snapshot must be false to avoid a hydration mismatch"
++  );
++  assert.doesNotMatch(
++    kameEdgeSrc,
++    /useEffect\(\(\)\s*=>\s*\{[\s\S]*?setReduced\(/,
++    "must not seed the value with a synchronous setState inside an effect"
 +  );
 +});
 +
@@ -2431,4 +2818,282 @@ index cd9885a26..a8435affc 100644
 +  // The feed polls on an interval, so it must receive the same visibility gate as the
 +  // WS subscription — otherwise a hidden widget keeps fetching.
 +  expect(feed?.getAttribute("data-enabled")).toBe("false");
++});
+diff --git a/tests/unit/ui/home-topology-compatible-provider-node.test.tsx b/tests/unit/ui/home-topology-compatible-provider-node.test.tsx
+new file mode 100644
+index 000000000..96e6d2d38
+--- /dev/null
++++ b/tests/unit/ui/home-topology-compatible-provider-node.test.tsx
+@@ -0,0 +1,272 @@
++// @vitest-environment jsdom
++//
++// A custom compatible provider never appeared as a topology node, no matter how healthy
++// its connection was.
++//
++// `providerStats` was built by iterating the STATIC `AI_PROVIDERS` registry and matching
++// `conn.provider === providerId`. Custom compatible providers are `provider_nodes` rows
++// whose id is generated at creation time (`openai-compatible-chat-<uuid>`,
++// `anthropic-compatible-<uuid>`, `anthropic-compatible-cc-<uuid>`), so they are not in
++// that registry at all. Measured on a seeded instance: one active compatible connection,
++// 298 static providers, 0 of them matched it — `providerStats` reported nothing, and
++// `topologyProviders` (which only reads `providerStats`) therefore drew no node.
++//
++// This renders the real HomePageClient with the topology enabled and asserts on the
++// `providers` array it hands to <HomeProviderTopologySection>, which is exactly the
++// value the graph is built from.
++import React from "react";
++import { act } from "react";
++import { createRoot } from "react-dom/client";
++import { afterEach, beforeEach, expect, it, vi } from "vitest";
++
++function makeTranslator() {
++  const t = (key: string) => key;
++  t.rich = (key: string) => key;
++  return t;
++}
++
++vi.mock("next-intl", () => ({ useTranslations: () => makeTranslator() }));
++vi.mock("next/navigation", () => ({
++  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }),
++}));
++vi.mock("next/link", () => ({
++  default: ({ href, children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
++    <a href={String(href)} {...props}>
++      {children}
++    </a>
++  ),
++}));
++vi.mock("next/dynamic", () => ({
++  default: () =>
++    function DynamicStub() {
++      return <div data-testid="dynamic-component" />;
++    },
++}));
++vi.mock("@/shared/components", () => ({
++  Card: ({ children }: { children: React.ReactNode }) => <section>{children}</section>,
++  CardSkeleton: () => <div data-testid="card-skeleton" />,
++  Button: ({
++    children,
++    loading: _loading,
++    fullWidth: _fullWidth,
++    variant: _variant,
++    size: _size,
++    ...props
++  }: React.ButtonHTMLAttributes<HTMLButtonElement> & {
++    loading?: boolean;
++    fullWidth?: boolean;
++    variant?: string;
++    size?: string;
++  }) => <button {...props}>{children}</button>,
++  Modal: ({ children, isOpen }: { children: React.ReactNode; isOpen: boolean }) =>
++    isOpen ? <div role="dialog">{children}</div> : null,
++}));
++vi.mock("@/shared/components/ProviderIcon", () => ({
++  default: () => <span data-testid="provider-icon" />,
++}));
++
++const notifyMock = { success: vi.fn(), error: vi.fn(), addNotification: vi.fn() };
++function useNotificationStoreMock() {
++  return notifyMock;
++}
++useNotificationStoreMock.getState = () => notifyMock;
++vi.mock("@/store/notificationStore", () => ({ useNotificationStore: useNotificationStoreMock }));
++vi.mock("@/shared/hooks/useElectron", () => ({
++  useIsElectron: () => false,
++  useOpenExternal: () => ({ openExternal: vi.fn() }),
++}));
++vi.mock("@/shared/utils/clipboard", () => ({ copyToClipboard: vi.fn(async () => undefined) }));
++
++/**
++ * Capture the `providers` array the topology section receives.
++ *
++ * This is the seam between "which providers does the dashboard consider connected" and
++ * "what does the graph draw", which is precisely where the compatible node was lost.
++ */
++type CapturedProvider = { id: string; provider: string; name?: string; status: string };
++let captured: CapturedProvider[] = [];
++vi.mock("../../../src/app/(dashboard)/dashboard/HomeProviderTopologySection", () => ({
++  HomeProviderTopologySection: ({ providers }: { providers: CapturedProvider[] }) => {
++    captured = providers;
++    return <div data-testid="topology-section" />;
++  },
++}));
++
++const { default: HomePageClient } = await import(
++  "../../../src/app/(dashboard)/dashboard/HomePageClient"
++);
++
++const NODE_ID = "openai-compatible-chat-3c1f9b52-7a44-4d18-9f0e-2b6d5c8a1e77";
++const NODE_PREFIX = "mybox";
++const NODE_NAME = "My Compatible Box";
++
++function jsonResponse(body: unknown) {
++  return { ok: true, json: async () => body } as Response;
++}
++
++let container: HTMLDivElement;
++let root: ReturnType<typeof createRoot>;
++
++function stubFetch(options: { connections: unknown[]; nodes: unknown[] }) {
++  vi.stubGlobal(
++    "fetch",
++    vi.fn((input: RequestInfo | URL) => {
++      const url = String(input);
++      if (url === "/api/settings") {
++        return Promise.resolve(
++          jsonResponse({ showQuickStartOnHome: false, showProviderTopologyOnHome: true })
++        );
++      }
++      if (url === "/api/providers") {
++        return Promise.resolve(jsonResponse({ connections: options.connections }));
++      }
++      if (url === "/api/models") return Promise.resolve(jsonResponse({ models: [] }));
++      if (url === "/api/provider-nodes") {
++        return Promise.resolve(jsonResponse({ nodes: options.nodes }));
++      }
++      if (url === "/api/system/version") {
++        return Promise.resolve(
++          jsonResponse({
++            current: "0.0.0-test",
++            latest: "0.0.0-test",
++            updateAvailable: false,
++            channel: "test",
++            autoUpdateSupported: false,
++          })
++        );
++      }
++      return Promise.resolve(jsonResponse({}));
++    })
++  );
++}
++
++beforeEach(() => {
++  (
++    globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
++  ).IS_REACT_ACT_ENVIRONMENT = true;
++  captured = [];
++  container = document.createElement("div");
++  document.body.append(container);
++  root = createRoot(container);
++});
++
++afterEach(() => {
++  act(() => root.unmount());
++  container.remove();
++  vi.unstubAllGlobals();
++  vi.clearAllMocks();
++});
++
++async function render() {
++  await act(async () => {
++    root.render(<HomePageClient machineId="test-machine" />);
++  });
++  // The dashboard loads settings, connections, models and provider nodes in separate
++  // effects; let the microtask queue drain so the memo sees the resolved state.
++  await act(async () => {
++    await Promise.resolve();
++  });
++}
++
++it("draws a topology node for a healthy custom compatible provider", async () => {
++  stubFetch({
++    connections: [
++      {
++        id: "conn-compat",
++        provider: NODE_ID,
++        isActive: true,
++        testStatus: "active",
++        authType: "apikey",
++      },
++    ],
++    nodes: [{ id: NODE_ID, prefix: NODE_PREFIX, name: NODE_NAME, type: "openai-compatible" }],
++  });
++
++  await render();
++
++  const node = captured.find((p) => p.id === NODE_ID);
++  expect(
++    node,
++    `the compatible provider must be a topology node; got ${JSON.stringify(captured)}`
++  ).toBeTruthy();
++  expect(node?.status).toBe("active");
++  // The node carries the operator's own name, not the raw generated uuid id.
++  expect(node?.name).not.toContain("3c1f9b52");
++});
++
++it("keeps a compatible provider whose only connection failed its test, marked error", async () => {
++  stubFetch({
++    connections: [
++      {
++        id: "conn-compat-bad",
++        provider: NODE_ID,
++        isActive: true,
++        testStatus: "error",
++        authType: "apikey",
++      },
++    ],
++    nodes: [{ id: NODE_ID, prefix: NODE_PREFIX, name: NODE_NAME, type: "openai-compatible" }],
++  });
++
++  await render();
++
++  const node = captured.find((p) => p.id === NODE_ID);
++  expect(node, "an errored compatible provider is still connected hardware").toBeTruthy();
++  expect(node?.status).toBe("error");
++});
++
++it("does not draw a compatible provider that has no connection at all", async () => {
++  // Guard the fix direction: seeding stats from provider_nodes must not turn every
++  // configured-but-unconnected node into a permanent ghost node.
++  stubFetch({
++    connections: [],
++    nodes: [{ id: NODE_ID, prefix: NODE_PREFIX, name: NODE_NAME, type: "openai-compatible" }],
++  });
++
++  await render();
++
++  expect(captured.find((p) => p.id === NODE_ID)).toBeUndefined();
++});
++
++it("does not draw a compatible provider whose connections are all disabled", async () => {
++  stubFetch({
++    connections: [
++      {
++        id: "conn-compat-off",
++        provider: NODE_ID,
++        isActive: false,
++        testStatus: "active",
++        authType: "apikey",
++      },
++    ],
++    nodes: [{ id: NODE_ID, prefix: NODE_PREFIX, name: NODE_NAME, type: "openai-compatible" }],
++  });
++
++  await render();
++
++  expect(captured.find((p) => p.id === NODE_ID)).toBeUndefined();
++});
++
++it("still draws built-in providers alongside compatible ones", async () => {
++  // The compatible rows are APPENDED to the built-in stats; a regression that replaced
++  // the list instead of extending it would pass every assertion above.
++  stubFetch({
++    connections: [
++      { id: "c1", provider: "openai", isActive: true, testStatus: "active", authType: "apikey" },
++      {
++        id: "conn-compat",
++        provider: NODE_ID,
++        isActive: true,
++        testStatus: "active",
++        authType: "apikey",
++      },
++    ],
++    nodes: [{ id: NODE_ID, prefix: NODE_PREFIX, name: NODE_NAME, type: "openai-compatible" }],
++  });
++
++  await render();
++
++  const ids = captured.map((p) => p.id);
++  expect(ids).toContain("openai");
++  expect(ids).toContain(NODE_ID);
 +});

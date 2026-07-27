@@ -23,6 +23,7 @@ import { persistCreditBalance, getAllPersistedCreditBalances } from "@/lib/db/cr
 import { setConnectionRateLimitUntil } from "@/lib/db/providers";
 import { getMitmAlias } from "@/lib/db/models";
 import { ensureAntigravityProjectAssigned } from "../services/antigravityProjectBootstrap.ts";
+import { persistDiscoveredAntigravityProjectId } from "../services/antigravityProjectPersist.ts";
 import {
   resolveAntigravityModelId,
   getAntigravityModelFallbacks,
@@ -541,7 +542,16 @@ export class AntigravityExecutor extends BaseExecutor {
         getAntigravityClientProfile(credentials),
         signal
       );
-      if (discovered) projectId = discovered;
+      if (discovered) {
+        projectId = discovered;
+        // #8491: persist the recovered id so it survives the next token refresh
+        // or process restart instead of being silently rediscovered every time.
+        await persistDiscoveredAntigravityProjectId(
+          credentials.connectionId,
+          discovered,
+          credentials.providerSpecificData
+        );
+      }
     }
 
     if (!projectId) {

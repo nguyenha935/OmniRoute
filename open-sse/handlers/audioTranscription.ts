@@ -72,11 +72,16 @@ function getUploadedFileName(file: Blob & { name?: unknown }): string {
   return typeof file.name === "string" && file.name.length > 0 ? file.name : "audio.wav";
 }
 
+/**
+ * `body` is `Uint8Array<ArrayBuffer>`, not bare `Uint8Array`: `new Uint8Array(n)`
+ * is always ArrayBuffer-backed, and only that narrower form satisfies `BodyInit`
+ * (the bare type widens to `ArrayBufferLike`, which admits `SharedArrayBuffer`).
+ */
 export async function buildMultipartBody(
   file: Blob & { name?: unknown },
   fields: Record<string, string>,
   fileFieldName = "file"
-): Promise<{ body: Uint8Array; contentType: string }> {
+): Promise<{ body: Uint8Array<ArrayBuffer>; contentType: string }> {
   const boundary = "----OmniRouteAudioBoundary" + Date.now().toString(36);
   const parts: Uint8Array[] = [];
   const encoder = new TextEncoder();

@@ -39,9 +39,7 @@
   "incremental": true,
   "incrementalFile": "reports/mutation/stryker-incremental.json",
   "testRunner": "tap",
-  "plugins": [
-    "@stryker-mutator/tap-runner"
-  ],
+  "plugins": ["@stryker-mutator/tap-runner"],
   "tap": {
     "testFiles": [
       "tests/unit/7993-noauth-proxy-routing.test.ts",
@@ -49,6 +47,9 @@
       "tests/unit/8247-accountfallback-model-unhealthy.test.ts",
       "tests/unit/8248-accountfallback-nvidia-degraded.test.ts",
       "tests/unit/8332-combo-vision-fallback.test.ts",
+      "tests/unit/8376-econnrefused-breaker.test.ts",
+      "tests/unit/8396-cooldown-429-cap.test.ts",
+      "tests/unit/8488-capability-filter-fail-closed.test.ts",
       "tests/unit/account-fallback-anthropic-quota.test.ts",
       "tests/unit/account-fallback-lockout-eviction.test.ts",
       "tests/unit/account-fallback-retry-after-json.test.ts",
@@ -134,6 +135,7 @@
       "tests/unit/collect-metrics-module-coverage.test.ts",
       "tests/unit/combo-499-abort.test.ts",
       "tests/unit/combo-account-allowlist-3266.test.ts",
+      "tests/unit/combo-attempt-body-isolation-7847.test.ts",
       "tests/unit/combo-auto-candidate-expansion.test.ts",
       "tests/unit/combo-breaker-429.test.ts",
       "tests/unit/combo-cache-invalidation.test.ts",
@@ -251,6 +253,7 @@
       "tests/unit/rate-limit-enhanced.test.ts",
       "tests/unit/rate-limit-manager.test.ts",
       "tests/unit/rate-limit-queue-timeout-lockout.test.ts",
+      "tests/unit/repro-7503-no-choices.test.ts",
       "tests/unit/repro-antigravity-404-family-cooldown-hijack.test.ts",
       "tests/unit/responses-handler.test.ts",
       "tests/unit/rotation-config-omniroute.test.ts",
@@ -291,6 +294,7 @@
       "tests/unit/tproxy-route.test.ts",
       "tests/unit/trae-publiccred.test.ts",
       "tests/unit/types-barrel-model-cooldown.test.ts",
+      "tests/unit/upstream-error-passthrough.test.ts",
       "tests/unit/upstream-retry-hints-toggle.test.ts",
       "tests/unit/upstream-timeout-model-override.test.ts",
       "tests/unit/usage-service-hardening.test.ts",
@@ -403,11 +407,7 @@
     ".worktrees",
     ".stryker-tmp"
   ],
-  "reporters": [
-    "progress",
-    "html",
-    "json"
-  ],
+  "reporters": ["progress", "html", "json"],
   "htmlReporter": {
     "fileName": "reports/mutation/mutation.html"
   },

@@ -7,6 +7,7 @@
 
 import { REGISTRY } from "../config/providerRegistry.ts";
 import { getModelContextLimit } from "../../src/lib/modelCapabilities.ts";
+import { jsonLength } from "../utils/jsonSize.ts";
 
 // Default token limits per provider (fallbacks when not in registry)
 const DEFAULT_LIMITS: Record<string, number> = {
@@ -14,6 +15,10 @@ const DEFAULT_LIMITS: Record<string, number> = {
   openai: 128000,
   gemini: 1000000,
   codex: 400000,
+  // HyperAgent Claude-family agents (fable/opus/sonnet) — 1M default; was falling
+  // through to 128k and blocking normal agentic tool loops with huge catalogs.
+  hyperagent: 1_000_000,
+  ha: 1_000_000,
   default: 128000,
 };
 
@@ -146,7 +151,10 @@ function extractImageTokens(node: unknown, seen: Set<unknown>): { node: unknown;
 
   const record = node as Record<string, unknown>;
   if (isInlineBase64ImageBlock(record)) {
-    return { node: { __image_token_estimate__: IMAGE_TOKEN_ESTIMATE }, tokens: IMAGE_TOKEN_ESTIMATE };
+    return {
+      node: { __image_token_estimate__: IMAGE_TOKEN_ESTIMATE },
+      tokens: IMAGE_TOKEN_ESTIMATE,
+    };
   }
 
   let tokens = 0;
@@ -173,8 +181,10 @@ export function estimateTokens(text: string | object | null | undefined): number
     return Math.ceil(text.length / CHARS_PER_TOKEN);
   }
   const { node, tokens: imageTokens } = extractImageTokens(text, new Set());
-  const str = JSON.stringify(node);
-  return Math.ceil(str.length / CHARS_PER_TOKEN) + imageTokens;
+  // #7847: count the serialized length instead of building the string. Only `.length` was ever
+  // used, and on a multi-megabyte agent body that string is a pure transient allocation.
+  // jsonLength is exact (property-tested against JSON.stringify), so the estimate is unchanged.
+  return Math.ceil(jsonLength(node) / CHARS_PER_TOKEN) + imageTokens;
 }
 
 /**
@@ -199,6 +209,8 @@ function resolveTokenLimit(
   const envOverride = getEnvOverride(provider);
   if (envOverride) return { limit: envOverride, specific: true };
 
+  const lowerModel = (model || "").toLowerCase();
+
   // 2. Check models.dev synced DB for per-model context limit
   if (model) {
     const dbLimit = getModelContextLimit(provider, model);
@@ -213,15 +225,14 @@ function resolveTokenLimit(
 
   // 4. Check if model name hints at a known limit
   if (model) {
-    const lower = model.toLowerCase();
-    if (lower.includes("claude")) return { limit: DEFAULT_LIMITS.claude, specific: true };
-    if (lower.includes("gemini")) return { limit: DEFAULT_LIMITS.gemini, specific: true };
+    if (lowerModel.includes("claude")) return { limit: DEFAULT_LIMITS.claude, specific: true };
+    if (lowerModel.includes("gemini")) return { limit: DEFAULT_LIMITS.gemini, specific: true };
     if (
-      lower.includes("gpt") ||
-      lower.includes("o1") ||
-      lower.includes("o3") ||
-      lower.includes("o4") ||
-      lower.includes("codex")
+      lowerModel.includes("gpt") ||
+      lowerModel.includes("o1") ||
+      lowerModel.includes("o3") ||
+      lowerModel.includes("o4") ||
+      lowerModel.includes("codex")
     )
       return { limit: DEFAULT_LIMITS.codex, specific: true };
   }
@@ -294,7 +305,11 @@ export function compressContext(
   const targetTokens = Math.max(0, maxTokens - reserveTokens);
 
   let messages = [...body.messages];
-  let currentTokens = estimateTokens(JSON.stringify(messages));
+  // #8594: pass the structured messages array directly — estimateTokens walks it for
+  // inline base64 image blocks (#8368) and substitutes a bounded per-image estimate.
+  // JSON.stringify()-ing first forces the char/4 text path and mis-measures a ~500KB
+  // image as ~125k tokens, triggering needless compression / context loss.
+  let currentTokens = estimateTokens(messages);
   const stats = { original: currentTokens, layers: [] as { name: string; tokens: number }[] };
 
   // Already fits
@@ -304,7 +319,7 @@ export function compressContext(
 
   // Layer 1: Trim tool_result/tool messages
   messages = trimToolMessages(messages, 2000); // Max 2000 chars per tool result
-  currentTokens = estimateTokens(JSON.stringify(messages));
+  currentTokens = estimateTokens(messages); // #8594: object-path keeps the #8368 image estimate
   stats.layers.push({ name: "trim_tools", tokens: currentTokens });
 
   if (currentTokens <= targetTokens) {
@@ -317,7 +332,7 @@ export function compressContext(
 
   // Layer 2: Compress structured thinking blocks (remove from non-last assistant messages)
   messages = compressThinking(messages);
-  currentTokens = estimateTokens(JSON.stringify(messages));
+  currentTokens = estimateTokens(messages); // #8594: object-path keeps the #8368 image estimate
   stats.layers.push({ name: "compress_thinking", tokens: currentTokens });
 
   if (currentTokens <= targetTokens) {
@@ -330,7 +345,7 @@ export function compressContext(
 
   // Layer 3: Aggressive purification — drop oldest messages keeping system + last N pairs
   messages = purifyHistory(messages, targetTokens);
-  currentTokens = estimateTokens(JSON.stringify(messages));
+  currentTokens = estimateTokens(messages); // #8594: object-path keeps the #8368 image estimate
   stats.layers.push({ name: "purify_history", tokens: currentTokens });
 
   return {
@@ -416,7 +431,9 @@ function purifyHistory(messages: Record<string, unknown>[], targetTokens: number
     // orphan tool_results that Claude rejects ("tool_result without preceding tool_use").
     candidate = fixToolPairs(candidate);
     candidate = stripTrailingAssistantOrphanToolUse(candidate);
-    const tokens = estimateTokens(JSON.stringify(candidate));
+    // #8594: measure the candidate structure directly so image-bearing turns are not
+    // over-counted and pruned during the binary search.
+    const tokens = estimateTokens(candidate);
     if (tokens <= targetTokens) break;
     keep = Math.max(2, Math.floor(keep * 0.7)); // Drop 30% each iteration
   }

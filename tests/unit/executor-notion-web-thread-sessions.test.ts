@@ -34,6 +34,29 @@ function installNotionTlsMock(
   return () => __setTlsFetchOverrideForTesting(null);
 }
 
+function okNdjson(text: string): string {
+  return [
+    JSON.stringify({ type: "patch-start", data: { s: [] } }),
+    JSON.stringify({
+      type: "record-map",
+      recordMap: {
+        thread_message: {
+          m1: {
+            value: {
+              value: {
+                step: {
+                  type: "agent-inference",
+                  value: [{ type: "text", content: text }],
+                },
+              },
+            },
+          },
+        },
+      },
+    }),
+  ].join("\n");
+}
+
 describe("Notion thread session continuity", () => {
   const {
     __resetNotionThreadSessionsForTests,
@@ -144,7 +167,7 @@ describe("Notion thread session continuity", () => {
     const executor = new NotionWebExecutor();
     const captured: Array<{ createThread?: boolean; threadId?: string }> = [];
     let n = 0;
-    const restore = installNotionTlsMock(async (_url, opts) => {
+    const restoreTls = installNotionTlsMock(async (_url, opts) => {
       const body = JSON.parse(String(opts.body)) as {
         createThread?: boolean;
         threadId?: string;
@@ -163,27 +186,7 @@ describe("Notion thread session continuity", () => {
           }),
         };
       }
-      const ndjson = [
-        JSON.stringify({ type: "patch-start", data: { s: [] } }),
-        JSON.stringify({
-          type: "record-map",
-          recordMap: {
-            thread_message: {
-              m1: {
-                value: {
-                  value: {
-                    step: {
-                      type: "agent-inference",
-                      value: [{ type: "text", content: "recovered" }],
-                    },
-                  },
-                },
-              },
-            },
-          },
-        }),
-      ].join("\n");
-      return { status: 200, text: ndjson };
+      return { status: 200, text: okNdjson("recovered") };
     });
     try {
       const result = await executor.execute({
@@ -201,7 +204,90 @@ describe("Notion thread session continuity", () => {
       const json = (await result.response.json()) as { choices?: { message?: { content?: string } }[] };
       assert.match(String(json.choices?.[0]?.message?.content || ""), /recovered/);
     } finally {
-      restore();
+      restoreTls();
+      __resetNotionThreadSessionsForTests();
+    }
+  });
+
+  it("new first-turn after confirmed chat with same opener mints a fresh thread", () => {
+    __resetNotionThreadSessionsForTests();
+    const {
+      resolveNotionThreadBinding,
+      notionThreadMarkCreateAttempted,
+      notionThreadMarkConfirmed,
+    } = mod as typeof mod & {
+      resolveNotionThreadBinding: (
+        spaceKey: string,
+        messages: { role: string; content: string }[],
+        clientThreadId?: string
+      ) => { threadId: string; createThread: boolean; rootKey: string | null };
+      notionThreadMarkCreateAttempted: (rootKey: string | null, threadId: string) => void;
+      notionThreadMarkConfirmed: (rootKey: string | null, threadId: string) => void;
+    };
+
+    const spaceId = "space-new-session";
+    const hi = [{ role: "user", content: "hi" }];
+
+    const b1 = resolveNotionThreadBinding(spaceId, hi);
+    assert.equal(b1.createThread, true);
+    notionThreadMarkCreateAttempted(b1.rootKey, b1.threadId);
+    notionThreadMarkConfirmed(b1.rootKey, b1.threadId);
+
+    // Claude Code "New session" + same first message must NOT fork the prior Notion chat
+    const b2 = resolveNotionThreadBinding(spaceId, hi);
+    assert.equal(b2.createThread, true);
+    assert.notEqual(b2.threadId, b1.threadId);
+
+    // Multi-turn of the *new* session still sticks to b2 via prefix / sticky history
+    mod.notionThreadSessionStore(
+      spaceId,
+      [{ role: "user", content: "hi" }],
+      "hello from session 2",
+      b2.threadId
+    );
+    const multi = [
+      { role: "user", content: "hi" },
+      { role: "assistant", content: "hello from session 2" },
+      { role: "user", content: "next" },
+    ];
+    const b3 = resolveNotionThreadBinding(spaceId, multi);
+    assert.equal(b3.createThread, false);
+    assert.equal(b3.threadId, b2.threadId);
+  });
+
+  it("execute: two sequential first-turns with same text get distinct Notion threads", async () => {
+    __resetNotionThreadSessionsForTests();
+    const executor = new mod.NotionWebExecutor();
+    const captured: Array<{ createThread?: boolean; threadId?: string }> = [];
+    const restoreTls = installNotionTlsMock(async (_url, opts) => {
+      captured.push(JSON.parse(String(opts.body)));
+      return { status: 200, text: okNdjson("pong") };
+    });
+    try {
+      const creds = { apiKey: COOKIE_WITH_SPACE };
+      const r1 = await executor.execute({
+        model: "fable-5",
+        body: { messages: [{ role: "user", content: "hi" }] },
+        stream: false,
+        credentials: creds,
+        signal: null,
+      } as never);
+      assert.equal(r1.response.status, 200);
+      assert.equal(captured[0]!.createThread, true);
+
+      // Brand-new Claude Code session, same opener text only
+      const r2 = await executor.execute({
+        model: "fable-5",
+        body: { messages: [{ role: "user", content: "hi" }] },
+        stream: false,
+        credentials: creds,
+        signal: null,
+      } as never);
+      assert.equal(r2.response.status, 200);
+      assert.equal(captured[1]!.createThread, true);
+      assert.notEqual(captured[0]!.threadId, captured[1]!.threadId);
+    } finally {
+      restoreTls();
       __resetNotionThreadSessionsForTests();
     }
   });
@@ -229,29 +315,9 @@ describe("Notion thread session continuity", () => {
     __resetNotionThreadSessionsForTests();
     const executor = new mod.NotionWebExecutor();
     const captured: Array<{ createThread?: boolean; threadId?: string }> = [];
-    const restore = installNotionTlsMock(async (_url, opts) => {
+    const restoreTls = installNotionTlsMock(async (_url, opts) => {
       captured.push(JSON.parse(String(opts.body)));
-      const ndjson = [
-        JSON.stringify({ type: "patch-start", data: { s: [] } }),
-        JSON.stringify({
-          type: "record-map",
-          recordMap: {
-            thread_message: {
-              m1: {
-                value: {
-                  value: {
-                    step: {
-                      type: "agent-inference",
-                      value: [{ type: "text", content: "ok" }],
-                    },
-                  },
-                },
-              },
-            },
-          },
-        }),
-      ].join("\n");
-      return { status: 200, text: ndjson };
+      return { status: 200, text: okNdjson("ok") };
     });
     try {
       const r1 = await executor.execute({
@@ -262,8 +328,8 @@ describe("Notion thread session continuity", () => {
         signal: null,
       } as never);
       assert.equal(r1.response.status, 200);
-      assert.equal(captured[0].createThread, true);
-      const t1 = captured[0].threadId;
+      assert.equal(captured[0]!.createThread, true);
+      const t1 = captured[0]!.threadId;
       assert.ok(t1 && t1.length > 10);
 
       const json1 = (await r1.response.json()) as { notion_thread_id?: string; id?: string };
@@ -283,10 +349,10 @@ describe("Notion thread session continuity", () => {
         signal: null,
       } as never);
       assert.equal(r2.response.status, 200);
-      assert.equal(captured[1].createThread, false);
-      assert.equal(captured[1].threadId, t1);
+      assert.equal(captured[1]!.createThread, false);
+      assert.equal(captured[1]!.threadId, t1);
     } finally {
-      restore();
+      restoreTls();
       __resetNotionThreadSessionsForTests();
     }
   });
@@ -297,34 +363,14 @@ describe("Notion thread session continuity", () => {
     const pinned = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
     let capturedCreateThread: boolean | undefined;
     let capturedThreadId: string | undefined;
-    const restore = installNotionTlsMock(async (_url, opts) => {
+    const restoreTls = installNotionTlsMock(async (_url, opts) => {
       const body = JSON.parse(String(opts.body)) as {
         createThread?: boolean;
         threadId?: string;
       };
       capturedCreateThread = body.createThread;
       capturedThreadId = body.threadId;
-      const ndjson = [
-        JSON.stringify({ type: "patch-start", data: { s: [] } }),
-        JSON.stringify({
-          type: "record-map",
-          recordMap: {
-            thread_message: {
-              m1: {
-                value: {
-                  value: {
-                    step: {
-                      type: "agent-inference",
-                      value: [{ type: "text", content: "ok" }],
-                    },
-                  },
-                },
-              },
-            },
-          },
-        }),
-      ].join("\n");
-      return { status: 200, text: ndjson };
+      return { status: 200, text: okNdjson("ok") };
     });
     try {
       // Real ExecuteInput shape: clientHeaders only (headers is undefined).
@@ -342,7 +388,7 @@ describe("Notion thread session continuity", () => {
       // Client-supplied thread id must force follow-up mode (createThread=false).
       assert.equal(capturedCreateThread, false);
     } finally {
-      restore();
+      restoreTls();
       __resetNotionThreadSessionsForTests();
     }
   });
