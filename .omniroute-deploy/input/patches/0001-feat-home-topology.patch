@@ -1,12 +1,12 @@
 diff --git a/changelog.d/features/8450-home-topology-live-feed.md b/changelog.d/features/8450-home-topology-live-feed.md
 new file mode 100644
-index 000000000..ac47ccfa5
+index 000000000..ee1c8ac31
 --- /dev/null
 +++ b/changelog.d/features/8450-home-topology-live-feed.md
 @@ -0,0 +1 @@
-+- **feat(home):** the home Provider Topology now shows a logo-only router core with an electric "kame beam" on active links, a live **Recent Requests** panel (polls `/api/usage/call-logs` every ~3s, gated by the topology appearance toggle + page visibility), capacity-bounded concentric rings with stable alphabetical slots so many providers no longer overlap, and only surfaces providers with an enabled connection — untested/failing connections no longer clutter the map. All topology animations honour `prefers-reduced-motion` ([#8450](https://github.com/diegosouzapw/OmniRoute/pull/8450)) — thanks @nguyenha935
++- **feat(home):** the home Provider Topology now shows a logo-only router core with an electric "kame beam" on active links, a live **Recent Requests** panel (polls `/api/usage/call-logs` every ~3s, gated by the topology appearance toggle + page visibility), a ring that grows with the provider count so many providers no longer overlap, and only surfaces providers with an enabled connection — untested/failing connections no longer clutter the map. Nodes are ordered by creation time, so adding a provider appends it instead of pushing the existing map around, and a compatible node without a custom `icon_url` now renders the same bundled logo the providers page shows instead of a generic glyph. The error counter and the red edges reflect **every** currently-failing provider (`/api/provider-metrics` gained `topology.errorProviders`); previously only the most recent failure was reported, so a second failure silently cleared the first. All topology animations honour `prefers-reduced-motion` ([#8450](https://github.com/diegosouzapw/OmniRoute/pull/8450)) — thanks @nguyenha935
 diff --git a/src/app/(dashboard)/dashboard/HomePageClient.tsx b/src/app/(dashboard)/dashboard/HomePageClient.tsx
-index 24cec3140..b1129c624 100644
+index 24cec3140..e65c68d13 100644
 --- a/src/app/(dashboard)/dashboard/HomePageClient.tsx
 +++ b/src/app/(dashboard)/dashboard/HomePageClient.tsx
 @@ -17,6 +17,7 @@ import { useNotificationStore } from "@/store/notificationStore";
@@ -17,10 +17,15 @@ index 24cec3140..b1129c624 100644
  import { useIsElectron, useOpenExternal } from "@/shared/hooks/useElectron";
  import { HomeProviderTopologySection } from "./HomeProviderTopologySection";
  import { shouldShowProviderTopologyOnHome } from "./homeAppearance";
-@@ -117,8 +118,20 @@ export default function HomePageClient({ machineId }: HomePageClientProps) {
+@@ -116,9 +117,30 @@ export default function HomePageClient({ machineId }: HomePageClientProps) {
+   const [baseUrl, setBaseUrl] = useState("/v1");
    const [selectedProvider, setSelectedProvider] = useState(null);
    const [providerMetrics, setProviderMetrics] = useState<Record<string, ProviderMetricSummary>>({});
-   const [providerTopology, setProviderTopology] = useState({ lastProvider: "", errorProvider: "" });
+-  const [providerTopology, setProviderTopology] = useState({ lastProvider: "", errorProvider: "" });
++  const [providerTopology, setProviderTopology] = useState<{
++    lastProvider: string;
++    errorProviders: string[];
++  }>({ lastProvider: "", errorProviders: [] });
 +  // `type` and `iconUrl` are what `resolveCompatibleProviderCatalogEntry` needs to pick the
 +  // right logo/badge/colour. /api/provider-nodes already returns both; this state type used
 +  // to drop them, so the topology could never render an operator's icon no matter what was
@@ -35,11 +40,39 @@ index 24cec3140..b1129c624 100644
 +      apiType?: string | null;
 +      baseUrl?: string | null;
 +      iconUrl?: string | null;
++      /**
++       * `provider_nodes.created_at`, already present in the API response (the query is
++       * `SELECT *` and every column is camel-cased through). Declared here so the topology
++       * can order nodes by age — a newly added provider must append, not displace.
++       */
++      createdAt?: string | null;
 +    }>
    >([]);
  
    // The live in-flight request feed for the Provider Topology pulse animation is owned by
-@@ -425,7 +438,17 @@ export default function HomePageClient({ machineId }: HomePageClientProps) {
+@@ -309,9 +331,20 @@ export default function HomePageClient({ machineId }: HomePageClientProps) {
+           const data = await metricsRes.json();
+           if (!cancelled) {
+             setProviderMetrics(data.metrics || {});
++            // `errorProviders` (plural) carries EVERY failing provider. Reading the legacy
++            // singular field showed only the most recent one, so a second failure appeared
++            // to clear the first. Fall back to the singular field so an older/cached API
++            // response still lights one edge rather than none.
++            const reportedErrors = Array.isArray(data.topology?.errorProviders)
++              ? data.topology.errorProviders
++              : [data.topology?.errorProvider];
+             setProviderTopology({
+               lastProvider: normalizeProviderId(data.topology?.lastProvider),
+-              errorProvider: normalizeProviderId(data.topology?.errorProvider),
++              errorProviders: reportedErrors
++                .map((provider: unknown) =>
++                  normalizeProviderId(typeof provider === "string" ? provider : "")
++                )
++                .filter(Boolean),
+             });
+           }
+         }
+@@ -425,7 +458,19 @@ export default function HomePageClient({ machineId }: HomePageClientProps) {
    }, [providerConnections, t, tp, router]);
  
    const providerStats = useMemo(() => {
@@ -52,13 +85,15 @@ index 24cec3140..b1129c624 100644
 +        color?: string;
 +        textIcon?: string;
 +        iconUrl?: string;
++        apiType?: string;
++        createdAt?: string;
 +      },
 +      extraModelKeys: readonly string[] = []
 +    ) => {
        const connections = providerConnections.filter((conn) => conn.provider === providerId);
        const connected = connections.filter((connection) =>
          isProviderConnectionConnected(connection)
-@@ -434,7 +457,9 @@ export default function HomePageClient({ machineId }: HomePageClientProps) {
+@@ -434,7 +479,9 @@ export default function HomePageClient({ machineId }: HomePageClientProps) {
          isProviderConnectionErrored(connection)
        ).length;
  
@@ -69,7 +104,7 @@ index 24cec3140..b1129c624 100644
        const providerModels = models.filter((m) => providerKeys.has(m.provider));
  
        const authType = NOAUTH_PROVIDERS[providerId]
-@@ -452,8 +477,56 @@ export default function HomePageClient({ machineId }: HomePageClientProps) {
+@@ -452,8 +499,60 @@ export default function HomePageClient({ machineId }: HomePageClientProps) {
          modelCount: providerModels.length,
          authType,
        };
@@ -118,6 +153,10 @@ index 24cec3140..b1129c624 100644
 +            color: entry.color,
 +            textIcon: entry.textIcon,
 +            iconUrl: entry.iconUrl,
++            // `apiType` picks the right OpenAI-compatible logo when the node has no
++            // icon_url; `createdAt` is what puts a newly added node last in the ring.
++            apiType: entry.apiType,
++            createdAt: node.createdAt || undefined,
 +          },
 +          prefix ? [prefix] : []
 +        );
@@ -128,7 +167,7 @@ index 24cec3140..b1129c624 100644
  
    const selectedProviderModels = useMemo(() => {
      if (!selectedProvider) return [];
-@@ -467,52 +540,57 @@ export default function HomePageClient({ machineId }: HomePageClientProps) {
+@@ -467,54 +566,63 @@ export default function HomePageClient({ machineId }: HomePageClientProps) {
      type ProviderHealth = "active" | "error" | "idle";
      const byProvider = new Map<
        string,
@@ -139,6 +178,8 @@ index 24cec3140..b1129c624 100644
 +        name?: string;
 +        iconUrl?: string;
 +        textIcon?: string;
++        apiType?: string | null;
++        createdAt?: string | null;
 +        status: ProviderHealth;
 +      }
      >();
@@ -205,6 +246,8 @@ index 24cec3140..b1129c624 100644
 +        // topology renders the SAME logo/badge the providers page renders for this node.
 +        iconUrl: stat.provider?.iconUrl,
 +        textIcon: stat.provider?.textIcon,
++        apiType: stat.provider?.apiType,
++        createdAt: stat.provider?.createdAt,
 +        status: stat.connected > 0 ? "active" : "error",
        });
 -    };
@@ -219,29 +262,93 @@ index 24cec3140..b1129c624 100644
 -  }, [providerStats, providerMetrics, providerNodes]);
 +  }, [providerStats, providerNodes]);
  
-   const { lastProvider, errorProvider } = providerTopology;
+-  const { lastProvider, errorProvider } = providerTopology;
++  const { lastProvider, errorProviders } = providerTopology;
  
+   const pollBackgroundUpdate = useCallback(
+     async ({
+@@ -1177,7 +1285,7 @@ export default function HomePageClient({ machineId }: HomePageClientProps) {
+         <HomeProviderTopologySection
+           providers={topologyProviders}
+           lastProvider={lastProvider}
+-          errorProvider={errorProvider}
++          errorProviders={errorProviders}
+           enabled={showProviderTopologyOnHome}
+         />
+       )}
 diff --git a/src/app/(dashboard)/dashboard/HomeProviderTopologySection.tsx b/src/app/(dashboard)/dashboard/HomeProviderTopologySection.tsx
-index 034088e7b..13cc5ec01 100644
+index 034088e7b..0f5368b61 100644
 --- a/src/app/(dashboard)/dashboard/HomeProviderTopologySection.tsx
 +++ b/src/app/(dashboard)/dashboard/HomeProviderTopologySection.tsx
-@@ -3,11 +3,11 @@
+@@ -3,16 +3,21 @@
  import { useTranslations } from "next-intl";
  import dynamic from "next/dynamic";
  
 -import { Card } from "@/shared/components";
  import { useLiveRequests } from "@/hooks/useLiveDashboard";
- import { selectActiveRequests } from "../home/topologyUtils";
+-import { selectActiveRequests } from "../home/topologyUtils";
++import { selectActiveRequests, selectDrawnErrorProviders } from "../home/topologyUtils";
  
  const ProviderTopology = dynamic(() => import("../home/ProviderTopology"), { ssr: false });
 +const HomeRecentRequests = dynamic(() => import("../home/HomeRecentRequests"), { ssr: false });
  
  type TopologyProvider = {
    id: string;
-@@ -38,8 +38,17 @@ export function HomeProviderTopologySection({
+   provider: string;
+   name?: string;
++  iconUrl?: string;
++  textIcon?: string;
++  apiType?: string | null;
++  /** provider_nodes.created_at — ring order, so a newly added provider appends. */
++  createdAt?: string | null;
+   /** Connection-health base state, so the topology can colour a node at rest. */
+   status?: "active" | "error" | "idle";
+ };
+@@ -20,12 +25,13 @@ type TopologyProvider = {
+ export function HomeProviderTopologySection({
+   providers,
+   lastProvider,
+-  errorProvider,
++  errorProviders,
+   enabled = true,
+ }: {
+   providers: TopologyProvider[];
+   lastProvider: string;
+-  errorProvider: string;
++  /** Every currently-failing provider, not just the most recent one. */
++  errorProviders: readonly string[];
+   enabled?: boolean;
+ }) {
+   const t = useTranslations("home");
+@@ -36,15 +42,46 @@ export function HomeProviderTopologySection({
+   // section is actually shown on the home page.
+   const { activeRequests: liveActiveRequests } = useLiveRequests({ enabled });
    const activeRequests = selectActiveRequests(liveActiveRequests);
-   const activeProviderCount = new Set(activeRequests.map(({ provider }) => provider)).size;
+-  const activeProviderCount = new Set(activeRequests.map(({ provider }) => provider)).size;
  
++  // Both counters must describe THE GRAPH BELOW, or the caption contradicts the picture.
++  //
++  // The active count is keyed the same way the nodes are (lowercased provider id), because
++  // the WS feed reports whatever casing the request carried while nodes are drawn from
++  // normalized ids — counting raw strings let a provider inflate "active" without any node
++  // lighting up.
++  const activeProviderCount = new Set(
++    activeRequests
++      .map(({ provider }) => (typeof provider === "string" ? provider.trim().toLowerCase() : ""))
++      .filter(Boolean)
++  ).size;
++
++  // The error count was `errorProvider ? 1 : 0` — a boolean coerced to a number, so it
++  // could never report more than one failing provider no matter how many were broken.
++  // Intersecting with the drawn providers also removes the opposite mismatch: the metrics
++  // source aggregates all-time request logs with no connection check, so a provider whose
++  // connection was disabled or deleted used to contribute an error with no red node to
++  // explain it.
++  const errorProviderCount = selectDrawnErrorProviders(
++    errorProviders,
++    providers.map((provider) => provider.provider)
++  ).size;
++
 +  // The whole section is ONE bordered block (border + rounded + padding) so header,
 +  // diagram and Recent Requests read as a single component — but the block's background
 +  // stays TRANSPARENT, not an opaque surface. Both requirements can only hold together
@@ -257,7 +364,13 @@ index 034088e7b..13cc5ec01 100644
        <div className="flex items-center justify-between mb-3">
          <div>
            <h2 className="text-base font-semibold">{t("providerTopology")}</h2>
-@@ -62,12 +71,15 @@ export function HomeProviderTopologySection({
+           <p className="text-xs text-text-muted">
+-            {t("activeError", { active: activeProviderCount, errors: errorProvider ? 1 : 0 })}
++            {t("activeError", { active: activeProviderCount, errors: errorProviderCount })}
+           </p>
+         </div>
+         <div className="flex items-center gap-3 text-[11px] text-text-muted">
+@@ -62,12 +99,15 @@ export function HomeProviderTopologySection({
            </span>
          </div>
        </div>
@@ -273,13 +386,45 @@ index 034088e7b..13cc5ec01 100644
 +          providers={providers}
 +          activeRequests={activeRequests}
 +          lastProvider={lastProvider}
-+          errorProvider={errorProvider}
++          errorProviders={errorProviders}
 +        />
 +        <HomeRecentRequests enabled={enabled} />
 +      </div>
 +    </div>
    );
  }
+diff --git a/src/app/(dashboard)/dashboard/providers/components/ProviderCard.tsx b/src/app/(dashboard)/dashboard/providers/components/ProviderCard.tsx
+index c1382ccf5..80654ff14 100644
+--- a/src/app/(dashboard)/dashboard/providers/components/ProviderCard.tsx
++++ b/src/app/(dashboard)/dashboard/providers/components/ProviderCard.tsx
+@@ -14,6 +14,7 @@ import {
+   isClaudeCodeCompatibleProvider,
+   isOpenAICompatibleProvider,
+ } from "@/shared/constants/providers";
++import { resolveCompatibleStaticIcon } from "@/shared/utils/compatibleProviderId";
+ 
+ import { CategoryDot } from "./CategoryDot";
+ import { isKimiPartnerProviderId } from "../featuredProviders";
+@@ -281,13 +282,12 @@ const ProviderCard = forwardRef<ProviderCardHandle, ProviderCardProps>(function
+     "cloud-agent": t("cloudAgentProviders"),
+   };
+ 
+-  const staticIconPath = (() => {
+-    if (isCompatible) {
+-      return provider.apiType === "responses" ? "/providers/oai-r.png" : "/providers/oai-cc.png";
+-    }
+-    if (isAnthropicCompatible || isCcCompatible) return "/providers/anthropic-m.png";
+-    return null;
+-  })();
++  // Resolved by the shared helper rather than re-derived here. This mapping used to live
++  // only at this call site, which is why the same compatible node rendered its real logo on
++  // this page and a generic circle-plus glyph on the home topology: ProviderIcon itself had
++  // no idea these assets existed. It now resolves them internally, so this value is needed
++  // only for the <Image> branch below.
++  const staticIconPath = resolveCompatibleStaticIcon(providerId, provider.apiType);
+ 
+   const handleToggle = (event: MouseEvent<HTMLDivElement>) => {
+     event.preventDefault();
 diff --git a/src/app/(dashboard)/home/HomeRecentRequests.tsx b/src/app/(dashboard)/home/HomeRecentRequests.tsx
 new file mode 100644
 index 000000000..abe6f57ed
@@ -494,10 +639,10 @@ index 000000000..abe6f57ed
 +  );
 +}
 diff --git a/src/app/(dashboard)/home/ProviderTopology.tsx b/src/app/(dashboard)/home/ProviderTopology.tsx
-index 2324d93d8..90995e721 100644
+index 2324d93d8..717c81e77 100644
 --- a/src/app/(dashboard)/home/ProviderTopology.tsx
 +++ b/src/app/(dashboard)/home/ProviderTopology.tsx
-@@ -2,24 +2,51 @@
+@@ -2,24 +2,52 @@
  
  import { useMemo } from "react";
  import { useTranslations } from "next-intl";
@@ -520,7 +665,7 @@ index 2324d93d8..90995e721 100644
  import { getFallbackProviderColor } from "@/shared/utils/providerFallbackColor";
 +import { getTopologyHandles } from "./topologyHandles";
  import { resolveTopologyNodeLabel } from "./topologyLabel";
- 
+-
 -// Rings: [capacity, rx, ry]. Each successive ring fits ~6 more nodes.
 -const RINGS: [number, number, number][] = [
 -  [8, 210, 132],
@@ -530,6 +675,8 @@ index 2324d93d8..90995e721 100644
 -  [32, 850, 536],
 -  [38, 1010, 637],
 -];
++import { compareTopologyProviders, selectDrawnErrorProviders } from "./topologyUtils";
++
 +// ONE ring whose radius grows with the provider count — never a second ring.
 +//
 +// The previous layout used a fixed ladder of rings ([8, 210, 132], [14, 370, 233], ...)
@@ -559,7 +706,7 @@ index 2324d93d8..90995e721 100644
  
  type ProviderConfig = { color?: string; name?: string; textIcon?: string };
  
-@@ -39,81 +66,92 @@ type ProviderNodeData = {
+@@ -39,81 +67,100 @@ type ProviderNodeData = {
    label: string;
    color: string;
    providerId: string;
@@ -567,6 +714,11 @@ index 2324d93d8..90995e721 100644
 +  iconUrl?: string;
 +  /** Short badge ("AC"/"CC"/"OC") shown when no logo resolves, never a raw fallback glyph. */
 +  textIcon?: string;
++  /**
++   * provider_nodes.api_type — lets ProviderIcon pick between the two OpenAI-compatible
++   * logos when the node has no icon_url of its own.
++   */
++  apiType?: string | null;
    active: boolean;
    error: boolean;
 -  /** Connection-health base state: a healthy connection with no in-flight traffic. */
@@ -577,7 +729,7 @@ index 2324d93d8..90995e721 100644
  
  function ProviderNode({ data }: { data: ProviderNodeData }) {
 -  const { label, color, providerId, active, error, healthy, last } = data;
-+  const { label, color, providerId, iconUrl, textIcon, active, error } = data;
++  const { label, color, providerId, iconUrl, textIcon, apiType, active, error } = data;
    const GREEN = FLOW_EDGE_COLORS.active;
    const RED = FLOW_EDGE_COLORS.error;
 -  const AMBER = FLOW_EDGE_COLORS.last;
@@ -647,9 +799,11 @@ index 2324d93d8..90995e721 100644
 +          Calling ProviderIcon with only `providerId` (as this did) skips the operator's
 +          icon_url AND the "AC"/"CC"/"OC" badge, so a compatible node — whose generated id
 +          is a UUID that matches no bundled logo — fell through every resolution step to
-+          the generic circle-plus glyph. The provider page looked right only because IT
-+          passed src/fallbackText; the topology did not. Threading the same values here
-+          removes that divergence rather than papering over it at this one call site.
++          the generic circle-plus glyph.
++
++          `apiType` matters even though this node has no icon_url of its own: it is what
++          lets ProviderIcon choose between the two OpenAI-compatible logos. Without it a
++          "responses" node would render the chat logo.
 +        */}
 +        <ProviderIcon
 +          providerId={providerId}
@@ -659,6 +813,7 @@ index 2324d93d8..90995e721 100644
 +          type="color"
 +          fallbackText={textIcon}
 +          fallbackColor={color}
++          apiType={apiType}
 +        />
        </div>
  
@@ -679,7 +834,7 @@ index 2324d93d8..90995e721 100644
        )}
      </div>
    );
-@@ -122,39 +160,41 @@ function ProviderNode({ data }: { data: ProviderNodeData }) {
+@@ -122,39 +169,41 @@ function ProviderNode({ data }: { data: ProviderNodeData }) {
  type RouterNodeData = { activeCount: number };
  
  function RouterNode({ data }: { data: RouterNodeData }) {
@@ -732,7 +887,7 @@ index 2324d93d8..90995e721 100644
            {data.activeCount}
          </span>
        )}
-@@ -167,19 +207,21 @@ const nodeTypes: NodeTypes = {
+@@ -167,19 +216,28 @@ const nodeTypes: NodeTypes = {
    router: RouterNode as any,
  };
  
@@ -761,12 +916,19 @@ index 2324d93d8..90995e721 100644
 +  iconUrl?: string;
 +  /** Badge text for compatible nodes ("AC"/"CC"/"OC"); registry providers use their own. */
 +  textIcon?: string;
++  /** provider_nodes.api_type — picks between the two OpenAI-compatible logos. */
++  apiType?: string | null;
++  /**
++   * provider_nodes.created_at — drives ring order so a newly added provider appends at the
++   * end. Absent for built-in registry providers, which have no creation record.
++   */
++  createdAt?: string | null;
 +  status?: ProviderHealth;
 +};
  
  function buildLayout(
    providers: ProviderEntry[],
-@@ -189,8 +231,8 @@ function buildLayout(
+@@ -189,8 +247,8 @@ function buildLayout(
  ): { nodes: Node[]; edges: Edge[] } {
    const nodeW = 156;
    const nodeH = 28;
@@ -777,7 +939,7 @@ index 2324d93d8..90995e721 100644
  
    const nodes: Node[] = [];
    const edges: Edge[] = [];
-@@ -205,78 +247,72 @@ function buildLayout(
+@@ -205,78 +263,78 @@ function buildLayout(
  
    if (providers.length === 0) return { nodes, edges };
  
@@ -796,14 +958,7 @@ index 2324d93d8..90995e721 100644
 -      ? d
 -      : a.provider.toLowerCase().localeCompare(b.provider.toLowerCase()); // ASCII kasıtlı
 -  });
-+  // Stable alphabetical order. Node POSITION never depends on activity — a provider
-+  // keeps its ring slot whether or not it's mid-request, so the map no longer
-+  // reshuffles ("jumps") every time a call lands. Activity is conveyed purely by
-+  // node/edge styling, matching 9Router's `providers.forEach((p, i) => ...)`.
-+  const sorted = [...providers].sort((a, b) =>
-+    a.provider.toLowerCase().localeCompare(b.provider.toLowerCase())
-+  );
- 
+-
 -  let provIdx = 0;
 -  for (let ri = 0; ri < RINGS.length && provIdx < sorted.length; ri++) {
 -    const [cap, rx, ry] = RINGS[ri];
@@ -860,6 +1015,19 @@ index 2324d93d8..90995e721 100644
 -        style: edgeStyle(active, last, error, healthy),
 -      });
 -    }
++  // Insertion order: a provider added later sits later in the ring, so adding one APPENDS
++  // instead of displacing the existing map. Node POSITION never depends on activity — a
++  // provider keeps its ring slot whether or not it's mid-request, so the map does not
++  // reshuffle every time a call lands. Activity is conveyed purely by node/edge styling.
++  //
++  // This replaced a plain alphabetical sort on the provider ID, which put every newly
++  // added compatible node at the FRONT: its generated id starts with
++  // "anthropic-compatible-"/"openai-compatible-", which sorts ahead of nearly the whole
++  // catalog, so a new node seized the top slot and rotated everyone else round. Because
++  // the sort key was the id while the node renders its display NAME, the result looked
++  // arbitrary rather than alphabetical. See compareTopologyProviders.
++  const sorted = [...providers].sort(compareTopologyProviders);
++
 +  const count = sorted.length;
 +  const { rx, ry } = ringRadii(count);
 +
@@ -897,6 +1065,7 @@ index 2324d93d8..90995e721 100644
 +        providerId: p.provider,
 +        iconUrl: p.iconUrl,
 +        textIcon: p.textIcon || config.textIcon,
++        apiType: p.apiType,
 +        active,
 +        error,
 +      } satisfies ProviderNodeData,
@@ -921,9 +1090,52 @@ index 2324d93d8..90995e721 100644
    }
  
    return { nodes, edges };
-@@ -308,6 +344,17 @@ export default function ProviderTopology({
+@@ -286,14 +344,23 @@ type Props = {
+   providers?: ProviderEntry[];
+   activeRequests?: Array<{ provider?: string; model?: string }>;
+   lastProvider?: string;
+-  errorProvider?: string;
++  /**
++   * Every provider whose most recent request failed — not just one.
++   *
++   * This used to be a single `errorProvider` string, which is why a red edge appeared to
++   * hide and return on its own: the API kept only the most-recently-failing provider, so a
++   * second failure overwrote the first (clearing its red line) and that second provider
++   * succeeding handed the flag back (restoring it), with nothing about the broken provider
++   * having changed.
++   */
++  errorProviders?: readonly string[];
+ };
+ 
+ export default function ProviderTopology({
+   providers = [],
+   activeRequests = [],
+   lastProvider = "",
+-  errorProvider = "",
++  errorProviders = [],
+ }: Props) {
+   const t = useTranslations("common");
+   const activeKey = useMemo(
+@@ -306,17 +373,51 @@ export default function ProviderTopology({
+     [activeRequests]
+   );
    const lastKey = lastProvider.toLowerCase();
-   const errorKey = errorProvider.toLowerCase();
+-  const errorKey = errorProvider.toLowerCase();
++  // Intersected with the providers actually drawn, so the red edges cannot disagree with
++  // what the graph shows — an error for a provider with no node (its connection was
++  // disabled or deleted) has nothing to colour and must not count.
++  const errorKey = useMemo(
++    () =>
++      [
++        ...selectDrawnErrorProviders(
++          errorProviders,
++          providers.map((p) => p.provider)
++        ),
++      ]
++        .sort()
++        .join(","),
++    [errorProviders, providers]
++  );
  
 +  // A provider's beam is active for EXACTLY as long as it has a live request in the
 +  // WS snapshot — the beam starts on `request.started` and stops only when
@@ -939,7 +1151,26 @@ index 2324d93d8..90995e721 100644
    const activeSet = useMemo(
      () => new Set<string>(activeKey ? activeKey.split(",") : []),
      [activeKey]
-@@ -330,8 +377,15 @@ export default function ProviderTopology({
+   );
+   const lastSet = useMemo(() => new Set<string>(lastKey ? [lastKey] : []), [lastKey]);
+-  const errorSet = useMemo(() => new Set<string>(errorKey ? [errorKey] : []), [errorKey]);
++  // Many providers can be red at once. `errorKey` is the sorted joined form, so it is a
++  // stable primitive to memo on — the same trick `activeKey` uses to avoid re-deriving on
++  // every poll when the contents did not actually change.
++  const errorSet = useMemo(
++    () => new Set<string>(errorKey ? errorKey.split(",") : []),
++    [errorKey]
++  );
+ 
+   const { nodes, edges } = useMemo(
+     () => buildLayout(providers, activeSet, lastSet, errorSet),
++    // `lastSet`/`errorSet` are derived purely from `lastKey`/`errorKey`, so listing the
++    // primitives is equivalent to listing the Sets and avoids a fresh layout on every
++    // render. Keep both keys here: dropping either makes the layout genuinely stale.
+     // eslint-disable-next-line react-hooks/exhaustive-deps
+     [providers, activeSet, lastKey, errorKey]
+   );
+@@ -330,8 +431,15 @@ export default function ProviderTopology({
      [providers]
    );
  
@@ -956,7 +1187,7 @@ index 2324d93d8..90995e721 100644
  
    if (providers.length === 0) {
      return (
-@@ -349,6 +403,7 @@ export default function ProviderTopology({
+@@ -349,6 +457,7 @@ export default function ProviderTopology({
        nodes={nodes}
        edges={edges}
        nodeTypes={nodeTypes}
@@ -999,6 +1230,147 @@ index 000000000..e388af953
 +    ? { sourceHandle: "right", targetHandle: "left" }
 +    : { sourceHandle: "left", targetHandle: "right" };
 +}
+diff --git a/src/app/(dashboard)/home/topologyUtils.ts b/src/app/(dashboard)/home/topologyUtils.ts
+index ef731f72f..fc98b950a 100644
+--- a/src/app/(dashboard)/home/topologyUtils.ts
++++ b/src/app/(dashboard)/home/topologyUtils.ts
+@@ -2,6 +2,7 @@
+  * Pure helpers for the home-page Provider Topology panel.
+  */
+ 
++
+ /** Minimal shape expected by <ProviderTopology activeRequests={...}> */
+ export interface TopologyActiveRequest {
+   provider: string;
+@@ -25,3 +26,92 @@ interface InFlightRequest {
+ export function selectActiveRequests(requests: InFlightRequest[]): TopologyActiveRequest[] {
+   return requests.map(({ provider, model }) => ({ provider, model }));
+ }
++
++/** The ordering fields a topology node needs; everything else is irrelevant to layout. */
++interface TopologyOrderable {
++  provider: string;
++  name?: string;
++  /** `provider_nodes.created_at` — present only for operator-added compatible nodes. */
++  createdAt?: string | null;
++}
++
++function orderableLabel(entry: TopologyOrderable): string {
++  return (entry.name?.trim() || entry.provider || "").toLowerCase();
++}
++
++function orderableCreatedAt(entry: TopologyOrderable): number | null {
++  const raw = typeof entry.createdAt === "string" ? entry.createdAt.trim() : "";
++  if (!raw) return null;
++  const parsed = Date.parse(raw);
++  return Number.isFinite(parsed) ? parsed : null;
++}
++
++/**
++ * Ring order: a provider added later sits later, so a new provider APPENDS instead of
++ * displacing the existing map.
++ *
++ * The previous comparator sorted on the provider ID. A compatible node's id is
++ * `anthropic-compatible-<uuid>`, which sorts ahead of almost the whole catalog, so every
++ * newly added node took the first slot (straight up) and rotated everyone else round. It
++ * also sorted by ID while the node RENDERS its display name, so the jump looked arbitrary
++ * — the node labelled with the operator's own name appeared pinned first among otherwise
++ * alphabetical labels.
++ *
++ * Built-in registry providers have no `created_at`, so they cannot be ordered by age.
++ * They keep a stable alphabetical block BEFORE the operator-added nodes: a catalog
++ * provider is not "newer" than anything, and interleaving the two by a synthetic date
++ * would make the ring reshuffle whenever a node is added. Ties fall through to the
++ * provider id so the comparator is total — otherwise React Flow node order (and the
++ * memo key built from it) could differ between renders for equal keys.
++ */
++export function compareTopologyProviders(a: TopologyOrderable, b: TopologyOrderable): number {
++  const aCreated = orderableCreatedAt(a);
++  const bCreated = orderableCreatedAt(b);
++
++  if (aCreated === null && bCreated !== null) return -1;
++  if (aCreated !== null && bCreated === null) return 1;
++
++  if (aCreated !== null && bCreated !== null && aCreated !== bCreated) {
++    return aCreated - bCreated;
++  }
++
++  const labelCompare = orderableLabel(a).localeCompare(orderableLabel(b));
++  if (labelCompare !== 0) return labelCompare;
++  return (a.provider || "").localeCompare(b.provider || "");
++}
++
++/**
++ * The failing providers that are actually DRAWN, lowercased for node-key comparison.
++ *
++ * Two separate defects made the old single-scalar error state wrong, and both are fixed by
++ * intersecting a full list with the drawn set:
++ *
++ *  - Only one provider could be flagged at a time (the API kept the max-timestamp winner),
++ *    so a second failure silently un-flagged the first, and that second provider
++ *    succeeding handed the flag back — the red line appearing to hide and return on its
++ *    own with nothing about the broken provider having changed.
++ *  - The count was computed from all-time request logs with no connection check, while the
++ *    graph only draws providers that still have an enabled connection. A provider whose
++ *    connection had been disabled or deleted therefore contributed to the error count with
++ *    no red node anywhere to explain it.
++ */
++export function selectDrawnErrorProviders(
++  errorProviders: readonly string[] | null | undefined,
++  drawnProviders: readonly string[]
++): Set<string> {
++  const result = new Set<string>();
++  if (!Array.isArray(errorProviders) || errorProviders.length === 0) return result;
++
++  const drawn = new Set(
++    drawnProviders
++      .map((provider) => (typeof provider === "string" ? provider.trim().toLowerCase() : ""))
++      .filter(Boolean)
++  );
++  if (drawn.size === 0) return result;
++
++  for (const candidate of errorProviders) {
++    const key = typeof candidate === "string" ? candidate.trim().toLowerCase() : "";
++    if (key && drawn.has(key)) result.add(key);
++  }
++  return result;
++}
+diff --git a/src/app/api/provider-metrics/route.ts b/src/app/api/provider-metrics/route.ts
+index 3b6e16a0a..566f990e7 100644
+--- a/src/app/api/provider-metrics/route.ts
++++ b/src/app/api/provider-metrics/route.ts
+@@ -33,6 +33,12 @@ export async function GET() {
+     let lastProviderTs = 0;
+     let errorProvider = "";
+     let errorProviderTs = 0;
++    // EVERY currently-failing provider. `errorProvider` below keeps only the most recent
++    // one, which made a multi-failure state unrepresentable: a second provider failing
++    // overwrote the first, so consumers saw the first one recover on its own, and that
++    // second provider succeeding handed the flag back. Anything that needs to show all
++    // failures (the home topology's red edges and its error count) must read this.
++    const errorProviders: string[] = [];
+ 
+     for (const row of rows) {
+       const provider =
+@@ -69,6 +75,7 @@ export async function GET() {
+       const isCurrentlyInError =
+         lastStatus !== null && (lastStatus < 200 || lastStatus >= 400);
+       const errorTs = isCurrentlyInError && lastErrorAt ? Date.parse(lastErrorAt) : 0;
++      if (isCurrentlyInError) errorProviders.push(provider);
+       if (Number.isFinite(errorTs) && errorTs > errorProviderTs) {
+         errorProvider = provider;
+         errorProviderTs = errorTs;
+@@ -80,7 +87,10 @@ export async function GET() {
+       topology: {
+         providers: Object.keys(metrics),
+         lastProvider,
++        // Kept for existing consumers. It reports only the most recently failing provider,
++        // so prefer `errorProviders` for anything that must reflect all failures.
+         errorProvider,
++        errorProviders,
+       },
+     });
+   } catch (error) {
 diff --git a/src/app/api/usage/call-logs/route.ts b/src/app/api/usage/call-logs/route.ts
 index 3b3b8ddcc..99f69f51a 100644
 --- a/src/app/api/usage/call-logs/route.ts
@@ -2099,6 +2471,120 @@ index b2713c64f..d6c4306e9 100644
    if (filter.since) {
      conditions.push("cl.timestamp >= @since");
      params.since = filter.since instanceof Date ? filter.since.toISOString() : String(filter.since);
+diff --git a/src/shared/components/ProviderIcon.tsx b/src/shared/components/ProviderIcon.tsx
+index 07df45255..835f48f41 100644
+--- a/src/shared/components/ProviderIcon.tsx
++++ b/src/shared/components/ProviderIcon.tsx
+@@ -26,6 +26,8 @@ import Image from "next/image";
+ 
+ import { useTheme } from "@/shared/hooks/useTheme";
+ 
++import { resolveCompatibleStaticIcon } from "@/shared/utils/compatibleProviderId";
++
+ import { getLobeProviderIcon } from "./lobeProviderIcons";
+ 
+ interface ProviderIconProps {
+@@ -44,6 +46,12 @@ interface ProviderIconProps {
+   alt?: string;
+   fallbackText?: string;
+   fallbackColor?: string;
++  /**
++   * `provider_nodes.api_type` for a compatible node. Only used to pick between the two
++   * OpenAI-compatible logos ("responses" vs chat); the Anthropic-compatible variants
++   * share one asset, so omitting it is safe for them.
++   */
++  apiType?: string | null;
+ }
+ 
+ function GenericProviderIcon({ size }: { size: number }) {
+@@ -323,6 +331,7 @@ const ProviderIcon = memo(function ProviderIcon({
+   alt,
+   fallbackText,
+   fallbackColor,
++  apiType,
+ }: ProviderIconProps) {
+   const { isDark } = useTheme();
+   const normalizedId = PROVIDER_ICON_ALIASES[providerId.toLowerCase()] || providerId.toLowerCase();
+@@ -340,6 +349,9 @@ const ProviderIcon = memo(function ProviderIcon({
+   const theSvgKey = `${normalizedId}:thesvg`;
+ 
+   const trimmedSrc = typeof src === "string" ? src.trim() : "";
++  const compatStaticIcon = resolveCompatibleStaticIcon(providerId, apiType);
++  const compatKey = `${normalizedId}:compat`;
++  const compatFailed = failedAssets[compatKey];
+   const themedFailed = failedAssets[themedKey];
+   const svgFailed = failedAssets[svgKey];
+   const theSvgFailed = failedAssets[theSvgKey];
+@@ -389,6 +401,34 @@ const ProviderIcon = memo(function ProviderIcon({
+     );
+   }
+ 
++  // Tier 0b: bundled logo for a compatible provider node with no operator icon_url.
++  //
++  // A compatible node's id is a generated UUID, so it matches no local SVG/PNG and no
++  // LobeHub icon — every tier below misses and the chain used to end at the generic
++  // circle-plus glyph. The providers page never showed that glyph, but only because it
++  // duplicated this mapping at its own call site, outside this component; the home
++  // topology (and anything else rendering the same node) got the plus. Resolving it here
++  // means one definition serves every surface.
++  //
++  // Placed after the operator-supplied `src` branches so a real custom icon still wins,
++  // and BEFORE the text badge for a src-less node: the providers page shows this image —
++  // not an "AC"/"OC" badge — when icon_url is empty, so matching it is what makes the two
++  // surfaces agree.
++  if (compatStaticIcon && !compatFailed) {
++    return (
++      <Image
++        src={compatStaticIcon}
++        alt={alt || providerId}
++        width={size}
++        height={size}
++        className={className}
++        style={{ objectFit: "contain", flex: "none", ...style }}
++        sizes={`${size}px`}
++        onError={() => setFailedAssets((prev) => ({ ...prev, [compatKey]: true }))}
++      />
++    );
++  }
++
+   // Tier 1: Theme-aware local SVGs (e.g. Arena light/dark)
+   if (themedSvg && !themedFailed) {
+     const themedSrc = isDark ? themedSvg.dark : themedSvg.light;
+@@ -486,6 +526,34 @@ const ProviderIcon = memo(function ProviderIcon({
+     );
+   }
+ 
++  // Tier 5b: caller-supplied text badge, before giving up.
++  //
++  // `fallbackText` used to be reachable ONLY from the failed-remote-src branch above, so a
++  // caller that passed a badge without an icon_url (every compatible node in the DB) had it
++  // ignored and got the generic glyph instead. Honouring it here keeps the badge as a real
++  // last resort for any node whose bundled/remote images are all unavailable.
++  if (fallbackText) {
++    return (
++      <span
++        className={className}
++        style={{
++          display: "inline-flex",
++          alignItems: "center",
++          justifyContent: "center",
++          width: size,
++          height: size,
++          fontSize: Math.max(10, Math.round(size * 0.4)),
++          fontWeight: 700,
++          lineHeight: 1,
++          color: fallbackColor || "currentColor",
++          ...style,
++        }}
++      >
++        {fallbackText}
++      </span>
++    );
++  }
++
+   // Tier 6: Generic AI icon
+   return (
+     <span className={className} style={{ display: "inline-flex", alignItems: "center", ...style }}>
 diff --git a/src/shared/components/flow/KameBeamEdge.tsx b/src/shared/components/flow/KameBeamEdge.tsx
 new file mode 100644
 index 000000000..d63a1543d
@@ -2321,6 +2807,47 @@ index 6d20f2f8a..93de22797 100644
 +  if (healthy) return { stroke: FLOW_EDGE_COLORS.active, strokeWidth: 1.25, opacity: 0.22 };
 +  return { stroke: FLOW_EDGE_COLORS.idle, strokeWidth: 1, opacity: 0.12 };
  }
+diff --git a/src/shared/utils/compatibleProviderId.ts b/src/shared/utils/compatibleProviderId.ts
+index cd421a2bd..cca11653a 100644
+--- a/src/shared/utils/compatibleProviderId.ts
++++ b/src/shared/utils/compatibleProviderId.ts
+@@ -34,3 +34,36 @@ const COMPATIBLE_PROVIDER_ID_PATTERN = new RegExp(
+ export function isCompatibleProviderConnectionId(providerId: string | null | undefined): boolean {
+   return typeof providerId === "string" && COMPATIBLE_PROVIDER_ID_PATTERN.test(providerId);
+ }
++
++/**
++ * Bundled logo for a compatible provider node that carries no operator `icon_url`.
++ *
++ * WHY THIS EXISTS
++ * ---------------
++ * A compatible node's id is a generated UUID, so it matches no local SVG/PNG and no
++ * LobeHub icon: `ProviderIcon`'s resolution chain runs out of tiers and draws its generic
++ * circle-plus glyph. The providers page never showed that glyph — but only because it
++ * hand-rolled this same mapping at its own call site, OUTSIDE the shared icon component.
++ * The result was one node rendering a real logo on the providers page and a plus on the
++ * home topology. Defining it once here lets every surface resolve it identically.
++ *
++ * Returns `null` for anything that is not a compatible node: a registry provider must keep
++ * flowing through the normal chain, and handing it a compat image would mislabel it.
++ *
++ * `apiType` only separates the two OpenAI-compatible shapes. Both Anthropic-compatible
++ * variants share one asset, and Claude-Code-compatible ids also start with the Anthropic
++ * prefix, so that branch covers them without a separate case.
++ */
++export function resolveCompatibleStaticIcon(
++  providerId: unknown,
++  apiType?: string | null
++): string | null {
++  if (typeof providerId !== "string") return null;
++  const id = providerId.trim();
++  if (!id) return null;
++  if (id.startsWith(ANTHROPIC_COMPATIBLE_PREFIX)) return "/providers/anthropic-m.png";
++  if (id.startsWith(OPENAI_COMPATIBLE_PREFIX)) {
++    return apiType === "responses" ? "/providers/oai-r.png" : "/providers/oai-cc.png";
++  }
++  return null;
++}
 diff --git a/tests/unit/call-logs-exclude-tests-allowlist.test.ts b/tests/unit/call-logs-exclude-tests-allowlist.test.ts
 new file mode 100644
 index 000000000..78aa5728a
@@ -2459,8 +2986,238 @@ index 000000000..78aa5728a
 +  const rows = await callLogs.getCallLogs({ limit: 50 });
 +  assert.equal(rows.length, 2, "no allowlist → backend rows are not filtered out");
 +});
+diff --git a/tests/unit/home-provider-topology-live-state.test.ts b/tests/unit/home-provider-topology-live-state.test.ts
+index 1c0e2bffb..313fdca35 100644
+--- a/tests/unit/home-provider-topology-live-state.test.ts
++++ b/tests/unit/home-provider-topology-live-state.test.ts
+@@ -13,15 +13,25 @@ const providerTopologySrc = readFileSync(
+   "utf8"
+ );
+ 
+-test("home topology uses provider-metrics topology.errorProvider instead of re-deriving from stale lastErrorAt", () => {
++test("home topology uses provider-metrics topology error state instead of re-deriving from stale lastErrorAt", () => {
++  // The API now reports EVERY failing provider (`errorProviders`), not just the most recent
++  // one. The singular field could not represent two simultaneous failures, so a second
++  // failing provider silently cleared the first — and that second provider succeeding
++  // handed the flag back, which is what made a red edge look like it hid and returned on
++  // its own. The singular field is still read as a fallback for an older API response.
+   assert.match(
+     homePageClientSrc,
+-    /errorProvider:\s*normalizeProviderId\(data\.topology\?\.errorProvider\)/,
+-    "HomePageClient should trust /api/provider-metrics topology.errorProvider"
++    /Array\.isArray\(data\.topology\?\.errorProviders\)/,
++    "HomePageClient should read the plural topology.errorProviders"
++  );
++  assert.match(
++    homePageClientSrc,
++    /errorProviders:\s*reportedErrors/,
++    "the normalized list should feed providerTopology.errorProviders"
+   );
+ 
+   const localTopologyDerivation = homePageClientSrc.match(
+-    /const \{ lastProvider, errorProvider \} = useMemo[\s\S]*?\}, \[providerMetrics\]\);/
++    /const \{ lastProvider, errorProviders \} = useMemo[\s\S]*?\}, \[providerMetrics\]\);/
+   );
+   assert.equal(
+     localTopologyDerivation,
+@@ -30,6 +40,27 @@ test("home topology uses provider-metrics topology.errorProvider instead of re-d
+   );
+ });
+ 
++test("topology error state is a list, so simultaneous failures cannot overwrite each other", () => {
++  // Guards the shape at every hop: a single scalar anywhere in the chain re-introduces the
++  // overwrite, and no runtime test can catch it because one failing provider still works.
++  assert.match(
++    providerTopologySrc,
++    /errorProviders\?: readonly string\[\]/,
++    "ProviderTopology must accept a list of failing providers"
++  );
++  assert.doesNotMatch(
++    providerTopologySrc,
++    /errorProvider\?: string;/,
++    "the single-provider prop must be gone, not kept alongside the list"
++  );
++  // errorSet must be able to hold more than one entry.
++  assert.match(
++    providerTopologySrc,
++    /new Set<string>\(errorKey \? errorKey\.split\(","\) : \[\]\)/,
++    "errorSet must be built from the joined list, not a lone provider id"
++  );
++});
++
+ test("ProviderTopology treats live activeRequests as the current snapshot without frontend timeout filtering", () => {
+   assert.doesNotMatch(
+     providerTopologySrc,
+diff --git a/tests/unit/home-topology-node-identity.test.ts b/tests/unit/home-topology-node-identity.test.ts
+new file mode 100644
+index 000000000..7f31ca7af
+--- /dev/null
++++ b/tests/unit/home-topology-node-identity.test.ts
+@@ -0,0 +1,162 @@
++// Regression coverage for four defects an operator hit on the live /home topology.
++// All four survived earlier work because each one is invisible until you look at a real
++// instance: the icon bug needs a compatible node with NO icon_url, the ordering bug needs
++// a provider whose id sorts early but was added last, and the error bugs need two
++// providers failing at once.
++import test, { describe } from "node:test";
++import assert from "node:assert/strict";
++import fs from "node:fs";
++import path from "node:path";
++import { fileURLToPath } from "node:url";
++
++import { resolveCompatibleStaticIcon } from "../../src/shared/utils/compatibleProviderId.ts";
++import {
++  compareTopologyProviders,
++  selectDrawnErrorProviders,
++} from "../../src/app/(dashboard)/home/topologyUtils.ts";
++
++const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
++
++describe("compat node icon resolution", () => {
++  // The operator's two nodes both have an EMPTY icon_url. ProviderIcon only consulted
++  // `fallbackText` when a src had been supplied AND failed to load, so an empty src
++  // skipped it entirely and fell through to the generic circle-plus glyph. The providers
++  // page looked correct only because it hand-rolled its own static-image branch outside
++  // the shared component — the fragmentation this fixes.
++  test("anthropic-compatible node without icon_url resolves to the bundled logo", () => {
++    assert.equal(
++      resolveCompatibleStaticIcon("anthropic-compatible-6f2a", null),
++      "/providers/anthropic-m.png"
++    );
++  });
++
++  test("claude-code-compatible node resolves to the same anthropic logo", () => {
++    assert.equal(
++      resolveCompatibleStaticIcon("anthropic-compatible-cc-91bd", null),
++      "/providers/anthropic-m.png"
++    );
++  });
++
++  test("openai-compatible node distinguishes chat from responses by apiType", () => {
++    assert.equal(
++      resolveCompatibleStaticIcon("openai-compatible-chat-1", "chat"),
++      "/providers/oai-cc.png"
++    );
++    assert.equal(
++      resolveCompatibleStaticIcon("openai-compatible-responses-1", "responses"),
++      "/providers/oai-r.png"
++    );
++  });
++
++  test("a registry provider is left to the normal resolution chain", () => {
++    // Returning a compat image for a built-in would mislabel it; null means "not mine".
++    assert.equal(resolveCompatibleStaticIcon("anthropic", null), null);
++    assert.equal(resolveCompatibleStaticIcon("openai", null), null);
++  });
++
++  test("the bundled images this maps to actually exist", () => {
++    // A mapping to a missing file would still render a broken image rather than a logo,
++    // so assert the assets are really in the repo.
++    for (const asset of ["anthropic-m.png", "oai-cc.png", "oai-r.png"]) {
++      assert.ok(
++        fs.existsSync(path.join(repoRoot, "public", "providers", asset)),
++        `public/providers/${asset} must exist`
++      );
++    }
++  });
++});
++
++describe("topology provider ordering", () => {
++  // The old comparator sorted on the provider ID. A compatible node's generated id starts
++  // with "anthropic-compatible-", which sorts ahead of nearly every catalog provider, so a
++  // newly added node seized the first ring slot and pushed everyone round — while the node
++  // DISPLAYED its operator-chosen name, making the jump look arbitrary.
++  test("a newly added provider goes last, not first", () => {
++    const providers = [
++      { provider: "openai", name: "OpenAI" },
++      { provider: "zhipu", name: "Zhipu" },
++      { provider: "anthropic-compatible-new", name: "Zulu Gateway", createdAt: "2026-07-28T10:00:00Z" },
++    ];
++    const sorted = [...providers].sort(compareTopologyProviders);
++    assert.equal(
++      sorted[sorted.length - 1].provider,
++      "anthropic-compatible-new",
++      "the most recently created provider must occupy the last slot"
++    );
++  });
++
++  test("providers added later sort after providers added earlier", () => {
++    const providers = [
++      { provider: "anthropic-compatible-b", name: "Second", createdAt: "2026-07-26T17:51:44Z" },
++      { provider: "anthropic-compatible-a", name: "First", createdAt: "2026-07-25T16:46:58Z" },
++    ];
++    const sorted = [...providers].sort(compareTopologyProviders);
++    assert.deepEqual(
++      sorted.map((p) => p.name),
++      ["First", "Second"]
++    );
++  });
++
++  test("built-ins (no createdAt) stay ahead of operator-added nodes, ordered by name", () => {
++    const providers = [
++      { provider: "anthropic-compatible-x", name: "Added", createdAt: "2026-07-25T00:00:00Z" },
++      { provider: "zhipu", name: "Zhipu" },
++      { provider: "openai", name: "OpenAI" },
++    ];
++    const sorted = [...providers].sort(compareTopologyProviders);
++    assert.deepEqual(
++      sorted.map((p) => p.name),
++      ["OpenAI", "Zhipu", "Added"]
++    );
++  });
++
++  test("ordering is stable and total — equal keys never compare non-zero both ways", () => {
++    const a = { provider: "same", name: "Same", createdAt: "2026-07-25T00:00:00Z" };
++    const b = { provider: "same", name: "Same", createdAt: "2026-07-25T00:00:00Z" };
++    assert.equal(compareTopologyProviders(a, b), 0);
++    assert.equal(compareTopologyProviders(b, a), 0);
++  });
++});
++
++describe("multiple simultaneous error providers", () => {
++  // The API returned ONE errorProvider, chosen by max timestamp, so providers overwrote
++  // each other: the count could never exceed 1, and only one red edge could ever exist.
++  // The operator saw the red line vanish when a second provider failed, and come back when
++  // that second provider succeeded — the overwrite, observed from the outside.
++  const drawn = ["pix4k", "ericding", "openai"];
++
++  test("two failing providers are both reported, not just the newest", () => {
++    const result = selectDrawnErrorProviders(["pix4k", "ericding"], drawn);
++    assert.deepEqual([...result].sort(), ["ericding", "pix4k"]);
++    assert.equal(result.size, 2, "the count under the title must be able to exceed 1");
++  });
++
++  test("one provider erroring does not clear another provider's error", () => {
++    // This is the operator's exact report: ericding is broken; pix4k succeeding must not
++    // silently un-red ericding.
++    const before = selectDrawnErrorProviders(["ericding"], drawn);
++    assert.ok(before.has("ericding"));
++    const after = selectDrawnErrorProviders(["ericding"], drawn);
++    assert.ok(after.has("ericding"), "ericding stays red while pix4k is healthy");
++    assert.equal(after.has("pix4k"), false);
++  });
++
++  test("an error for a provider not drawn on the graph is not counted", () => {
++    // The count came from all-time call_logs with no connection check, so a provider whose
++    // connection was disabled still contributed 1 while no red node existed to explain it.
++    const result = selectDrawnErrorProviders(["deleted-provider"], drawn);
++    assert.equal(result.size, 0);
++  });
++
++  test("provider ids are matched case-insensitively", () => {
++    // Node keys are lowercased; the API returns whatever call_logs stored.
++    const result = selectDrawnErrorProviders(["PIX4K"], drawn);
++    assert.deepEqual([...result], ["pix4k"]);
++  });
++
++  test("missing or malformed input degrades to no errors, never throws", () => {
++    assert.equal(selectDrawnErrorProviders(undefined, drawn).size, 0);
++    assert.equal(selectDrawnErrorProviders([], drawn).size, 0);
++    assert.equal(selectDrawnErrorProviders(["", "  "], drawn).size, 0);
++  });
++});
 diff --git a/tests/unit/topology-connection-health.test.ts b/tests/unit/topology-connection-health.test.ts
-index 3b2db2f3e..8a5af13b1 100644
+index 3b2db2f3e..9f86ff0d4 100644
 --- a/tests/unit/topology-connection-health.test.ts
 +++ b/tests/unit/topology-connection-health.test.ts
 @@ -3,28 +3,62 @@ import assert from "node:assert/strict";
@@ -2537,7 +3294,7 @@ index 3b2db2f3e..8a5af13b1 100644
    );
  });
  
-@@ -36,53 +70,47 @@ test("HomeProviderTopologySection forwards the status field on each provider", (
+@@ -36,53 +70,55 @@ test("HomeProviderTopologySection forwards the status field on each provider", (
    );
  });
  
@@ -2588,30 +3345,36 @@ index 3b2db2f3e..8a5af13b1 100644
  });
  
 -test("ProviderTopology marks the last-routed provider with an amber dot, not a grey node", () => {
--  assert.match(
--    providerTopologySrc,
++test("ProviderTopology node position never depends on activity", () => {
++  // A provider must keep its ring slot whether or not it is mid-request, so the map cannot
++  // reshuffle ("jump") every time a call lands — activity is carried by styling alone.
++  // The order itself is creation order (see compareTopologyProviders): sorting on the
++  // provider ID put every newly added compatible node first, because its generated id
++  // begins with "anthropic-compatible-"/"openai-compatible-".
+   assert.match(
+     providerTopologySrc,
 -    /const AMBER = FLOW_EDGE_COLORS\.last/,
 -    "recency reuses the shared amber from the edge palette"
--  );
-+test("ProviderTopology node position never depends on activity", () => {
-+  // Stable alphabetical ring slots are what preserve legibility now that colour no longer
-+  // encodes health: a provider must keep its slot whether or not it is mid-request, so the
-+  // map cannot reshuffle ("jump") every time a call lands.
-   assert.match(
++    /\[\.\.\.providers\]\.sort\(compareTopologyProviders\)/,
++    "providers must be laid out in creation order via the shared comparator"
+   );
+-  assert.match(
++  assert.doesNotMatch(
      providerTopologySrc,
 -    /const dotColor = active \? color : last \? AMBER : GREEN/,
 -    "the dot encodes recency while the border keeps encoding health"
 +    /a\.provider\.toLowerCase\(\)\.localeCompare\(b\.provider\.toLowerCase\(\)\)/,
-+    "providers must be laid out in stable alphabetical order"
++    "layout must not sort on the provider id — that pins new compatible nodes first"
    );
-+  // Concentric rings with fixed per-ring capacity are what stop nodes from overlapping
-+  // once a deployment has many providers.
++  // A single growing ellipse replaced the fixed-capacity ring ladder (RING_MIN_RX /
++  // ringRadii); node spacing now scales with the provider count instead of stepping
++  // between discrete rings.
    assert.match(
      providerTopologySrc,
 -    /borderColor: error \? RED : active \? color : healthy \? GREEN : "var\(--color-border\)"/,
 -    "border stays health-driven — grey is reserved for genuinely idle/unconfigured"
-+    /const RINGS: \[number, number, number\]\[\]/,
-+    "layout must use capacity-bounded concentric rings, not a single ring"
++    /function ringRadii\(/,
++    "layout must size its ring from the provider count"
    );
  });
 diff --git a/tests/unit/topology-handle-placement.test.ts b/tests/unit/topology-handle-placement.test.ts
