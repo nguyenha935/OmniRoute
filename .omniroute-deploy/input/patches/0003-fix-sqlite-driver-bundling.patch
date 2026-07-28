@@ -1,0 +1,183 @@
+diff --git a/src/lib/db/adapters/driverFactory.ts b/src/lib/db/adapters/driverFactory.ts
+index 008fd8225..eab8ef538 100644
+--- a/src/lib/db/adapters/driverFactory.ts
++++ b/src/lib/db/adapters/driverFactory.ts
+@@ -12,6 +12,48 @@ const _require = createRequire(import.meta.url);
+ 
+ type DriverLoader = (moduleName: string) => unknown;
+ 
++/**
++ * The production loader for the sync driver cascade.
++ *
++ * WHY A SWITCH INSTEAD OF PASSING `_require` DIRECTLY
++ * ---------------------------------------------------
++ * `createSyncDriverFactory(load)` takes the loader as a parameter so the driver
++ * branches stay testable. But webpack (the Next.js server build) only recognizes a
++ * require when it can read the module id as a literal at the call site:
++ *
++ *   _require("better-sqlite3")   →  a real external: `module.exports = require("better-sqlite3")`
++ *   load("better-sqlite3")       →  unanalyzable, so the loader ITSELF is replaced
++ *
++ * In the second case webpack cannot see what `load` is, so the value passed in is
++ * replaced by its "missing module" stub — a function whose only behavior is
++ * `throw Error("Cannot find module '" + id + "'")` with `code = "MODULE_NOT_FOUND"`.
++ * Every driver in the cascade then reports itself as not installed even though the
++ * addon is present on disk, the whole cascade falls through to the sql.js WASM last
++ * resort, and startup dies there instead — pointing the blame at sql.js rather than at
++ * the bundling. Observed in the packaged v3.8.49 server build, where the driver chunk
++ * contains that stub and NO `require("better-sqlite3")` external, while the previous
++ * release's chunk (before the loader became injectable) contains the external and no
++ * stub. Not reproducible from source: `tsx`/`node --test` resolve the injected
++ * `_require` normally, so the existing unit tests pass either way.
++ *
++ * Naming each module in a direct `_require("<literal>")` call restores the externals
++ * webpack emitted before the loader became injectable, while keeping the seam intact.
++ * Keep the literals literal: hoisting them into a constant or a map keyed by variable
++ * re-breaks the analysis.
++ */
++function requireSqliteDriver(moduleName: string): unknown {
++  switch (moduleName) {
++    case "bun:sqlite":
++      return _require("bun:sqlite");
++    case "better-sqlite3":
++      return _require("better-sqlite3");
++    case "node:sqlite":
++      return _require("node:sqlite");
++    default:
++      throw new Error(`Unsupported SQLite driver module: ${moduleName}`);
++  }
++}
++
+ type NodeSqliteOptions = {
+   readOnly?: boolean;
+ };
+@@ -152,7 +194,7 @@ export function createSyncDriverFactory(load: DriverLoader) {
+ }
+ 
+ /** Tenta abrir com better-sqlite3 e node:sqlite sincronamente. Retorna null se ambos falharem. */
+-export const tryOpenSync = createSyncDriverFactory(_require);
++export const tryOpenSync = createSyncDriverFactory(requireSqliteDriver);
+ 
+ /**
+  * Pré-inicializa sql.js para um filePath.
+diff --git a/src/lib/db/adapters/sqljsAdapter.ts b/src/lib/db/adapters/sqljsAdapter.ts
+index 16ce501fb..8c56e47a4 100644
+--- a/src/lib/db/adapters/sqljsAdapter.ts
++++ b/src/lib/db/adapters/sqljsAdapter.ts
+@@ -27,8 +27,29 @@ function resolveSqlJsWasmPath(): string {
+   // Global Bun installs do not use the application's cwd as the package root.
+   // Resolve the actual JavaScript entrypoint so sql.js can find its sibling WASM
+   // asset when OmniRoute is launched from ~/.bun/install/global.
++  //
++  // This is also the ONLY candidate that works in a packaged server build: `dist/
++  // server.js` does `process.chdir(__dirname)`, so cwd is always `dist/`, while the
++  // installed `node_modules` sits one level up — neither cwd-relative path above can
++  // ever exist there.
++  //
++  // `require.resolve` must therefore survive bundling, and by default it does not:
++  // webpack rewrites `_require.resolve("sql.js")` into the NUMERIC internal module id
++  // it assigned the package. `path.dirname(<number>)` then throws ("The \"path\"
++  // argument must be of type string. Received type number"), the catch swallows it, and
++  // the only viable candidate is silently dropped — leaving the thrown error to list
++  // just the two impossible cwd paths.
++  //
++  // Reaching `resolve` through a property of an object defers the lookup to runtime,
++  // which webpack does not fold. Verified by compiling all three shapes with the repo's
++  // own webpack: the property form is emitted verbatim and resolves to
++  // <install>/node_modules/sql.js/dist, while `_require.resolve("sql.js")` became
++  // `dirname(293)`. Do NOT "simplify" this to `const r = _require.resolve` — webpack
++  // replaces that alias with `(void 0)`, which is strictly worse: it throws on call
++  // instead of resolving.
++  const requireHolder: { readonly resolver: NodeJS.Require } = { resolver: _require };
+   try {
+-    const sqlJsEntry = _require.resolve("sql.js");
++    const sqlJsEntry = requireHolder.resolver.resolve("sql.js");
+     candidatePaths.push(path.join(path.dirname(sqlJsEntry), "sql-wasm.wasm"));
+   } catch {}
+ 
+diff --git a/tests/unit/db-driver-bundling-externals.test.ts b/tests/unit/db-driver-bundling-externals.test.ts
+new file mode 100644
+index 000000000..81e1ff82f
+--- /dev/null
++++ b/tests/unit/db-driver-bundling-externals.test.ts
+@@ -0,0 +1,80 @@
++// Guards the two `require` shapes in the SQLite stack that webpack silently rewrites
++// when the module specifier (or the require itself) is not statically analyzable.
++//
++// Neither failure can be caught by running the code: under `tsx`/`node --test` the
++// injected loader and `require.resolve` behave normally, so the existing driverFactory
++// tests pass in BOTH the broken and fixed shapes. The damage only appears in a packaged
++// Next server build, and only at startup:
++//
++//   - `load("better-sqlite3")` (loader arrives as a parameter) → webpack cannot see what
++//     `load` is, so the value passed in becomes its "missing module" stub, which throws
++//     `Cannot find module 'better-sqlite3'` with code MODULE_NOT_FOUND. Every driver in
++//     the cascade then reports itself as uninstalled although the addon is on disk, and
++//     the process dies in the sql.js last resort — blaming sql.js for a bundling bug.
++//
++//   - `_require.resolve("sql.js")` → rewritten to the NUMERIC internal module id, so
++//     `path.dirname(<number>)` throws, the surrounding catch swallows it, and the only
++//     candidate that can work in a packaged build is dropped.
++//
++// Both are shape assertions on source text because the shape IS the defect: there is no
++// runtime state to observe that distinguishes them outside a webpack build.
++import test from "node:test";
++import assert from "node:assert/strict";
++import fs from "node:fs";
++import path from "node:path";
++import { fileURLToPath } from "node:url";
++
++const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
++
++function readSource(relativePath: string): string {
++  return fs.readFileSync(path.join(repoRoot, relativePath), "utf8");
++}
++
++/**
++ * Strips comments before shape-matching. Both files document the rewritten forms they
++ * must avoid, so a scan of the raw text matches its own warning and fails on the FIXED
++ * source — a guard that can only ever be satisfied by deleting the explanation.
++ */
++function stripComments(source: string): string {
++  return source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[ \t]*\/\/.*$/gm, "");
++}
++
++test("sync driver cascade requires each SQLite module by literal specifier", () => {
++  const driverFactory = stripComments(readSource("src/lib/db/adapters/driverFactory.ts"));
++
++  // Positive anchor: proves the read hit the real, non-empty module (#8619).
++  assert.match(driverFactory, /^export function createSyncDriverFactory\(/m);
++
++  // The production loader must be the literal-specifier wrapper, never `_require`
++  // itself — passing `_require` through the `load` parameter is exactly what makes
++  // webpack substitute its missing-module stub.
++  assert.match(driverFactory, /^export const tryOpenSync = createSyncDriverFactory\(\w+\);$/m);
++  assert.doesNotMatch(driverFactory, /createSyncDriverFactory\(\s*_require\s*\)/);
++
++  // Every driver the cascade can ask for needs a direct `_require("<literal>")` so
++  // webpack emits a real external for it.
++  for (const moduleName of ["bun:sqlite", "better-sqlite3", "node:sqlite"]) {
++    assert.ok(
++      driverFactory.includes(`_require("${moduleName}")`),
++      `driverFactory must call _require("${moduleName}") with a literal specifier so webpack emits an external for it`
++    );
++  }
++});
++
++test("sql.js wasm lookup resolves through a property so webpack keeps the call", () => {
++  const sqljsAdapter = stripComments(readSource("src/lib/db/adapters/sqljsAdapter.ts"));
++
++  // Positive anchor.
++  assert.match(sqljsAdapter, /^function resolveSqlJsWasmPath\(\): string \{$/m);
++
++  // The entrypoint candidate must survive bundling. `_require.resolve("sql.js")` is
++  // folded to a module id, and aliasing it (`const r = _require.resolve`) is replaced
++  // with `(void 0)` — worse still, since that throws on call.
++  assert.doesNotMatch(sqljsAdapter, /_require\.resolve\(/);
++  assert.doesNotMatch(sqljsAdapter, /=\s*_require\.resolve\s*;/);
++  assert.match(sqljsAdapter, /\.resolver\.resolve\("sql\.js"\)/);
++
++  // The candidate list must still keep the cwd-relative paths ahead of it: those are
++  // the ones that work for a plain `next start` from the project root.
++  assert.match(sqljsAdapter, /path\.join\(process\.cwd\(\), "node_modules", "sql\.js"/);
++});
