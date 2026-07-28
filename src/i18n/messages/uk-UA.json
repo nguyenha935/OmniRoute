@@ -7298,6 +7298,10 @@
         "label": "Менше коду",
         "description": "Драбина YAGNI: найменша робоча зміна, жодних незапитуваних абстракцій."
       },
+      "ponytail": {
+        "label": "Ponytail (lazy senior dev)",
+        "description": "Lazy senior-dev discipline: climb the YAGNI ladder, fix root cause, smallest working diff."
+      },
       "terse-cjk": {
         "label": "Стисла CJK (文言)",
         "description": "Класичний китайський ультрастислий стиль (доступно тільки для китайської)."
@@ -10518,7 +10522,9 @@
     "deleteGroupConfirm": "Видалити цю групу? Спочатку потрібно перепризначити або видалити її пули.",
     "deleteGroupHasPools": "Ця група все ще має пули — спочатку перепризначте або видаліть їх.",
     "ungroupedTitle": "Без групи",
-    "ungroupedHint": "Ці пули не призначені до жодної відомої групи. Відредагуйте пул, щоб перемістити його в реальну групу."
+    "ungroupedHint": "Ці пули не призначені до жодної відомої групи. Відредагуйте пул, щоб перемістити його в реальну групу.",
+    "removeFailed": "Could not remove this pool.",
+    "dismiss": "Dismiss"
   },
   "plugins": {
     "title": "Plugins",

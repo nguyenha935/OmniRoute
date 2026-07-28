@@ -5958,7 +5958,7 @@
       "cline": "Connect Cline with the existing OAuth flow.",
       "cursor": "Connect Cursor IDE with the existing OAuth flow.",
       "github": "Connect GitHub Copilot with the existing OAuth flow.",
-      "gitlab-duo": "OAuth application with ai_features + read_user scopes. Configure GITLAB_DUO_OAUTH_CLIENT_ID and optionally GITLAB_DUO_OAUTH_CLIENT_SECRET on this OmniRoute instance.",
+      "gitlab-duo": "GitLab Duo OAuth is not configured. Register an OAuth application at https://gitlab.com/-/profile/applications with redirect URI http://localhost:20128/callback and scopes \"ai_features read_user\", then set GITLAB_DUO_OAUTH_CLIENT_ID (and optionally GITLAB_DUO_OAUTH_CLIENT_SECRET) and restart.",
       "kilocode": "Connect Kilo Code with the existing OAuth flow.",
       "kimi-coding": "Connect Kimi Coding with the existing OAuth flow.",
       "kiro": "Free tier: 50 credits/month (~25K–100K tokens). ⚠️ Kiro ToS prohibits third-party proxy/harness use.",
@@ -7319,6 +7319,10 @@
       "less-code": {
         "label": "Less code",
         "description": "YAGNI ladder: smallest working change, no unrequested abstractions."
+      },
+      "ponytail": {
+        "label": "Ponytail (lazy senior dev)",
+        "description": "Lazy senior-dev discipline: climb the YAGNI ladder, fix root cause, smallest working diff."
       },
       "terse-cjk": {
         "label": "Terse CJK (文言)",
@@ -10540,7 +10544,9 @@
     "deleteGroupConfirm": "Delete this group? Its pools must be reassigned or removed first.",
     "deleteGroupHasPools": "This group still has pools — reassign or delete them first.",
     "ungroupedTitle": "Ungrouped",
-    "ungroupedHint": "These pools are not assigned to a known group. Edit a pool to move it into a real group."
+    "ungroupedHint": "These pools are not assigned to a known group. Edit a pool to move it into a real group.",
+    "removeFailed": "Could not remove this pool.",
+    "dismiss": "Dismiss"
   },
   "plugins": {
     "title": "Plugins",

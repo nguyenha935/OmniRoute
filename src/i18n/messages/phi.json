@@ -7298,6 +7298,10 @@
         "label": "Mas kaunting code",
         "description": "YAGNI ladder: pinakamaliit na gumaganang pagbabago, walang hindi hiniling na mga abstraction."
       },
+      "ponytail": {
+        "label": "Ponytail (lazy senior dev)",
+        "description": "Lazy senior-dev discipline: climb the YAGNI ladder, fix root cause, smallest working diff."
+      },
       "terse-cjk": {
         "label": "Maikling CJK (文言)",
         "description": "Klasikong Tsino na ultra-maikling estilo (magagamit lamang para sa Tsino)."
@@ -10518,7 +10522,9 @@
     "deleteGroupConfirm": "I-delete ang grupong ito? Ang mga pool nito ay dapat munang muling i-assign o alisin.",
     "deleteGroupHasPools": "May mga pool pa ang grupong ito — i-reassign o i-delete muna ang mga ito.",
     "ungroupedTitle": "Hindi nakagrupo",
-    "ungroupedHint": "Ang mga pool na ito ay hindi nakatalaga sa isang kilalang grupo. I-edit ang isang pool upang ilipat ito sa isang totoong grupo."
+    "ungroupedHint": "Ang mga pool na ito ay hindi nakatalaga sa isang kilalang grupo. I-edit ang isang pool upang ilipat ito sa isang totoong grupo.",
+    "removeFailed": "Could not remove this pool.",
+    "dismiss": "Dismiss"
   },
   "plugins": {
     "title": "Plugins",

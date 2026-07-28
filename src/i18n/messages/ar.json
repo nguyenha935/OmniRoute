@@ -7298,6 +7298,10 @@
         "label": "كود أقل",
         "description": "سلم YAGNI: أصغر تغيير فعال، بدون تجريدات غير مطلوبة."
       },
+      "ponytail": {
+        "label": "Ponytail (lazy senior dev)",
+        "description": "Lazy senior-dev discipline: climb the YAGNI ladder, fix root cause, smallest working diff."
+      },
       "terse-cjk": {
         "label": "CJK مقتضب (文言)",
         "description": "أسلوب صيني كلاسيكي فائق الاقتضاب (متاح للغة الصينية فقط)."
@@ -10518,7 +10522,9 @@
     "deleteGroupConfirm": "هل تريد حذف هذه المجموعة؟ يجب إعادة تعيين مجمعاتها أو إزالتها أولاً.",
     "deleteGroupHasPools": "لا تزال هذه المجموعة تحتوي على مجمعات — أعد تعيينها أو احذفها أولاً.",
     "ungroupedTitle": "غير مجمع",
-    "ungroupedHint": "هذه المجمعات غير مخصصة لمجموعة معروفة. قم بتحرير مجمع لنقله إلى مجموعة حقيقية."
+    "ungroupedHint": "هذه المجمعات غير مخصصة لمجموعة معروفة. قم بتحرير مجمع لنقله إلى مجموعة حقيقية.",
+    "removeFailed": "Could not remove this pool.",
+    "dismiss": "Dismiss"
   },
   "plugins": {
     "title": "الإضافات",

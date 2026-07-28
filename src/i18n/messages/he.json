@@ -7298,6 +7298,10 @@
         "label": "פחות קוד",
         "description": "סולם YAGNI: השינוי העובד הקטן ביותר, ללא הפשטות שלא נדרשו."
       },
+      "ponytail": {
+        "label": "Ponytail (lazy senior dev)",
+        "description": "Lazy senior-dev discipline: climb the YAGNI ladder, fix root cause, smallest working diff."
+      },
       "terse-cjk": {
         "label": "CJK תמציתי (文言)",
         "description": "סגנון סיני קלאסי אולטרה-תמציתי (זמין עבור סינית בלבד)."
@@ -10518,7 +10522,9 @@
     "deleteGroupConfirm": "למחוק קבוצה זו? יש להקצות מחדש או להסיר את הבריכות שלה תחילה.",
     "deleteGroupHasPools": "קבוצה זו עדיין מכילה בריכות — הקצה מחדש או מחק אותן תחילה.",
     "ungroupedTitle": "ללא קבוצה",
-    "ungroupedHint": "בריכות אלו אינן משויכות לקבוצה מוכרת. ערוך בריכה כדי להעביר אותה לקבוצה אמיתית."
+    "ungroupedHint": "בריכות אלו אינן משויכות לקבוצה מוכרת. ערוך בריכה כדי להעביר אותה לקבוצה אמיתית.",
+    "removeFailed": "Could not remove this pool.",
+    "dismiss": "Dismiss"
   },
   "plugins": {
     "title": "Plugins",

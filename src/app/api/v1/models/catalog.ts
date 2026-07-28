@@ -662,6 +662,18 @@ async function buildUnifiedModelsResponseCore(
         return Array.isArray(models) && models.length > 0;
       })
     );
+    const isRegisteredEffortVariant = (
+      providerModels: Array<{ id: string }>,
+      modelId: string
+    ): boolean => {
+      for (const suffix of ["none", "low", "medium", "high", "max", "xhigh"]) {
+        const suffixWithSeparator = `-${suffix}`;
+        if (!modelId.endsWith(suffixWithSeparator)) continue;
+        const baseModelId = modelId.slice(0, -suffixWithSeparator.length);
+        return providerModels.some((candidate) => candidate.id === baseModelId);
+      }
+      return false;
+    };
 
     // Add provider models (chat)
     for (const [alias, providerModels] of Object.entries(PROVIDER_MODELS)) {
@@ -680,9 +692,14 @@ async function buildUnifiedModelsResponseCore(
         continue;
       }
 
-      if (providersWithSyncedModels.has(canonicalProviderId)) continue;
-
       for (const model of providerModels) {
+        // Synced models replace static base entries, but they do not carry aliases
+        // registered for provider-specific reasoning variants.
+        if (
+          providersWithSyncedModels.has(canonicalProviderId) &&
+          !isRegisteredEffortVariant(providerModels, model.id)
+        )
+          continue;
         if (!providerSupportsModel(canonicalProviderId, model.id)) continue;
         const aliasId = `${alias}/${model.id}`;
         if (getModelIsHidden(canonicalProviderId, model.id)) continue;

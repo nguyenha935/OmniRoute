@@ -1,0 +1,1 @@
+- **fix(providers):** Kimi Coding billing-cycle quota errors now recover automatically at the cached reset instead of remaining unavailable ([#8632](https://github.com/diegosouzapw/OmniRoute/pull/8632)) — thanks @glazec

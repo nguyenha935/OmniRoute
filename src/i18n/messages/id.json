@@ -7298,6 +7298,10 @@
         "label": "Lebih sedikit kode",
         "description": "Tangga YAGNI: perubahan kerja terkecil, tanpa abstraksi yang tidak diminta."
       },
+      "ponytail": {
+        "label": "Ponytail (lazy senior dev)",
+        "description": "Lazy senior-dev discipline: climb the YAGNI ladder, fix root cause, smallest working diff."
+      },
       "terse-cjk": {
         "label": "CJK Ringkas (文言)",
         "description": "Gaya ultra-ringkas Tionghoa Klasik (hanya tersedia untuk bahasa Tionghoa)."
@@ -10518,7 +10522,9 @@
     "deleteGroupConfirm": "Hapus grup ini? Pool di dalamnya harus dialihkan atau dihapus terlebih dahulu.",
     "deleteGroupHasPools": "Grup ini masih memiliki pool — alihkan atau hapus terlebih dahulu.",
     "ungroupedTitle": "Tanpa Grup",
-    "ungroupedHint": "Pool ini tidak ditetapkan ke grup yang dikenal. Edit pool untuk memindahkannya ke grup yang sebenarnya."
+    "ungroupedHint": "Pool ini tidak ditetapkan ke grup yang dikenal. Edit pool untuk memindahkannya ke grup yang sebenarnya.",
+    "removeFailed": "Could not remove this pool.",
+    "dismiss": "Dismiss"
   },
   "plugins": {
     "title": "Plugins",

@@ -7298,6 +7298,10 @@
         "label": "Weniger Code",
         "description": "YAGNI-Leiter: kleinste funktionierende Änderung, keine ungefragten Abstraktionen."
       },
+      "ponytail": {
+        "label": "Ponytail (lazy senior dev)",
+        "description": "Lazy senior-dev discipline: climb the YAGNI ladder, fix root cause, smallest working diff."
+      },
       "terse-cjk": {
         "label": "Knappe CJK (文言)",
         "description": "Klassisch-chinesischer, extrem knapper Stil (nur für Chinesisch verfügbar)."
@@ -10518,7 +10522,9 @@
     "deleteGroupConfirm": "Diese Gruppe löschen? Ihre Pools müssen zuerst neu zugewiesen oder entfernt werden.",
     "deleteGroupHasPools": "Diese Gruppe enthält noch Pools — weisen Sie diese zuerst neu zu oder löschen Sie sie.",
     "ungroupedTitle": "Nicht gruppiert",
-    "ungroupedHint": "Diese Pools sind keiner bekannten Gruppe zugewiesen. Bearbeiten Sie einen Pool, um ihn in eine echte Gruppe zu verschieben."
+    "ungroupedHint": "Diese Pools sind keiner bekannten Gruppe zugewiesen. Bearbeiten Sie einen Pool, um ihn in eine echte Gruppe zu verschieben.",
+    "removeFailed": "Could not remove this pool.",
+    "dismiss": "Dismiss"
   },
   "plugins": {
     "title": "Plugins",

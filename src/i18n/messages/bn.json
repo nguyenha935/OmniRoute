@@ -7298,6 +7298,10 @@
         "label": "কম কোড",
         "description": "YAGNI ল্যাডার: ক্ষুদ্রতম কার্যকরী পরিবর্তন, কোনো অনুরোধহীন অ্যাবস্ট্রাকশন নয়।"
       },
+      "ponytail": {
+        "label": "Ponytail (lazy senior dev)",
+        "description": "Lazy senior-dev discipline: climb the YAGNI ladder, fix root cause, smallest working diff."
+      },
       "terse-cjk": {
         "label": "সংক্ষিপ্ত CJK (文言)",
         "description": "ক্লাসিক্যাল-চাইনিজ অতি-সংক্ষিপ্ত শৈলী (শুধুমাত্র চাইনিজ ভাষার জন্য উপলব্ধ)।"
@@ -10518,7 +10522,9 @@
     "deleteGroupConfirm": "এই গ্রুপটি মুছবেন? এর পুলগুলো প্রথমে পুনরায় বরাদ্দ বা অপসারণ করতে হবে।",
     "deleteGroupHasPools": "এই গ্রুপে এখনও পুল রয়েছে — প্রথমে সেগুলো পুনরায় বরাদ্দ করুন বা মুছুন।",
     "ungroupedTitle": "গ্রুপবিহীন",
-    "ungroupedHint": "এই পুলগুলো কোনো পরিচিত গ্রুপে বরাদ্দ করা নেই। একটি পুলকে কোনো বাস্তব গ্রুপে স্থানান্তর করতে সেটি সম্পাদনা করুন।"
+    "ungroupedHint": "এই পুলগুলো কোনো পরিচিত গ্রুপে বরাদ্দ করা নেই। একটি পুলকে কোনো বাস্তব গ্রুপে স্থানান্তর করতে সেটি সম্পাদনা করুন।",
+    "removeFailed": "Could not remove this pool.",
+    "dismiss": "Dismiss"
   },
   "plugins": {
     "title": "Plugins",

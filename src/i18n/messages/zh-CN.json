@@ -7298,6 +7298,10 @@
         "label": "更少代码",
         "description": "YAGNI 阶梯：最小可行改动，无未要求的抽象。"
       },
+      "ponytail": {
+        "label": "Ponytail (lazy senior dev)",
+        "description": "Lazy senior-dev discipline: climb the YAGNI ladder, fix root cause, smallest working diff."
+      },
       "terse-cjk": {
         "label": "精简 CJK (文言)",
         "description": "文言文极简风格 (仅适用于中文)。"
@@ -10518,7 +10522,9 @@
     "deleteGroupConfirm": "要删除此组吗？必须先重新分配或移除其池。",
     "deleteGroupHasPools": "该组仍然有池 — 请先重新分配或删除它们。",
     "ungroupedTitle": "未分组",
-    "ungroupedHint": "这些池未分配给已知组。编辑一个池以将其移动到真实组中。"
+    "ungroupedHint": "这些池未分配给已知组。编辑一个池以将其移动到真实组中。",
+    "removeFailed": "Could not remove this pool.",
+    "dismiss": "Dismiss"
   },
   "plugins": {
     "title": "插件",

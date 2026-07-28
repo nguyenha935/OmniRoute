@@ -1,0 +1,1 @@
+- **fix(sse):** restore Task-Aware Routing config from `settings.taskRouting` at boot and keep it on `globalThis` so multi-graph imports share one store — stops the feature silently reverting to disabled on every restart (#8601) ([#8604](https://github.com/diegosouzapw/OmniRoute/pull/8604)) — thanks @MumuTW

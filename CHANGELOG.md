@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **executors**: fix internal timeout misclassified as client disconnect (499) for 7 niche executors — pass TimeoutError reason to controller.abort() (#8197 side-finding)
+
 ---
 
 ## [3.8.49] — TBD

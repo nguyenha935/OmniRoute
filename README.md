@@ -833,18 +833,22 @@ devbox run npm run dev
 **🦭 Podman**
 
 ```bash
-# 1. Build the image
-podman build --target runner-base -t omniroute:base .
+# 1. Prepare the bind-mounted data directory
+mkdir -p data
 
-# 2. Fix data directory permissions for rootless Podman
-mkdir -p data && podman unshare chown 1000:1000 ./data
+# 2. Linux + local rootless Podman only (never a remote Podman Machine client):
+podman unshare chown 1000:1000 ./data
 
-# 3. Set runtime in .env, then run (see contrib/podman/ for Quadlet)
+# 3. Set the runtime hint, build the local Compose image, and start
 echo "CONTAINER_HOST=podman" >> .env
-podman compose --profile base up -d
+podman compose --profile base up -d --build
 ```
 
-📖 [Podman Guide](contrib/podman/README.md) — Quadlet setup, podman-compose, Quadlet.
+On macOS or Windows, Podman uses a remote Podman Machine: skip `podman unshare` and
+follow the [topology-specific data directory guidance](contrib/podman/README.md#data-directory-permissions-by-topology).
+
+📖 [Podman Guide](contrib/podman/README.md) — Compose builds, Podman Machine, and
+Linux/systemd Quadlet setup.
 
 **⚡ Faster / leaner install (skip the native build)**
 

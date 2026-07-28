@@ -7298,6 +7298,10 @@
         "label": "குறைந்த குறியீடு",
         "description": "YAGNI ஏணி: மிகச்சிறிய வேலை செய்யும் மாற்றம், கோரப்படாத சுருக்கங்கள் இல்லை."
       },
+      "ponytail": {
+        "label": "Ponytail (lazy senior dev)",
+        "description": "Lazy senior-dev discipline: climb the YAGNI ladder, fix root cause, smallest working diff."
+      },
       "terse-cjk": {
         "label": "சுருக்கமான CJK (文言)",
         "description": "செம்மொழி-சீன மிகச் சுருக்கமான நடை (சீன மொழிக்கு மட்டுமே கிடைக்கும்)."
@@ -10518,7 +10522,9 @@
     "deleteGroupConfirm": "இந்தக் குழுவை நீக்கவா? இதன் பூல்கள் முதலில் மறுஒதுக்கீடு செய்யப்பட வேண்டும் அல்லது அகற்றப்பட வேண்டும்.",
     "deleteGroupHasPools": "இந்தக் குழுவில் இன்னும் பூல்கள் உள்ளன — முதலில் அவற்றை மறுஒதுக்கீடு செய்யவும் அல்லது நீக்கவும்.",
     "ungroupedTitle": "குழுப்படுத்தப்படாதவை",
-    "ungroupedHint": "இந்தப் பூல்கள் அறியப்பட்ட எந்தக் குழுவிலும் ஒதுக்கப்படவில்லை. ஒரு பூலை உண்மையான குழுவிற்கு நகர்த்த அதைத் திருத்தவும்."
+    "ungroupedHint": "இந்தப் பூல்கள் அறியப்பட்ட எந்தக் குழுவிலும் ஒதுக்கப்படவில்லை. ஒரு பூலை உண்மையான குழுவிற்கு நகர்த்த அதைத் திருத்தவும்.",
+    "removeFailed": "Could not remove this pool.",
+    "dismiss": "Dismiss"
   },
   "plugins": {
     "title": "Plugins",

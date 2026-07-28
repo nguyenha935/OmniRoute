@@ -50,6 +50,7 @@ export function matchesSearch(
 /**
  * Checks if `text` matches any whitespace-separated token in `query`.
  * Returns `true` if `query` is empty or if any token is found in `text`.
+ * Full query match takes priority over token-level OR fallback.
  */
 export function matchesAnyToken(
   text: string | null | undefined,
@@ -57,10 +58,9 @@ export function matchesAnyToken(
 ): boolean {
   const q = normalizeForSearch(query);
   if (!q) return true;
-  const tokens = q.split(/\s+/).filter(Boolean);
-  if (tokens.length === 0) return true;
-  const normText = normalizeForSearch(text);
-  return tokens.some((token) => normText.includes(token));
+  const normalizedText = normalizeForSearch(text);
+  if (normalizedText.includes(q)) return true;
+  return q.split(/\s+/).filter(Boolean).some((token) => normalizedText.includes(token));
 }
 
 const trCollator = new Intl.Collator("tr", {

@@ -7298,6 +7298,10 @@
         "label": "کم کوڈ",
         "description": "YAGNI سیڑھی: سب سے چھوٹی کام کرنے والی تبدیلی، کوئی غیر مطلوبہ خلاصہ نہیں۔"
       },
+      "ponytail": {
+        "label": "Ponytail (lazy senior dev)",
+        "description": "Lazy senior-dev discipline: climb the YAGNI ladder, fix root cause, smallest working diff."
+      },
       "terse-cjk": {
         "label": "مختصر CJK (文言)",
         "description": "کلاسیکی چینی انتہائی مختصر انداز (صرف چینی زبان کے لیے دستیاب ہے)۔"
@@ -10518,7 +10522,9 @@
     "deleteGroupConfirm": "کیا یہ گروپ حذف کریں؟ اس کے پولز کو پہلے دوبارہ تفویض یا ہٹانا ضروری ہے۔",
     "deleteGroupHasPools": "اس گروپ میں اب بھی پولز موجود ہیں — پہلے انہیں دوبارہ تفویض کریں یا حذف کریں۔",
     "ungroupedTitle": "بغیر گروپ کے",
-    "ungroupedHint": "یہ پولز کسی معلوم گروپ کو تفویض نہیں کیے گئے ہیں۔ کسی پول کو حقیقی گروپ میں منتقل کرنے کے لیے اس میں ترمیم کریں۔"
+    "ungroupedHint": "یہ پولز کسی معلوم گروپ کو تفویض نہیں کیے گئے ہیں۔ کسی پول کو حقیقی گروپ میں منتقل کرنے کے لیے اس میں ترمیم کریں۔",
+    "removeFailed": "Could not remove this pool.",
+    "dismiss": "Dismiss"
   },
   "plugins": {
     "title": "Plugins",

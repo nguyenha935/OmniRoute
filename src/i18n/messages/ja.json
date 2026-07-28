@@ -7298,6 +7298,10 @@
         "label": "コード削減",
         "description": "YAGNIラダー: 動作する最小限の変更、要求されていない抽象化の排除。"
       },
+      "ponytail": {
+        "label": "Ponytail (lazy senior dev)",
+        "description": "Lazy senior-dev discipline: climb the YAGNI ladder, fix root cause, smallest working diff."
+      },
       "terse-cjk": {
         "label": "簡潔なCJK (文言)",
         "description": "漢文の超簡潔スタイル (中国語でのみ利用可能)。"
@@ -10518,7 +10522,9 @@
     "deleteGroupConfirm": "このグループを削除しますか？先にプールを再割り当てするか削除する必要があります。",
     "deleteGroupHasPools": "このグループにはまだプールがあります — 先に再割り当てするか削除してください。",
     "ungroupedTitle": "未グループ化",
-    "ungroupedHint": "これらのプールは既知のグループに割り当てられていません。プールを編集して実際のグループに移動してください。"
+    "ungroupedHint": "これらのプールは既知のグループに割り当てられていません。プールを編集して実際のグループに移動してください。",
+    "removeFailed": "Could not remove this pool.",
+    "dismiss": "Dismiss"
   },
   "plugins": {
     "title": "Plugins",

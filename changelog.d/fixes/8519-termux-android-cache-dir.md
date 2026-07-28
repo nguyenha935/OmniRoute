@@ -1,0 +1,1 @@
+- fix(cli): create `~/.cache` (and set `XDG_CACHE_HOME`) before Next.js loads on Android/Termux so `getCacheDirectory()` no longer aborts with `Unsupported platform: android`, which previously left every request as a silent HTTP 500 after the CLI still looked "running" (#8519)

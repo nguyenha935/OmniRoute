@@ -1,0 +1,1 @@
+- **chore(quality):** bank completed file-size shrinks into `file-size-baseline.json` via shrink-only `--update` on current tip (no raised caps) ([#8585](https://github.com/diegosouzapw/OmniRoute/pull/8585)) — thanks @MumuTW

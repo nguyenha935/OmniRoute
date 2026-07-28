@@ -7298,6 +7298,10 @@
         "label": "코드 최소화",
         "description": "YAGNI 사다리: 작동하는 최소한의 변경, 요청되지 않은 추상화 배제."
       },
+      "ponytail": {
+        "label": "Ponytail (lazy senior dev)",
+        "description": "Lazy senior-dev discipline: climb the YAGNI ladder, fix root cause, smallest working diff."
+      },
       "terse-cjk": {
         "label": "간결한 CJK (文言)",
         "description": "한문 초간결 스타일 (중국어만 지원)."
@@ -10518,7 +10522,9 @@
     "deleteGroupConfirm": "이 그룹을 삭제하시겠습니까? 먼저 해당 그룹의 풀을 재할당하거나 제거해야 합니다.",
     "deleteGroupHasPools": "이 그룹에 아직 풀이 있습니다. 먼저 재할당하거나 삭제하세요.",
     "ungroupedTitle": "그룹 없음",
-    "ungroupedHint": "이 풀들은 알려진 그룹에 할당되지 않았습니다. 풀을 편집하여 실제 그룹으로 이동하세요."
+    "ungroupedHint": "이 풀들은 알려진 그룹에 할당되지 않았습니다. 풀을 편집하여 실제 그룹으로 이동하세요.",
+    "removeFailed": "Could not remove this pool.",
+    "dismiss": "Dismiss"
   },
   "plugins": {
     "title": "Plugins",

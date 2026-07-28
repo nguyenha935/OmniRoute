@@ -1,0 +1,1 @@
+- **fix(oauth):** show GitLab Duo OAuth app / env setup instructions in the Add Connection modal _before_ authorize, using a shared recipe with catalog `authHint` and the authorize-route error fallback (#8688)

@@ -7298,6 +7298,10 @@
         "label": "Méně kódu",
         "description": "Žebříček YAGNI: nejmenší funkční změna, žádné nevyžádané abstrakce."
       },
+      "ponytail": {
+        "label": "Ponytail (lazy senior dev)",
+        "description": "Lazy senior-dev discipline: climb the YAGNI ladder, fix root cause, smallest working diff."
+      },
       "terse-cjk": {
         "label": "Stručné CJK (文言)",
         "description": "Klasický čínský ultra stručný styl (k dispozici pouze pro čínštinu)."
@@ -10518,7 +10522,9 @@
     "deleteGroupConfirm": "Smazat tuto skupinu? Její pooly musí být nejprve znovu přiřazeny nebo odstraněny.",
     "deleteGroupHasPools": "Tato skupina stále obsahuje pooly — nejprve je znovu přiřaďte nebo smažte.",
     "ungroupedTitle": "Bez skupiny",
-    "ungroupedHint": "Tyto pooly nejsou přiřazeny k žádné známé skupině. Upravte pool a přesuňte jej do skutečné skupiny."
+    "ungroupedHint": "Tyto pooly nejsou přiřazeny k žádné známé skupině. Upravte pool a přesuňte jej do skutečné skupiny.",
+    "removeFailed": "Could not remove this pool.",
+    "dismiss": "Dismiss"
   },
   "plugins": {
     "title": "Plugins",

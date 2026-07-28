@@ -7298,6 +7298,10 @@
         "label": "Daha az kod",
         "description": "YAGNI merdiveni: çalışan en küçük değişiklik, talep edilmeyen soyutlamalar yok."
       },
+      "ponytail": {
+        "label": "Ponytail (lazy senior dev)",
+        "description": "Lazy senior-dev discipline: climb the YAGNI ladder, fix root cause, smallest working diff."
+      },
       "terse-cjk": {
         "label": "Kısa ve öz CJK (文言)",
         "description": "Klasik Çince ultra kısa ve öz stil (yalnızca Çince için kullanılabilir)."
@@ -10518,7 +10522,9 @@
     "deleteGroupConfirm": "Bu grup silinsin mi? Önce havuzları yeniden atanmalı veya kaldırılmalıdır.",
     "deleteGroupHasPools": "Bu grupta hâlâ havuzlar var — önce bunları yeniden atayın veya silin.",
     "ungroupedTitle": "Gruplanmamış",
-    "ungroupedHint": "Bu havuzlar bilinen bir gruba atanmamış. Gerçek bir gruba taşımak için bir havuzu düzenleyin."
+    "ungroupedHint": "Bu havuzlar bilinen bir gruba atanmamış. Gerçek bir gruba taşımak için bir havuzu düzenleyin.",
+    "removeFailed": "Could not remove this pool.",
+    "dismiss": "Dismiss"
   },
   "plugins": {
     "title": "Plugins",

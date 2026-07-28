@@ -7298,6 +7298,10 @@
         "label": "Vähemmän koodia",
         "description": "YAGNI-portaat: pienin toimiva muutos, ei pyytämättömiä abstraktioita."
       },
+      "ponytail": {
+        "label": "Ponytail (lazy senior dev)",
+        "description": "Lazy senior-dev discipline: climb the YAGNI ladder, fix root cause, smallest working diff."
+      },
       "terse-cjk": {
         "label": "Tiivis CJK (文言)",
         "description": "Klassisen kiinan ultra-tiivis tyyli (saatavilla vain kiinaksi)."
@@ -10518,7 +10522,9 @@
     "deleteGroupConfirm": "Poistetaanko tämä ryhmä? Sen poolit on ensin määritettävä uudelleen tai poistettava.",
     "deleteGroupHasPools": "Tässä ryhmässä on vielä pooleja — määritä ne uudelleen tai poista ne ensin.",
     "ungroupedTitle": "Ryhmittelemättömät",
-    "ungroupedHint": "Näitä pooleja ei ole määritetty tunnettuun ryhmään. Muokkaa poolia siirtääksesi sen oikeaan ryhmään."
+    "ungroupedHint": "Näitä pooleja ei ole määritetty tunnettuun ryhmään. Muokkaa poolia siirtääksesi sen oikeaan ryhmään.",
+    "removeFailed": "Could not remove this pool.",
+    "dismiss": "Dismiss"
   },
   "plugins": {
     "title": "Plugins",

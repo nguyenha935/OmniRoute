@@ -1,0 +1,1 @@
+- **chore(skills):** regenerate `skills/cli-backup-sync/SKILL.md` so it matches the agent-skills catalog — drops stale `backup status` flags the generator no longer emits; unblocks Merge integrity (`check:agent-skills-sync`) for every PR against `release/v3.8.49` ([#8657](https://github.com/diegosouzapw/OmniRoute/pull/8657)) — thanks @MumuTW

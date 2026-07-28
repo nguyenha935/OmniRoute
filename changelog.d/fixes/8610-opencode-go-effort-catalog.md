@@ -1,0 +1,1 @@
+- **fix(providers):** keep registered OpenCode Go effort aliases in the Playground catalog when synced base models are present, and preserve Hunyuan3's 256K context metadata for combo routing ([#8610](https://github.com/diegosouzapw/OmniRoute/pull/8610)).

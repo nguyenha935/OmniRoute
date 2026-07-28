@@ -7298,6 +7298,10 @@
         "label": "कमी कोड",
         "description": "YAGNI शिडी: सर्वात लहान कार्यरत बदल, कोणतीही न मागितलेली ॲब्स्ट्रॅक्शन्स नाहीत."
       },
+      "ponytail": {
+        "label": "Ponytail (lazy senior dev)",
+        "description": "Lazy senior-dev discipline: climb the YAGNI ladder, fix root cause, smallest working diff."
+      },
       "terse-cjk": {
         "label": "संक्षिप्त CJK (文言)",
         "description": "अभिजात-चिनी अति-संक्षिप्त शैली (केवळ चिनी भाषेसाठी उपलब्ध)."
@@ -10518,7 +10522,9 @@
     "deleteGroupConfirm": "हा गट हटवायचा? त्याचे पूल्स प्रथम पुन्हा नियुक्त केले पाहिजेत किंवा काढून टाकले पाहिजेत.",
     "deleteGroupHasPools": "या गटात अजूनही पूल्स आहेत — प्रथम त्यांना पुन्हा नियुक्त करा किंवा हटवा.",
     "ungroupedTitle": "गट नसलेले",
-    "ungroupedHint": "हे पूल्स कोणत्याही ज्ञात गटाला नियुक्त केलेले नाहीत. पूलला वास्तविक गटात हलवण्यासाठी तो संपादित करा."
+    "ungroupedHint": "हे पूल्स कोणत्याही ज्ञात गटाला नियुक्त केलेले नाहीत. पूलला वास्तविक गटात हलवण्यासाठी तो संपादित करा.",
+    "removeFailed": "Could not remove this pool.",
+    "dismiss": "Dismiss"
   },
   "plugins": {
     "title": "Plugins",

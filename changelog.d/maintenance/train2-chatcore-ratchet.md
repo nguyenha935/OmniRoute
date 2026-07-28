@@ -1,0 +1,1 @@
+- chore(quality): re-pin the `chatCore.ts` file-size ceiling for the Responses multi-turn image compaction added in #8595

@@ -437,7 +437,7 @@ index f83cefc69..ec7449879 100644
        variant.name = `${model.name} (no thinking)`;
      }
 diff --git a/package.json b/package.json
-index f85359701..17d86b068 100644
+index ad5477137..1b4989f27 100644
 --- a/package.json
 +++ b/package.json
 @@ -12,6 +12,7 @@
@@ -448,6 +448,187 @@ index f85359701..17d86b068 100644
      "src/domain/",
      "src/lib/",
      "src/models/",
+diff --git a/src/app/(dashboard)/dashboard/combos/ComboControlCenterClient.tsx b/src/app/(dashboard)/dashboard/combos/ComboControlCenterClient.tsx
+index 6e4cea303..03ec03069 100644
+--- a/src/app/(dashboard)/dashboard/combos/ComboControlCenterClient.tsx
++++ b/src/app/(dashboard)/dashboard/combos/ComboControlCenterClient.tsx
+@@ -18,7 +18,7 @@ import {
+   type ComboControlCenterTarget,
+   type ComboControlCenterTargetHealth,
+ } from "@/lib/combos/controlCenter";
+-import { getProviderDisplayName } from "@/lib/display/names";
++import { useProviderNodeMap, resolveProviderName } from "@/lib/display/useProviderNodeMap";
+ 
+ type TimeRange = "1h" | "24h" | "7d" | "30d";
+ 
+@@ -143,6 +143,9 @@ function targetHealthTone(target: ComboControlCenterTarget | ComboControlCenterT
+ 
+ function TargetConfiguredRow({ target }: { target: ComboControlCenterTarget }) {
+   const t = useTranslations("comboControl");
++  // The node map is what lets the resolver reach `provider_nodes.name`; without it a
++  // named compatible node rendered as the generic "Compatible (openai)".
++  const nodeMap = useProviderNodeMap();
+   return (
+     <div className="rounded-xl border border-border bg-surface p-3">
+       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+@@ -162,7 +165,10 @@ function TargetConfiguredRow({ target }: { target: ComboControlCenterTarget }) {
+           </div>
+           <p className="mt-2 truncate font-mono text-sm text-text-main">{target.label}</p>
+           <p className="mt-1 text-xs text-text-muted">
+-            {target.provider ? getProviderDisplayName(target.provider) : t("comboReference")} ·{" "}
++            {target.provider
++              ? resolveProviderName(target.provider, nodeMap)
++              : t("comboReference")}{" "}
++            ·{" "}
+             {t("accountShort", { id: shortId(target.connectionId, t("dynamic")) })}
+           </p>
+         </div>
+@@ -189,6 +195,7 @@ function TargetConfiguredRow({ target }: { target: ComboControlCenterTarget }) {
+ 
+ function ResolvedTargetRow({ target }: { target: ComboControlCenterTargetHealth }) {
+   const t = useTranslations("comboControl");
++  const nodeMap = useProviderNodeMap();
+   return (
+     <div className="rounded-xl border border-border bg-surface p-3">
+       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+@@ -197,7 +204,10 @@ function ResolvedTargetRow({ target }: { target: ComboControlCenterTargetHealth
+             {target.model || t("unknown")}
+           </p>
+           <p className="mt-1 text-xs text-text-muted">
+-            {target.provider ? getProviderDisplayName(target.provider) : t("unknownProvider")} ·{" "}
++            {target.provider
++              ? resolveProviderName(target.provider, nodeMap)
++              : t("unknownProvider")}{" "}
++            ·{" "}
+             {t("accountShort", { id: shortId(target.connectionId, t("dynamic")) })} ·{" "}
+             {t("keyShort", { id: shortId(target.executionKey, t("dynamic")) })}
+           </p>
+@@ -242,6 +252,7 @@ function RecentLogRow({ log }: { log: CallLogEntry }) {
+ 
+ export default function ComboControlCenterClient({ comboId }: { comboId: string }) {
+   const t = useTranslations("comboControl");
++  const nodeMap = useProviderNodeMap();
+   const [combo, setCombo] = useState<ComboControlCenterCombo | null>(null);
+   const [metrics, setMetrics] = useState<ComboControlCenterMetrics | null>(null);
+   const [health, setHealth] = useState<ComboControlCenterHealth | null>(null);
+@@ -503,7 +514,7 @@ export default function ComboControlCenterClient({ comboId }: { comboId: string
+                 >
+                   <div className="flex items-center justify-between gap-3 text-sm">
+                     <span className="text-text-main">
+-                      {getProviderDisplayName(provider.provider)}
++                      {resolveProviderName(provider.provider, nodeMap)}
+                     </span>
+                     <span className={provider.isExhausted ? "text-red-300" : "text-text-muted"}>
+                       {fmtPercent(provider.remainingPct)} · {provider.trend}
+diff --git a/src/app/(dashboard)/dashboard/combos/page.tsx b/src/app/(dashboard)/dashboard/combos/page.tsx
+index 9433fb4ab..2486a887b 100644
+--- a/src/app/(dashboard)/dashboard/combos/page.tsx
++++ b/src/app/(dashboard)/dashboard/combos/page.tsx
+@@ -645,8 +645,16 @@ function formatComboEntryDisplay(
+   const modelLabel =
+     builderProvider?.models?.find((model) => model.id === parsed.modelId)?.name || parsed.modelId;
+ 
++  // Both halves are human labels — the provider's display name and the model's display
++  // name — so they must NOT be joined with "/". These strings render inside <code>
++  // elements, and "Eric Ding/claude-opus-4-5" reads as a qualified model id an operator
++  // can paste into a client config, which it is not (the real one is
++  // "<prefix>/<model-id>"). A separator that cannot appear in a model path keeps the
++  // caption readable without impersonating an identity.
++  const stepLabel = `${providerLabel} › ${modelLabel}`;
++
+   if (!includeConnection) {
+-    return `${providerLabel}/${modelLabel}`;
++    return stepLabel;
+   }
+ 
+   const connectionId = normalizedEntry.connectionId || null;
+@@ -660,14 +668,14 @@ function formatComboEntryDisplay(
+     : null;
+ 
+   if (connectionId) {
+-    return `${providerLabel}/${modelLabel} · ${connectionLabel || `acct ${connectionId.slice(0, 8)}`}`;
++    return `${stepLabel} · ${connectionLabel || `acct ${connectionId.slice(0, 8)}`}`;
+   }
+ 
+   if (normalizedEntry.providerId || builderProvider) {
+-    return `${providerLabel}/${modelLabel} · dynamic account`;
++    return `${stepLabel} · dynamic account`;
+   }
+ 
+-  return `${providerLabel}/${modelLabel}`;
++  return stepLabel;
+ }
+ 
+ export default function CombosPage() {
+diff --git a/src/app/(dashboard)/dashboard/health/ProviderHealthMatrixCard.tsx b/src/app/(dashboard)/dashboard/health/ProviderHealthMatrixCard.tsx
+index 4b6ce8337..2797e83a3 100644
+--- a/src/app/(dashboard)/dashboard/health/ProviderHealthMatrixCard.tsx
++++ b/src/app/(dashboard)/dashboard/health/ProviderHealthMatrixCard.tsx
+@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
+ 
+ import Badge from "@/shared/components/Badge";
+ import { Card } from "@/shared/components";
+-import { getProviderDisplayName } from "@/lib/display/names";
++import { useProviderNodeMap, resolveProviderName } from "@/lib/display/useProviderNodeMap";
+ import { cn } from "@/shared/utils/cn";
+ 
+ type HealthState = "healthy" | "degraded" | "down";
+@@ -268,6 +268,11 @@ function AccountRow({ account }: { account: HealthMatrixAccount }) {
+ 
+ export default function ProviderHealthMatrixCard() {
+   const t = useTranslations("health");
++  // Without the node map the resolver cannot reach `provider_nodes.name`, so a
++  // compatible node rendered as the generic "Compatible (openai)" even when the
++  // operator had named it. The sibling card in this directory
++  // (ProviderHealthAutopilotCard) already resolves it this way.
++  const nodeMap = useProviderNodeMap();
+   const [data, setData] = useState<HealthMatrixResponse | null>(null);
+   const [range, setRange] = useState<RangeValue>("24h");
+   const [providerFilter, setProviderFilter] = useState("");
+@@ -442,7 +447,7 @@ export default function ProviderHealthMatrixCard() {
+                 <div className="min-w-0">
+                   <div className="flex flex-wrap items-center gap-2">
+                     <span className="truncate text-sm font-semibold text-text-main">
+-                      {getProviderDisplayName(provider.provider)}
++                      {resolveProviderName(provider.provider, nodeMap)}
+                     </span>
+                     <span className="font-mono text-xs text-text-muted">{provider.provider}</span>
+                     <Badge variant={stateVariant(provider.state)} size="sm" dot>
+diff --git a/src/app/(dashboard)/dashboard/provider-stats/page.tsx b/src/app/(dashboard)/dashboard/provider-stats/page.tsx
+index bdc1e54ce..56d895d20 100644
+--- a/src/app/(dashboard)/dashboard/provider-stats/page.tsx
++++ b/src/app/(dashboard)/dashboard/provider-stats/page.tsx
+@@ -13,7 +13,10 @@ import { Card } from "@/shared/components";
+ import { useProviderNodeMap, resolveProviderName } from "@/lib/display/useProviderNodeMap";
+ 
+ interface ProviderStat {
++  /** IDENTITY — the raw provider/node id. Keys `toolLatency` and the model grouping. */
+   provider: string;
++  /** DISPLAY — the operator's node name, resolved server-side. Never a lookup key. */
++  providerDisplay?: string | null;
+   totalRequests: number;
+   successfulRequests: number;
+   avgLatencyMs: number;
+@@ -22,7 +25,10 @@ interface ProviderStat {
+ }
+ 
+ interface ModelStat {
++  /** IDENTITY — see {@link ProviderStat.provider}. */
+   provider: string;
++  /** DISPLAY — see {@link ProviderStat.providerDisplay}. */
++  providerDisplay?: string | null;
+   model: string;
+   requests: number;
+   avgLatencyMs: number;
+@@ -319,7 +325,7 @@ export default function ProviderStatsPage() {
+                       }
+                     >
+                       <td className="py-2.5 px-3 font-medium text-text-main">
+-                        {resolveProviderName(p.provider, nodeMap)}
++                        {p.providerDisplay?.trim() || resolveProviderName(p.provider, nodeMap)}
+                       </td>
+                       <td className="py-2.5 px-3 text-right tabular-nums text-text-main">
+                         {formatNumber(p.totalRequests)}
 diff --git a/src/app/(dashboard)/dashboard/providers/[id]/ProviderDetailPageClient.tsx b/src/app/(dashboard)/dashboard/providers/[id]/ProviderDetailPageClient.tsx
 index 95842ad47..b72c307d0 100644
 --- a/src/app/(dashboard)/dashboard/providers/[id]/ProviderDetailPageClient.tsx
@@ -639,7 +820,7 @@ index a8c83bedd..cf7127f5a 100644
 +export const __getModelsForProviderForTest = getModelsForProvider;
 +export const __getAllModelsForTest = getAllModels;
 diff --git a/src/app/api/combos/route.ts b/src/app/api/combos/route.ts
-index c13466a80..2d6b07d29 100644
+index c13466a80..fa23d7e2e 100644
 --- a/src/app/api/combos/route.ts
 +++ b/src/app/api/combos/route.ts
 @@ -16,6 +16,7 @@ import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
@@ -650,7 +831,7 @@ index c13466a80..2d6b07d29 100644
  import { ComboInvariantError } from "@/lib/combos/invariants";
  import { buildComboNameCollisionWarning } from "@/lib/combos/modelNameCollision";
  
-@@ -38,9 +39,22 @@ export async function GET(request: Request) {
+@@ -38,9 +39,26 @@ export async function GET(request: Request) {
      const range = validation.data;
      const total = getCombosCount();
      const rawCombos = await getCombos(range.limit, range.offset);
@@ -660,7 +841,11 @@ index c13466a80..2d6b07d29 100644
 +    const providerIdToPrefix: Record<string, string> = {};
 +    try {
 +      for (const node of await getCachedProviderNodes()) {
-+        if (node?.id && node?.prefix) providerIdToPrefix[node.id] = String(node.prefix);
++        // `getCachedProviderNodes` is typed `Record<string, unknown>[]`, so both fields
++        // arrive as `unknown` and neither can index a string map until narrowed.
++        const nodeId = typeof node?.id === "string" ? node.id : null;
++        const nodePrefix = typeof node?.prefix === "string" ? node.prefix : null;
++        if (nodeId && nodePrefix) providerIdToPrefix[nodeId] = nodePrefix;
 +      }
 +    } catch (nodeError) {
 +      // Non-fatal: without prefixes the computation degrades to its previous
@@ -674,6 +859,35 @@ index c13466a80..2d6b07d29 100644
      }));
      return NextResponse.json({ combos, total });
    } catch (error) {
+diff --git a/src/app/api/models/route.ts b/src/app/api/models/route.ts
+index 9c3d07822..eaf0bffe5 100644
+--- a/src/app/api/models/route.ts
++++ b/src/app/api/models/route.ts
+@@ -1,5 +1,6 @@
+ import { NextResponse } from "next/server";
+ import { getModelAliases, setModelAlias, getProviderConnections } from "@/models";
++import { getModelIsHidden } from "@/lib/db/models";
+ import { AI_MODELS, PROVIDER_ID_TO_ALIAS } from "@/shared/constants/models";
+ import { updateModelAliasSchema } from "@/shared/validation/schemas";
+ import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
+@@ -85,7 +86,16 @@ export async function GET(request: Request) {
+         alias: modelAliases[fullModel] || m.model,
+         available,
+       };
+-    }).filter((m: any) => showAll || m.available);
++    })
++      // Eye-hidden models must not come back from here either. This route feeds the
++      // dashboard model pickers (ModelSelectField, HomePageClient) and is the documented
++      // fallback the API manager uses when `/v1/models` is key-protected — so a model the
++      // operator hid stayed pickable in the UI even though `/v1/models` had dropped it.
++      // `AI_MODELS[].provider` is the canonical provider id, which is the key the eye
++      // toggle writes under; `?all=true` does not bypass the eye, only the active-connection
++      // filter. Hidden is not the same as trashed: this is the eye only.
++      .filter((m: any) => !getModelIsHidden(m.provider, m.model))
++      .filter((m: any) => showAll || m.available);
+ 
+     // #6328 (follow-up to #6495): REMOVE — not just hide — paid models from the
+     // dashboard model picker when the operator opts into hidePaidModels. Mirrors
 diff --git a/src/app/api/provider-models/route.ts b/src/app/api/provider-models/route.ts
 index 0bb1ee765..d147e29e5 100644
 --- a/src/app/api/provider-models/route.ts
@@ -899,8 +1113,54 @@ index a11180f50..712574ea6 100644
          baseUrl: sanitizedBaseUrl,
          name: (name || "").trim(),
          chatPath: chatPath || null,
+diff --git a/src/app/api/provider-stats/route.ts b/src/app/api/provider-stats/route.ts
+index 738b9f474..a07f3890b 100644
+--- a/src/app/api/provider-stats/route.ts
++++ b/src/app/api/provider-stats/route.ts
+@@ -1,6 +1,6 @@
+ import { NextResponse } from "next/server";
+ import { getProviderCallStats, getModelCallStats } from "@/lib/db/providerStats";
+-import { AI_PROVIDERS } from "@/shared/constants/providers";
++import { getProviderDisplayName } from "@/lib/display/names";
+ 
+ export async function GET() {
+   try {
+@@ -30,20 +30,26 @@ export async function GET() {
+       toolLatency = getToolLatencyByProvider() as Record<string, unknown>;
+     } catch {}
+ 
+-    const resolveName = (provider: string, nodeName: string | null) => {
+-      if (nodeName?.trim()) return nodeName.trim();
+-      const info = AI_PROVIDERS[provider as keyof typeof AI_PROVIDERS];
+-      return info?.name || provider;
+-    };
++    // `provider` is an IDENTITY: the page keys `toolLatency[...]` and its
++    // model-grouping map by it, and `toolLatency` is populated by the stream layer
++    // under the raw provider id. Overwriting it with the operator's display name
++    // therefore did not just relabel the row — it broke both lookups for exactly
++    // the providers that have a node name (the TTFT/gap columns silently read "—").
++    // Keep the id where it is and publish the human label as its own field, the
++    // same `provider` + `providerDisplay` split `src/lib/usage/callLogs.ts` uses.
++    const resolveDisplay = (provider: string, nodeName: string | null) =>
++      getProviderDisplayName(provider, nodeName?.trim() ? { name: nodeName } : null, {
++        catalogFallback: true,
++      });
+ 
+     const providers = providerStats.map((p: any) => ({
+       ...p,
+-      provider: resolveName(p.provider, p.nodeName),
++      providerDisplay: resolveDisplay(p.provider, p.nodeName),
+     }));
+ 
+     const models = modelStats.map((m: any) => ({
+       ...m,
+-      provider: resolveName(m.provider, m.nodeName),
++      providerDisplay: resolveDisplay(m.provider, m.nodeName),
+     }));
+ 
+     return NextResponse.json({ providers, models, comboMetrics, telemetry, toolLatency });
 diff --git a/src/app/api/usage/analytics/route.ts b/src/app/api/usage/analytics/route.ts
-index f26ef58a9..b8aaee7f2 100644
+index 04a05bab3..32e60dfb3 100644
 --- a/src/app/api/usage/analytics/route.ts
 +++ b/src/app/api/usage/analytics/route.ts
 @@ -187,10 +187,11 @@ function resolveModelPricing(
@@ -919,11 +1179,39 @@ index f26ef58a9..b8aaee7f2 100644
  
    const modelCandidates = getPricingModelCandidates(model, normalizeModelName);
  
+diff --git a/src/app/api/v1/combos/route.ts b/src/app/api/v1/combos/route.ts
+index 91a4a4fb3..bd9db26be 100644
+--- a/src/app/api/v1/combos/route.ts
++++ b/src/app/api/v1/combos/route.ts
+@@ -14,8 +14,11 @@ import { HTTP_STATUS } from "@omniroute/open-sse/config/constants.ts";
+ import { extractApiKey, isValidApiKey } from "@/sse/services/auth";
+ import { isDashboardSessionAuthenticated } from "@/shared/utils/apiAuth";
+ import { isRequireApiKeyEnabled } from "@/shared/utils/featureFlags";
++import { filterListableCombos } from "@/lib/models/comboVisibility";
+ import { projectCombo, type PublicCombo } from "./projectCombo";
+ 
++type ComboRow = Record<string, unknown>;
++
+ export async function OPTIONS() {
+   return new Response(null, {
+     headers: {
+@@ -43,7 +46,10 @@ export async function GET(request: Request) {
+ 
+   try {
+     const combos = await getCombos();
+-    const data = (Array.isArray(combos) ? combos : [])
++    // Same listability rule `/v1/models` applies (enabled, not eye-hidden, no hidden
++    // target model). This route used to list `getCombos()` verbatim, so hiding a model
++    // removed it from /v1/models while a combo pointing at it stayed advertised here.
++    const data = (await filterListableCombos(Array.isArray(combos) ? (combos as ComboRow[]) : []))
+       // #3979: advertise resolved capabilities so importing clients enable them
+       .map((c) => projectCombo(c as Record<string, unknown>, { includeCapabilities: true }))
+       .filter((c): c is PublicCombo => c !== null);
 diff --git a/src/app/api/v1/models/catalog.ts b/src/app/api/v1/models/catalog.ts
-index 426fd50f8..4cfcf1e67 100644
+index 34ccbdfba..5ac370c98 100644
 --- a/src/app/api/v1/models/catalog.ts
 +++ b/src/app/api/v1/models/catalog.ts
-@@ -41,7 +41,7 @@ import {
+@@ -35,7 +35,7 @@ import {
  } from "@omniroute/open-sse/services/autoCombo/builtinCatalog";
  import { getAllSyncedAvailableModels, type SyncedAvailableModel } from "@/lib/db/models";
  import { getModelCatalogCacheVersion } from "@/lib/db/readCache";
@@ -932,7 +1220,7 @@ index 426fd50f8..4cfcf1e67 100644
  import { providerUsesCuratedModelsOnly } from "@/lib/providers/modelListingCapability";
  import { getOpenRouterCatalog } from "@/lib/catalog/openrouterCatalog";
  import { hasEligibleConnectionForModel } from "@/domain/connectionModelRules";
-@@ -366,10 +366,28 @@ async function buildUnifiedModelsResponseCore(
+@@ -355,10 +355,28 @@ async function buildUnifiedModelsResponseCore(
      // map dependency — pure parseModel() probe), used both here and at the two
      // includeCanonical prefix-collision checks below.
      const getProviderPrefixes = (providerId: string, rawProvider: string) =>
@@ -964,7 +1252,22 @@ index 426fd50f8..4cfcf1e67 100644
  
      const getComboTargetCatalogMetadata = (
        target: ComboCatalogTarget
-@@ -1257,7 +1275,13 @@ async function buildUnifiedModelsResponseCore(
+@@ -925,6 +943,14 @@ async function buildUnifiedModelsResponseCore(
+           if (!openRouterModel?.id || typeof openRouterModel.id !== "string") continue;
+           const qualifiedId = qualifyOpenRouterModelId(openRouterModel.id);
+           if (models.some((existingModel: any) => existingModel?.id === qualifiedId)) continue;
++          // Every other catalog branch checks the eye here; this one never did, so hiding an
++          // OpenRouter model removed it from the synced listing but left it published as soon
++          // as the operator had NOT imported the roster (the `!providersWithSyncedModels`
++          // gate above) — which is exactly the state where the most models are listed.
++          // Key on the RAW upstream id, not `qualifiedId`: the eye toggle stores
++          // ("openrouter", "vendor/model") — see PATCH /api/provider-models, which forwards
++          // the unprefixed row id from PassthroughModelsSection.
++          if (getModelIsHidden("openrouter", openRouterModel.id)) continue;
+ 
+           const inputModalities = normalizeOpenRouterModalities(
+             openRouterModel.architecture?.input_modalities
+@@ -1295,7 +1321,13 @@ async function buildUnifiedModelsResponseCore(
            continue;
          }
  
@@ -979,7 +1282,7 @@ index 426fd50f8..4cfcf1e67 100644
          if (
            !activeAliases.has(alias) &&
            !activeAliases.has(canonicalProviderId) &&
-@@ -1299,6 +1323,10 @@ async function buildUnifiedModelsResponseCore(
+@@ -1337,6 +1369,10 @@ async function buildUnifiedModelsResponseCore(
          if (
            includeCanonical &&
            canonicalProviderId !== alias &&
@@ -990,7 +1293,7 @@ index 426fd50f8..4cfcf1e67 100644
            !isNoAuthProviderKey(canonicalProviderId) &&
            prefixRoutesToProvider(canonicalProviderId, canonicalProviderId)
          ) {
-@@ -1395,8 +1423,30 @@ async function buildUnifiedModelsResponseCore(
+@@ -1433,8 +1469,30 @@ async function buildUnifiedModelsResponseCore(
          // Without this branch, isModelAllowedForKey returns false for every model
          // (metadata missing → deny), collapsing /v1/models to 0 entries.
        } else {
@@ -1021,6 +1324,53 @@ index 426fd50f8..4cfcf1e67 100644
            // m.id is the full identifier (e.g. openai/gpt-4o), m.root is the raw model string
            // check either one as the config could use either patterns
            if (
+@@ -1447,7 +1505,10 @@ async function buildUnifiedModelsResponseCore(
+         finalModels = filtered;
+       }
+     }
+-    // ?configuredOnly — hide models that have no eligible DB connection.
++    // ?configuredOnly — hide models that have no eligible DB connection. The canonical-
++    // identity collapse (the same model published under two prefixes) runs at the end of
++    // applyCatalogPostFilters, so BOTH this path and the quota-exclusive early return
++    // above get it — see catalogResponse.ts.
+     finalModels = applyCatalogPostFilters(request, finalModels, {
+       connections,
+       prefixMode,
+diff --git a/src/app/api/v1/models/catalogDedupe.ts b/src/app/api/v1/models/catalogDedupe.ts
+index 29f48ac35df0565fa108c315ddf97d63ac2e9328..da501bc05fb44d6615c76225199ec22dc0f0722a 100644
+GIT binary patch
+delta 2437
+zcmZuz!EPKy5X~WymE{5l5(E-dtVGyhybj`o<3vi#qO1}-D7%r#iRta>ooPHXz3T4q
+zdXz-NKP(b|z!@nYz!mWmNL)GQ2YA&pv$h2*OP=nnsjhnO)$9G^`n%}2uQr+kljmaL
+z6j`%$<TK$(ScL~glZS^RDomnsT2!-KyG$iim5H+CmxdBOpDU|MPYbK&`b@dufbQUr
+zjvv3I>ErQ)M&FMo(+O|wT>kJ@eE95}(dzfB*PECUH5XOxQGlU1sYD(}<P51(Wox82
+zr<zY)W(I|dTnpEo?l{rhnu0W5mZCJJmLeyekaicUo*s`6M)dbjKa(jXQaFnDL!Jk_
+z`$fYoK8Q(_N&j`IZ-1R{oN!zlHl!(og!Es2efNuXagKBuP_ru4&f7Yo(f~`!kak|>
+zWai`+N@|gFaw(j0dlWPJO(Aw<ZmJ~S4eLU*tB7Kmiz-prmlBA?5+$7R>MX1(>x|`P
+z6-S}sL@7|IPOz6a4oS7osu`AP#!FFpomz3KeT_Yl#(?BkY91M%wfswA0r;By*epwx
+z{4lFyPQS(bYfRRi1MKa9-T7<Q7$3LsGgeb8B93b*$ZLvq0@{Ow25aHOtG_lrgdC))
+z@`OsJp9*EupvPhlB-4qi9asuA=GrR@wnHvpuFEvyN&*%l-93w$CZ>T)YXdHUfQTVY
+z3|Lxdd4j_ra^E0LctHv;a+8wF%o561LS|r*llvgV&=n-R)KWzk2BQ>(auF?oJr0L1
+z5@^!vw&<Fc7#eiYp>jSm<AcZa{Mj)z$K#{_nHfHJiZ<rjI?rs;+*nke>QhyM0}LW)
+zjaY_#;fu<lVvEr^7cHc&XF$zk3ZQp@!-<8RX>WzC_eeF|XE*RPv!V=33_sh0qK8k%
+z4=3ULnL-7vRh+8=g#`{cHe?Rd3K{|hnX#a(%`Q9NAhY0ljCCZWuSAnW9==|vAw7Yf
+znT^fR^d{$k)!<Oh4A*hWo_1v^=SA;Pp?C>Qf{FNytw1<ORuzWh1)dTZ8O9+n&POm?
+zreZJ}d<zPBQ<OE{<_D6wW~(bi4Fj@DBsIc<|4DVu;Y*5J?H|6FOzF{xzI#5JjE<&U
+z?_~$PxZ-ce9f719nA282coC2`J_>lCn`*|uY(ur*g7)4}eBJSc-nMihQpgd$p-pfF
+zmMQRs{vu)@H4zn+({dX$Kp#iXx|&<sq-lzoS$iis&#FR{JA7_JF>4!68GN^Gbx7S6
+z!Z<<Wf(q>%7P~kWMdGCvl4Tg`cAQgHR=QLm`urAY$7w(f&lemv6N?3ujT^ybY$Bp0
+zM#TmX!Q}uJF$5iNSXB-JQ2l8g=Q!SH)>LW6AXlX~mE>y-fIv%pP)TW}oWq{*FauFE
+zxC@nVxJl3u&)C`p_h?fZptA`tU9uFr!#Fk06KKXQawvpR>c@)#;hSSUqBsW<%6ri~
+zVMF8oj$S<7`O)aIK`FUDL2`B@6oH6%4{6r-AZqGU20=<wdV#rzToI(P01#Z1QwtGB
+zD-41ufw!PpjoA+fV`|wPjg*yT-%ywVWk2FxoS27e5<S5%3O3r|>h;y#)t?)m+&Jj(
+z*+XuuQ?6F4cN@(ryLNZ=%eC7LYJyF*gx!Z=Cf;s^qKCb-x9<%IpEi&sLYL!s3o#*R
+zcbAS#&v5T`7;0@J7#x}kywFzr3ju;V<_qXQoNVu1yi~vdK6*}DH`_X2zowg^5Il61
+z-@o5;zD=(XzxwRG8>_d2+n>j`UWJf1S8l!HcliIsF2kI@xw86T<KxvogTwdnu2sIW
+R5OL-24c@%Hv+?QGe*p=qKgIw6
+
+delta 12
+TcmeyYb3$x`G5h8?AyF0pB2)w<
+
 diff --git a/src/app/api/v1/models/catalogProviderMaps.ts b/src/app/api/v1/models/catalogProviderMaps.ts
 index 6de91e645..7d3594f46 100644
 --- a/src/app/api/v1/models/catalogProviderMaps.ts
@@ -1255,6 +1605,44 @@ index 6de91e645..7d3594f46 100644
      const prefixWithSlash = `${prefix}/`;
      if (modelStr.startsWith(prefixWithSlash)) {
        const modelId = modelStr.slice(prefixWithSlash.length).trim();
+diff --git a/src/app/api/v1/models/catalogResponse.ts b/src/app/api/v1/models/catalogResponse.ts
+index dee78d995..acfbc2092 100644
+--- a/src/app/api/v1/models/catalogResponse.ts
++++ b/src/app/api/v1/models/catalogResponse.ts
+@@ -15,7 +15,7 @@ import { appendCcDiscoveryAliases } from "@omniroute/open-sse/utils/ccDiscoveryA
+ import { isCcAliasGlobalEnabled, getCcAliasSettingsBulk } from "@/lib/db/ccDiscoveryAliases";
+ import { buildCcAliasPredicate } from "./ccAliasPredicate";
+ import { hasEligibleConnectionForModel } from "@/domain/connectionModelRules";
+-import { dedupeExactCatalogIds } from "./catalogDedupe";
++import { dedupeCanonicalModelIdentities, dedupeExactCatalogIds } from "./catalogDedupe";
+ import {
+   disambiguateCatalogModelNames,
+   enrichCatalogModelEntry,
+@@ -99,6 +99,24 @@ export function applyCatalogPostFilters(
+   // pair survives. Independent of MODELS_CATALOG_PREFIX_MODE; runs as the final guard.
+   finalModels = dedupeExactCatalogIds(finalModels);
+ 
++  // Then collapse the SAME model published under two different prefixes. `dual` prefix
++  // mode (the default) emits `<alias>/<model>` AND `<canonicalId>/<model>` for every
++  // provider whose alias differs from its id — 190+ providers, e.g. `ollama-cloud` +
++  // `ollamacloud`, `codex` + `cx`, `antigravity` + `ag`. Those are different `id` strings,
++  // so the exact-id pass above cannot see them as related and every such model appeared
++  // twice in every picker.
++  //
++  // It belongs HERE rather than in the catalog host: both the full build and the
++  // quota-exclusive short-circuit funnel through this function, so one placement covers
++  // every response instead of leaving the early-return path un-deduped.
++  //
++  // Dropping the redundant listing does NOT break clients that already send the other
++  // prefix: `buildAliasMaps` registers BOTH directions inbound (`aliasToProviderId[alias]`
++  // and `aliasToProviderId[providerId]` both resolve to the same provider), so requests
++  // keep resolving either way. This pass narrows what is ADVERTISED, not what is accepted
++  // — which is the whole point: one model should be listed once.
++  finalModels = dedupeCanonicalModelIdentities(finalModels);
++
+   return finalModels;
+ }
+ 
 diff --git a/src/app/api/v1/providers/[provider]/models/route.ts b/src/app/api/v1/providers/[provider]/models/route.ts
 index 9e5450be9..4af715526 100644
 --- a/src/app/api/v1/providers/[provider]/models/route.ts
@@ -1454,6 +1842,33 @@ index 47718233b..9e0aa76b4 100644
  
  export { OPTIONS };
  
+diff --git a/src/app/api/v1/vscode/[token]/combos/route.ts b/src/app/api/v1/vscode/[token]/combos/route.ts
+index 854419751..a4391d595 100644
+--- a/src/app/api/v1/vscode/[token]/combos/route.ts
++++ b/src/app/api/v1/vscode/[token]/combos/route.ts
+@@ -7,6 +7,7 @@
+  */
+ import { getCombos } from "@/lib/db/combos";
+ import { projectCombo, type PublicCombo } from "@/app/api/v1/combos/projectCombo";
++import { filterListableCombos } from "@/lib/models/comboVisibility";
+ 
+ // Re-export Ollama-compatible endpoints from the parent [token] route
+ // so VS Code can validate the server version and list models normally
+@@ -22,7 +23,13 @@ export async function GET(request: Request) {
+ 	// Default: return combos metadata
+ 	try {
+ 		const combos = await getCombos();
+-		const data = (Array.isArray(combos) ? combos : [])
++		// Same listability rule `/v1/models` applies (enabled, not eye-hidden, no hidden
++		// target model) — this route used to list `getCombos()` verbatim.
++		const data = (
++			await filterListableCombos(
++				Array.isArray(combos) ? (combos as Array<Record<string, unknown>>) : []
++			)
++		)
+ 			// #3979: advertise resolved capabilities so importing clients enable them
+ 			.map((combo) => projectCombo(combo as Record<string, unknown>, { includeCapabilities: true }))
+ 			.filter((combo): combo is PublicCombo => combo !== null);
 diff --git a/src/app/api/v1/vscode/[token]/familyFirstModelIds.ts b/src/app/api/v1/vscode/[token]/familyFirstModelIds.ts
 deleted file mode 100644
 index c1ef838b6..000000000
@@ -1660,6 +2075,33 @@ index c59f57b06..9e0aa76b4 100644
  
  export { OPTIONS };
  
+diff --git a/src/app/api/v1/vscode/raw/[token]/combos/route.ts b/src/app/api/v1/vscode/raw/[token]/combos/route.ts
+index fc2a35f4e..d04b171f8 100644
+--- a/src/app/api/v1/vscode/raw/[token]/combos/route.ts
++++ b/src/app/api/v1/vscode/raw/[token]/combos/route.ts
+@@ -7,6 +7,7 @@
+  */
+ import { getCombos } from "@/lib/db/combos";
+ import { projectCombo, type PublicCombo } from "@/app/api/v1/combos/projectCombo";
++import { filterListableCombos } from "@/lib/models/comboVisibility";
+ 
+ // Re-export Ollama-compatible endpoints from the parent [token] route
+ // so VS Code can validate the server version and list models normally
+@@ -22,7 +23,13 @@ export async function GET(request: Request) {
+ 	// Default: return combos metadata
+ 	try {
+ 		const combos = await getCombos();
+-		const data = (Array.isArray(combos) ? combos : [])
++		// Same listability rule `/v1/models` applies (enabled, not eye-hidden, no hidden
++		// target model) — this route used to list `getCombos()` verbatim.
++		const data = (
++			await filterListableCombos(
++				Array.isArray(combos) ? (combos as Array<Record<string, unknown>>) : []
++			)
++		)
+ 			// #3979: advertise resolved capabilities so importing clients enable them
+ 			.map((combo) => projectCombo(combo as Record<string, unknown>, { includeCapabilities: true }))
+ 			.filter((combo): combo is PublicCombo => combo !== null);
 diff --git a/src/app/api/v1/vscode/raw/[token]/familyFirstModelIds.ts b/src/app/api/v1/vscode/raw/[token]/familyFirstModelIds.ts
 deleted file mode 100644
 index c1ef838b6..000000000
@@ -2094,7 +2536,7 @@ index 9daf5450f..445289348 100644
  
      return Response.json({ models });
 diff --git a/src/instrumentation-node.ts b/src/instrumentation-node.ts
-index 72da1bbd2..179b917f2 100755
+index 822265d5c..398a7b548 100755
 --- a/src/instrumentation-node.ts
 +++ b/src/instrumentation-node.ts
 @@ -296,6 +296,29 @@ export async function registerNodejs(): Promise<void> {
@@ -2128,7 +2570,7 @@ index 72da1bbd2..179b917f2 100755
      { initGracefulShutdown },
      { initApiBridgeServer },
 diff --git a/src/lib/combos/builderOptions.ts b/src/lib/combos/builderOptions.ts
-index 8d73047e9..77b7ab372 100644
+index 8d73047e9..c9c9f4ce5 100644
 --- a/src/lib/combos/builderOptions.ts
 +++ b/src/lib/combos/builderOptions.ts
 @@ -8,7 +8,7 @@ import {
@@ -2140,6 +2582,28 @@ index 8d73047e9..77b7ab372 100644
  import { getResolvedModelCapabilities } from "@/lib/modelCapabilities";
  import { getSyncedCapabilities } from "@/lib/modelsDevSync";
  import { getModelsByProviderId } from "@/shared/constants/models";
+@@ -635,6 +635,21 @@ export async function getComboBuilderOptions(): Promise<ComboBuilderOptionsPaylo
+       customModels
+     );
+ 
++    // Same rule as the no-auth rewrite below (#2901): `qualifiedModel` is a ROUTING
++    // identity, so its left segment must be the prefix the model is actually published
++    // under — not the internal storage id. For a compatible node that id is a UUID, so
++    // the builder minted `openai-compatible-chat-<uuid>/<model>` while `/v1/models`
++    // publishes `<prefix>/<model>` and ModelSelectModal stores `<prefix>/<model>`. Two
++    // spellings of one model then compared unequal everywhere a combo step is matched
++    // against the picker's value, and the prefix-strip in `getComboTargetModelId` only
++    // ever saw one of them.
++    const nodeRoutingPrefix = toStringOrNull(providerNode?.prefix)?.trim();
++    if (nodeRoutingPrefix && nodeRoutingPrefix !== providerId) {
++      for (const opt of modelMap.values()) {
++        opt.qualifiedModel = `${nodeRoutingPrefix}/${opt.id}`;
++      }
++    }
++
+     const normalizedConnections =
+       expandConnectionOptions(providerConnections).sort(compareConnections);
+ 
 diff --git a/src/lib/combos/comboContext.ts b/src/lib/combos/comboContext.ts
 index 8d5e492cd..f144dd8c5 100644
 --- a/src/lib/combos/comboContext.ts
@@ -2177,12 +2641,12 @@ index 8d5e492cd..f144dd8c5 100644
  
      // 3b. Source check — only count models that exist in at least one
 diff --git a/src/lib/db/apiKeys.ts b/src/lib/db/apiKeys.ts
-index 35f84a79b..c915e0118 100644
+index 2fd411462..af5b58f59 100644
 --- a/src/lib/db/apiKeys.ts
 +++ b/src/lib/db/apiKeys.ts
-@@ -18,6 +18,14 @@ import {
- import { setNoLog } from "../compliance/noLog";
+@@ -19,6 +19,14 @@ import { setNoLog } from "../compliance/noLog";
  import { resolveModelAlias } from "@omniroute/open-sse/services/modelDeprecation.ts";
+ import { getProviderAlias, resolveProviderId } from "@/shared/constants/providers";
  import { getSyncedAvailableModelsByConnection, getCustomModels, getModelIsHidden } from "./models";
 +import { getCachedProviderNodes } from "./readCache";
 +import { getProviderModels } from "@/shared/constants/models";
@@ -2195,7 +2659,7 @@ index 35f84a79b..c915e0118 100644
  import {
    CLAUDE_CODE_PROVIDER_PREFIXES,
    preferClaudeCodeForUnprefixedClaudeModels,
-@@ -321,6 +329,22 @@ async function getModelPermissionCandidates(modelId: string): Promise<string[]>
+@@ -332,6 +340,22 @@ async function getModelPermissionCandidates(modelId: string): Promise<string[]>
    return Array.from(candidates);
  }
  
@@ -2218,7 +2682,7 @@ index 35f84a79b..c915e0118 100644
  async function getPublishedModelLookupTarget(
    modelId: string
  ): Promise<{ providerId: string; modelId: string } | null> {
-@@ -328,14 +352,24 @@ async function getPublishedModelLookupTarget(
+@@ -339,14 +363,24 @@ async function getPublishedModelLookupTarget(
    if (!cleanModelId) return null;
  
    if (cleanModelId.includes("/")) {
@@ -2251,7 +2715,7 @@ index 35f84a79b..c915e0118 100644
    }
  
    if (
-@@ -348,6 +382,38 @@ async function getPublishedModelLookupTarget(
+@@ -359,6 +393,38 @@ async function getPublishedModelLookupTarget(
    return null;
  }
  
@@ -2290,7 +2754,7 @@ index 35f84a79b..c915e0118 100644
  function ensureApiKeyColumn(
    db: ApiKeysDbLike,
    columnNames: Set<string>,
-@@ -1384,6 +1450,35 @@ export async function getApiKeyMetadata(
+@@ -1395,6 +1461,35 @@ export async function getApiKeyMetadata(
    return metadata;
  }
  
@@ -2326,7 +2790,7 @@ index 35f84a79b..c915e0118 100644
  /**
   * Check if a model is allowed for a given API key
   * @param {string} key - The API key
-@@ -1430,18 +1525,11 @@ export async function isModelAllowedForKey(
+@@ -1441,18 +1536,11 @@ export async function isModelAllowedForKey(
  
      if (!hasClaudeCodeWildcardPermission(allowedModels, modelPermissionCandidates)) {
        const lookupTarget = await getPublishedModelLookupTarget(effectiveModelId);
@@ -2348,7 +2812,7 @@ index 35f84a79b..c915e0118 100644
        if (!discovered) return false;
  
        const isPublic = !getModelIsHidden(providerId, shortModelId);
-@@ -1449,23 +1537,26 @@ export async function isModelAllowedForKey(
+@@ -1460,23 +1548,26 @@ export async function isModelAllowedForKey(
      }
    }
  
@@ -2844,7 +3308,7 @@ index 522c72575..760968f32 100644
 +  return getProviderDisplayName(providerId, providerNodes);
 +}
 diff --git a/src/lib/localDb.ts b/src/lib/localDb.ts
-index 889792e82..50473fe1b 100755
+index 3e251050b..b3952e251 100755
 --- a/src/lib/localDb.ts
 +++ b/src/lib/localDb.ts
 @@ -106,6 +106,7 @@ export {
@@ -2855,6 +3319,146 @@ index 889792e82..50473fe1b 100755
    pickApiKeyForInternalUse,
    clearApiKeyCaches,
    resetApiKeyState,
+diff --git a/src/lib/models/comboVisibility.ts b/src/lib/models/comboVisibility.ts
+new file mode 100644
+index 000000000..fe2a8dd26
+--- /dev/null
++++ b/src/lib/models/comboVisibility.ts
+@@ -0,0 +1,134 @@
++/**
++ * The ONE definition of "is this combo listable?", shared by every surface that lists
++ * combos.
++ *
++ * WHY THIS FILE EXISTS
++ * --------------------
++ * `GET /v1/models` suppresses a combo when the combo itself is inactive/hidden OR when any
++ * model it resolves to is eye-hidden. That rule lived inline in `catalog.ts` and nowhere
++ * else, so the endpoints that list combos directly from `getCombos()` — `/v1/combos` and
++ * both VS Code `…/combos` routes — applied no rule at all. Hiding a model that a combo
++ * targets therefore removed the model from `/v1/models` while the combo pointing at it
++ * stayed listed everywhere else: the same "hidden in one place, visible in another" split
++ * the operator sees in the UI.
++ *
++ * Keeping the predicate in one module means a change to the rule cannot land on some
++ * surfaces and miss others. Callers pass the combo list they already have; this module
++ * does the target resolution and the hidden lookup.
++ *
++ * WHY IT IS ASYNC
++ * ---------------
++ * Resolving a combo step to a (providerId, modelId) pair needs the same three inputs the
++ * catalog uses: the alias maps, and — for compatible-provider nodes — that node's
++ * `provider_nodes.prefix`. A combo step persists `provider` as the raw node id while its
++ * `modelStr` is prefix-qualified ("pix4k/claude-opus-5"), so without the prefix map the
++ * strip cannot recognize the qualified form and the hidden lookup misses. The prefix map
++ * comes from the (cached) provider-nodes read, hence the await.
++ *
++ * Note the asymmetry with `isDeleted`: eye-hidden (`isHidden`) and trashed (`isDeleted`)
++ * are deliberately distinct in storage, and this predicate is about the eye only.
++ */
++
++import { getModelIsHidden } from "@/lib/db/models";
++import { getCachedProviderNodes } from "@/lib/localDb";
++import {
++  buildAliasMaps,
++  getComboTargetModelId,
++  resolveCanonicalProviderId,
++  type AliasMaps,
++} from "@/app/api/v1/models/catalogProviderMaps";
++import { resolveNestedComboTargets } from "@omniroute/open-sse/services/combo/comboStructure.ts";
++
++type ComboLike = Record<string, unknown>;
++
++/** The resolution inputs `catalog.ts` builds inline; built once per listing call. */
++type ComboResolutionContext = {
++  aliasMaps: AliasMaps;
++  providerIdToPrefix: Record<string, string>;
++};
++
++async function buildComboResolutionContext(): Promise<ComboResolutionContext> {
++  const providerIdToPrefix: Record<string, string> = {};
++  try {
++    const nodes = await getCachedProviderNodes();
++    for (const node of Array.isArray(nodes) ? nodes : []) {
++      // Narrow rather than cast: the cache is typed `Record<string, unknown>[]`, so a
++      // cast would only be a promise that these are strings — and a non-string prefix
++      // would then silently become a broken map key.
++      const nodeId = typeof node?.id === "string" ? node.id : null;
++      const nodePrefix = typeof node?.prefix === "string" ? node.prefix : null;
++      if (nodeId && nodePrefix) providerIdToPrefix[nodeId] = nodePrefix;
++    }
++  } catch {
++    // No node prefixes available → registry providers still resolve; compatible nodes
++    // fall back to the unstripped modelStr, which is the pre-existing behavior.
++  }
++  return { aliasMaps: buildAliasMaps(), providerIdToPrefix };
++}
++
++/**
++ * True when every model this combo resolves to is visible.
++ *
++ * Resolution goes through `resolveNestedComboTargets` so a combo that nests another combo
++ * is judged by the models it ultimately reaches, not by its immediate steps — a nested
++ * combo whose leaf model is hidden must not slip through. Targets that cannot be resolved
++ * to a provider+model pair are treated as visible: an unresolvable step is a separate
++ * (configuration) problem and must not silently delete a combo from every listing.
++ */
++export function comboTargetsAllVisible(
++  combo: ComboLike,
++  allCombos: readonly ComboLike[],
++  context: ComboResolutionContext
++): boolean {
++  let targets: Array<Record<string, unknown>>;
++  try {
++    targets = resolveNestedComboTargets(
++      combo as Parameters<typeof resolveNestedComboTargets>[0],
++      allCombos as Parameters<typeof resolveNestedComboTargets>[1]
++    ) as Array<Record<string, unknown>>;
++  } catch {
++    // A malformed/cyclic combo structure is not a visibility decision — leave it listed
++    // and let the combo's own validation surface the problem.
++    return true;
++  }
++
++  return !targets.some((target) => {
++    // Same prefix lookup `catalog.ts` does: try the canonical id first, then the raw
++    // provider string, because a compatible node's prefix is keyed by its raw node id.
++    const providerValue = (target as { provider?: unknown }).provider;
++    const rawProvider = typeof providerValue === "string" ? providerValue.trim() : "";
++    const canonical = rawProvider
++      ? resolveCanonicalProviderId(context.aliasMaps.aliasToProviderId, rawProvider)
++      : rawProvider;
++    const resolved = getComboTargetModelId(
++      context.aliasMaps,
++      target as Parameters<typeof getComboTargetModelId>[1],
++      context.providerIdToPrefix[canonical] || context.providerIdToPrefix[rawProvider]
++    );
++    return resolved ? getModelIsHidden(resolved.providerId, resolved.modelId) : false;
++  });
++}
++
++/**
++ * The full listability rule: the combo is enabled, not eye-hidden, and no model it
++ * resolves to is eye-hidden. This is what `/v1/models` enforces; every other combo
++ * listing must enforce the same thing.
++ */
++export function isComboListable(
++  combo: ComboLike,
++  allCombos: readonly ComboLike[],
++  context: ComboResolutionContext
++): boolean {
++  if (combo?.isActive === false) return false;
++  if (combo?.isHidden === true) return false;
++  return comboTargetsAllVisible(combo, allCombos, context);
++}
++
++/** Filter a combo list down to the listable ones, preserving order. */
++export async function filterListableCombos<T extends ComboLike>(
++  combos: readonly T[]
++): Promise<T[]> {
++  if (!Array.isArray(combos) || combos.length === 0) return [];
++  const context = await buildComboResolutionContext();
++  return combos.filter((combo) => isComboListable(combo, combos, context));
++}
 diff --git a/src/lib/providers/compatibleFallbackModels.ts b/src/lib/providers/compatibleFallbackModels.ts
 new file mode 100644
 index 000000000..a06d5ff93
@@ -3264,10 +3868,10 @@ index 7f5886ab7..6400d1c4a 100644
    zai: {
      "glm-5": {
 diff --git a/src/shared/constants/providers/oauth.ts b/src/shared/constants/providers/oauth.ts
-index f39169d28..36665eb93 100644
+index 80471f3d1..f82b77b26 100644
 --- a/src/shared/constants/providers/oauth.ts
 +++ b/src/shared/constants/providers/oauth.ts
-@@ -97,7 +97,20 @@ export const OAUTH_PROVIDERS = {
+@@ -99,7 +99,20 @@ export const OAUTH_PROVIDERS = {
    },
    antigravity: {
      id: "antigravity",
@@ -6348,10 +6952,10 @@ index 000000000..89fffc4a2
 +  assert.equal(catalog.__getCatalogBuilderRunsForTest(), 1);
 +});
 diff --git a/tests/unit/models-catalog-route.test.ts b/tests/unit/models-catalog-route.test.ts
-index ed76e9a59..1a245430d 100644
+index 2db47dbf9..2840c38d1 100644
 --- a/tests/unit/models-catalog-route.test.ts
 +++ b/tests/unit/models-catalog-route.test.ts
-@@ -1012,10 +1012,17 @@ test("v1 models catalog does not duplicate imported Jina specialty models", asyn
+@@ -1040,10 +1040,17 @@ test("v1 models catalog does not duplicate imported Jina specialty models", asyn
    );
  
    assert.equal(response.status, 200);

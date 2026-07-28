@@ -7320,6 +7320,10 @@
         "label": "Mniej kodu",
         "description": "Drabina YAGNI: najmniejsza działająca zmiana, brak nieproszonych abstrakcji."
       },
+      "ponytail": {
+        "label": "Ponytail (lazy senior dev)",
+        "description": "Lazy senior-dev discipline: climb the YAGNI ladder, fix root cause, smallest working diff."
+      },
       "terse-cjk": {
         "label": "Zwięzłe CJK (文言)",
         "description": "Klasyczny chiński styl ultra-zwięzły (dostępny tylko dla języka chińskiego)."
@@ -10540,7 +10544,9 @@
     "deleteGroupConfirm": "Usunąć tę grupę? Jej pule muszą najpierw zostać ponownie przypisane lub usunięte.",
     "deleteGroupHasPools": "Ta grupa nadal zawiera pule — najpierw przypisz je ponownie lub usuń.",
     "ungroupedTitle": "Niezgrupowane",
-    "ungroupedHint": "Te pule nie są przypisane do żadnej znanej grupy. Edytuj pulę, aby przenieść ją do rzeczywistej grupy."
+    "ungroupedHint": "Te pule nie są przypisane do żadnej znanej grupy. Edytuj pulę, aby przenieść ją do rzeczywistej grupy.",
+    "removeFailed": "Could not remove this pool.",
+    "dismiss": "Dismiss"
   },
   "plugins": {
     "title": "Wtyczki",

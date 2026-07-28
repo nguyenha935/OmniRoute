@@ -95,6 +95,7 @@ import { getComboFailureLogError } from "./comboFailureLogging";
 
 // Pipeline integration — wired modules
 import { classify429FromError, type FailureKind } from "@/shared/utils/classify429";
+import { isSubscriptionQuotaText } from "@omniroute/open-sse/services/quotaTextCooldowns.ts";
 import { resolveUseUpstream429BreakerHints } from "@/shared/utils/providerHints";
 import { getCircuitBreaker, isLocalStreamLifecycleError } from "../../shared/utils/circuitBreaker";
 import { markAccountExhaustedFrom429 } from "../../domain/quotaCache";
@@ -1725,7 +1726,9 @@ async function handleSingleModelChat(
       const errorStr = String(result.rawMessage ?? result.error ?? "");
       const failureKind =
         result.status === 429
-          ? classify429FromError({ status: result.status, message: errorStr })
+          ? isSubscriptionQuotaText(errorStr.toLowerCase(), provider)
+            ? "quota_exhausted"
+            : classify429FromError({ status: result.status, message: errorStr })
           : undefined;
       if (result.status === 429 && isDailyQuotaExhausted(errorStr)) {
         // Parse which model is quota-limited

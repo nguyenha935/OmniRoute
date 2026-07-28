@@ -7298,6 +7298,10 @@
         "label": "Menej kódu",
         "description": "Rebríček YAGNI: najmenšia funkčná zmena, žiadne nevyžiadané abstrakcie."
       },
+      "ponytail": {
+        "label": "Ponytail (lazy senior dev)",
+        "description": "Lazy senior-dev discipline: climb the YAGNI ladder, fix root cause, smallest working diff."
+      },
       "terse-cjk": {
         "label": "Stručné CJK (文言)",
         "description": "Klasický čínsky ultra stručný štýl (dostupný len pre čínštinu)."
@@ -10518,7 +10522,9 @@
     "deleteGroupConfirm": "Vymazať túto skupinu? Jej fondy musia byť najskôr priradené inam alebo odstránené.",
     "deleteGroupHasPools": "Táto skupina stále obsahuje fondy — najskôr ich priraďte inam alebo vymažte.",
     "ungroupedTitle": "Nezoskupené",
-    "ungroupedHint": "Tieto fondy nie sú priradené k žiadnej známej skupine. Upravte fond a presuňte ho do skutočnej skupiny."
+    "ungroupedHint": "Tieto fondy nie sú priradené k žiadnej známej skupine. Upravte fond a presuňte ho do skutočnej skupiny.",
+    "removeFailed": "Could not remove this pool.",
+    "dismiss": "Dismiss"
   },
   "plugins": {
     "title": "Plugins",

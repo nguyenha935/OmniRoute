@@ -7298,6 +7298,10 @@
         "label": "کد کمتر",
         "description": "نردبان YAGNI: کوچک‌ترین تغییر کارآمد، بدون انتزاع‌های ناخواسته."
       },
+      "ponytail": {
+        "label": "Ponytail (lazy senior dev)",
+        "description": "Lazy senior-dev discipline: climb the YAGNI ladder, fix root cause, smallest working diff."
+      },
       "terse-cjk": {
         "label": "CJK موجز (文言)",
         "description": "سبک فوق‌موجز چینی کلاسیک (فقط برای زبان چینی در دسترس است)."
@@ -10518,7 +10522,9 @@
     "deleteGroupConfirm": "این گروه حذف شود؟ استخرهای آن ابتدا باید دوباره تخصیص داده شوند یا حذف شوند.",
     "deleteGroupHasPools": "این گروه هنوز دارای استخر است — ابتدا آن‌ها را دوباره تخصیص دهید یا حذف کنید.",
     "ungroupedTitle": "گروه‌بندی‌نشده",
-    "ungroupedHint": "این استخرها به هیچ گروه شناخته‌شده‌ای تخصیص داده نشده‌اند. یک استخر را ویرایش کنید تا آن را به یک گروه واقعی منتقل کنید."
+    "ungroupedHint": "این استخرها به هیچ گروه شناخته‌شده‌ای تخصیص داده نشده‌اند. یک استخر را ویرایش کنید تا آن را به یک گروه واقعی منتقل کنید.",
+    "removeFailed": "Could not remove this pool.",
+    "dismiss": "Dismiss"
   },
   "plugins": {
     "title": "Plugins",

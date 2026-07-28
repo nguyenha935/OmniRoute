@@ -7298,6 +7298,10 @@
         "label": "โค้ดน้อยลง",
         "description": "บันได YAGNI: การเปลี่ยนแปลงที่เล็กที่สุดที่ใช้งานได้จริง โดยไม่มีการสร้าง Abstraction ที่ไม่ได้ร้องขอ"
       },
+      "ponytail": {
+        "label": "Ponytail (lazy senior dev)",
+        "description": "Lazy senior-dev discipline: climb the YAGNI ladder, fix root cause, smallest working diff."
+      },
       "terse-cjk": {
         "label": "CJK แบบกระชับ (文言)",
         "description": "สไตล์ภาษาจีนคลาสสิกแบบกระชับอย่างยิ่ง (ใช้ได้เฉพาะภาษาจีนเท่านั้น)"
@@ -10518,7 +10522,9 @@
     "deleteGroupConfirm": "ลบกลุ่มนี้หรือไม่? ต้องมอบหมายพูลใหม่หรือลบพูลของกลุ่มนี้ออกก่อน",
     "deleteGroupHasPools": "กลุ่มนี้ยังมีพูลอยู่ — โปรดมอบหมายใหม่หรือลบพูลเหล่านั้นออกก่อน",
     "ungroupedTitle": "ไม่ได้จัดกลุ่ม",
-    "ungroupedHint": "พูลเหล่านี้ไม่ได้ถูกมอบหมายให้กับกลุ่มที่รู้จัก แก้ไขพูลเพื่อย้ายไปยังกลุ่มจริง"
+    "ungroupedHint": "พูลเหล่านี้ไม่ได้ถูกมอบหมายให้กับกลุ่มที่รู้จัก แก้ไขพูลเพื่อย้ายไปยังกลุ่มจริง",
+    "removeFailed": "Could not remove this pool.",
+    "dismiss": "Dismiss"
   },
   "plugins": {
     "title": "Plugins",

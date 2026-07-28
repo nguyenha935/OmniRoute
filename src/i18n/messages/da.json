@@ -7298,6 +7298,10 @@
         "label": "Mindre kode",
         "description": "YAGNI-stige: mindste fungerende ændring, ingen uanmodede abstraktioner."
       },
+      "ponytail": {
+        "label": "Ponytail (lazy senior dev)",
+        "description": "Lazy senior-dev discipline: climb the YAGNI ladder, fix root cause, smallest working diff."
+      },
       "terse-cjk": {
         "label": "Kortfattet CJK (文言)",
         "description": "Klassisk kinesisk ultra-kortfattet stil (kun tilgængelig for kinesisk)."
@@ -10518,7 +10522,9 @@
     "deleteGroupConfirm": "Slet denne gruppe? Dens puljer skal tildeles igen eller fjernes først.",
     "deleteGroupHasPools": "Denne gruppe har stadig puljer — tildel dem igen eller slet dem først.",
     "ungroupedTitle": "Ikke grupperet",
-    "ungroupedHint": "Disse puljer er ikke tildelt en kendt gruppe. Rediger en pulje for at flytte den til en rigtig gruppe."
+    "ungroupedHint": "Disse puljer er ikke tildelt en kendt gruppe. Rediger en pulje for at flytte den til en rigtig gruppe.",
+    "removeFailed": "Could not remove this pool.",
+    "dismiss": "Dismiss"
   },
   "plugins": {
     "title": "Plugins",

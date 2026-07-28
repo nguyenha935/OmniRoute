@@ -7298,6 +7298,10 @@
         "label": "Mai puțin cod",
         "description": "Scara YAGNI: cea mai mică modificare funcțională, fără abstracții nesolicitate."
       },
+      "ponytail": {
+        "label": "Ponytail (lazy senior dev)",
+        "description": "Lazy senior-dev discipline: climb the YAGNI ladder, fix root cause, smallest working diff."
+      },
       "terse-cjk": {
         "label": "CJK concis (文言)",
         "description": "Stil ultra-concis în chineza clasică (disponibil doar pentru chineză)."
@@ -10518,7 +10522,9 @@
     "deleteGroupConfirm": "Ștergeți acest grup? Pool-urile sale trebuie mai întâi reatribuite sau eliminate.",
     "deleteGroupHasPools": "Acest grup are încă pool-uri — reatribuiți-le sau ștergeți-le mai întâi.",
     "ungroupedTitle": "Negrupate",
-    "ungroupedHint": "Aceste pool-uri nu sunt atribuite unui grup cunoscut. Editați un pool pentru a-l muta într-un grup real."
+    "ungroupedHint": "Aceste pool-uri nu sunt atribuite unui grup cunoscut. Editați un pool pentru a-l muta într-un grup real.",
+    "removeFailed": "Could not remove this pool.",
+    "dismiss": "Dismiss"
   },
   "plugins": {
     "title": "Plugins",

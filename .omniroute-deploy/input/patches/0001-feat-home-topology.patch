@@ -6,23 +6,59 @@ index 000000000..ac47ccfa5
 @@ -0,0 +1 @@
 +- **feat(home):** the home Provider Topology now shows a logo-only router core with an electric "kame beam" on active links, a live **Recent Requests** panel (polls `/api/usage/call-logs` every ~3s, gated by the topology appearance toggle + page visibility), capacity-bounded concentric rings with stable alphabetical slots so many providers no longer overlap, and only surfaces providers with an enabled connection — untested/failing connections no longer clutter the map. All topology animations honour `prefers-reduced-motion` ([#8450](https://github.com/diegosouzapw/OmniRoute/pull/8450)) — thanks @nguyenha935
 diff --git a/src/app/(dashboard)/dashboard/HomePageClient.tsx b/src/app/(dashboard)/dashboard/HomePageClient.tsx
-index 24cec3140..41f5951a8 100644
+index 24cec3140..b1129c624 100644
 --- a/src/app/(dashboard)/dashboard/HomePageClient.tsx
 +++ b/src/app/(dashboard)/dashboard/HomePageClient.tsx
-@@ -425,7 +425,11 @@ export default function HomePageClient({ machineId }: HomePageClientProps) {
+@@ -17,6 +17,7 @@ import { useNotificationStore } from "@/store/notificationStore";
+ import { extractApiErrorMessage } from "@/shared/http/apiErrorMessage";
+ import { copyToClipboard } from "@/shared/utils/clipboard";
+ import { getProviderDisplayLabel } from "@/shared/utils/providerDisplayLabel";
++import { resolveCompatibleProviderCatalogEntry } from "@/lib/providers/catalog";
+ import { useIsElectron, useOpenExternal } from "@/shared/hooks/useElectron";
+ import { HomeProviderTopologySection } from "./HomeProviderTopologySection";
+ import { shouldShowProviderTopologyOnHome } from "./homeAppearance";
+@@ -117,8 +118,20 @@ export default function HomePageClient({ machineId }: HomePageClientProps) {
+   const [selectedProvider, setSelectedProvider] = useState(null);
+   const [providerMetrics, setProviderMetrics] = useState<Record<string, ProviderMetricSummary>>({});
+   const [providerTopology, setProviderTopology] = useState({ lastProvider: "", errorProvider: "" });
++  // `type` and `iconUrl` are what `resolveCompatibleProviderCatalogEntry` needs to pick the
++  // right logo/badge/colour. /api/provider-nodes already returns both; this state type used
++  // to drop them, so the topology could never render an operator's icon no matter what was
++  // configured — the data was fetched and then discarded one type annotation later.
+   const [providerNodes, setProviderNodes] = useState<
+-    Array<{ id?: string; prefix?: string; name?: string }>
++    Array<{
++      id: string;
++      prefix?: string;
++      name?: string;
++      type?: string | null;
++      apiType?: string | null;
++      baseUrl?: string | null;
++      iconUrl?: string | null;
++    }>
+   >([]);
+ 
+   // The live in-flight request feed for the Provider Topology pulse animation is owned by
+@@ -425,7 +438,17 @@ export default function HomePageClient({ machineId }: HomePageClientProps) {
    }, [providerConnections, t, tp, router]);
  
    const providerStats = useMemo(() => {
 -    return Object.entries(AI_PROVIDERS).map(([providerId, providerInfo]) => {
 +    const statFor = (
 +      providerId: string,
-+      providerInfo: { name?: string; alias?: string },
++      providerInfo: {
++        name?: string;
++        alias?: string;
++        color?: string;
++        textIcon?: string;
++        iconUrl?: string;
++      },
 +      extraModelKeys: readonly string[] = []
 +    ) => {
        const connections = providerConnections.filter((conn) => conn.provider === providerId);
        const connected = connections.filter((connection) =>
          isProviderConnectionConnected(connection)
-@@ -434,7 +438,9 @@ export default function HomePageClient({ machineId }: HomePageClientProps) {
+@@ -434,7 +457,9 @@ export default function HomePageClient({ machineId }: HomePageClientProps) {
          isProviderConnectionErrored(connection)
        ).length;
  
@@ -33,7 +69,7 @@ index 24cec3140..41f5951a8 100644
        const providerModels = models.filter((m) => providerKeys.has(m.provider));
  
        const authType = NOAUTH_PROVIDERS[providerId]
-@@ -452,8 +458,35 @@ export default function HomePageClient({ machineId }: HomePageClientProps) {
+@@ -452,8 +477,56 @@ export default function HomePageClient({ machineId }: HomePageClientProps) {
          modelCount: providerModels.length,
          authType,
        };
@@ -55,23 +91,56 @@ index 24cec3140..41f5951a8 100644
 +    // Their models are published under the node PREFIX, so that name is accepted as a
 +    // model key alongside the raw node id — the same accept-wide contract the catalog
 +    // surfaces use.
++    //
++    // Display metadata comes from `resolveCompatibleProviderCatalogEntry`, the SAME
++    // resolver the provider pages use — not a second inline copy. Hand-rolling it here
++    // (which is what this did) produced a node whose name/colour/badge/icon disagreed with
++    // the very same node's card on the providers page: no icon_url was threaded, so the
++    // topology fell through to the generic glyph while the card showed the real logo.
++    // Anything display-related for a compatible node must come from this one function.
 +    const compatible = providerNodes
-+      .map((node) => ({ id: (node.id || "").trim(), prefix: (node.prefix || "").trim(), name: node.name }))
-+      .filter((node) => node.id && !AI_PROVIDERS[node.id])
-+      .map((node) =>
-+        statFor(
-+          node.id,
-+          { name: node.name?.trim() || node.prefix || node.id, alias: node.prefix || undefined },
-+          node.prefix ? [node.prefix] : []
-+        )
-+      );
++      .filter((node) => (node.id || "").trim() && !AI_PROVIDERS[(node.id || "").trim()])
++      .map((node) => {
++        const entry = resolveCompatibleProviderCatalogEntry(node, {
++          ccCompatibleName: tp("ccCompatibleLabel"),
++          anthropicCompatibleName: tp("anthropicCompatibleName"),
++          openAiCompatibleName: tp("openaiCompatibleName"),
++        });
++        const prefix = (node.prefix || "").trim();
++        return statFor(
++          entry.id,
++          {
++            // `name` is the human caption; `alias` carries the PREFIX, which is what the
++            // models are published under and what may appear in a model path. The two are
++            // deliberately separate fields — a caption may contain spaces, a prefix may not.
++            name: entry.name,
++            alias: prefix || undefined,
++            color: entry.color,
++            textIcon: entry.textIcon,
++            iconUrl: entry.iconUrl,
++          },
++          prefix ? [prefix] : []
++        );
++      });
 +
 +    return [...builtIn, ...compatible];
-+  }, [providerConnections, models, providerNodes]);
++  }, [providerConnections, models, providerNodes, tp]);
  
    const selectedProviderModels = useMemo(() => {
      if (!selectedProvider) return [];
-@@ -471,48 +504,42 @@ export default function HomePageClient({ machineId }: HomePageClientProps) {
+@@ -467,52 +540,57 @@ export default function HomePageClient({ machineId }: HomePageClientProps) {
+     type ProviderHealth = "active" | "error" | "idle";
+     const byProvider = new Map<
+       string,
+-      { id: string; provider: string; name?: string; status: ProviderHealth }
++      {
++        id: string;
++        provider: string;
++        name?: string;
++        iconUrl?: string;
++        textIcon?: string;
++        status: ProviderHealth;
++      }
      >();
      const providerConfig = AI_PROVIDERS as Record<string, { name?: string }>;
  
@@ -132,6 +201,10 @@ index 24cec3140..41f5951a8 100644
 +        provider: canonical,
          name: resolvedName,
 -        status: healthByProvider.get(canonicalProviderId) ?? "idle",
++        // Threaded from `resolveCompatibleProviderCatalogEntry` (see providerStats) so the
++        // topology renders the SAME logo/badge the providers page renders for this node.
++        iconUrl: stat.provider?.iconUrl,
++        textIcon: stat.provider?.textIcon,
 +        status: stat.connected > 0 ? "active" : "error",
        });
 -    };
@@ -421,10 +494,10 @@ index 000000000..abe6f57ed
 +  );
 +}
 diff --git a/src/app/(dashboard)/home/ProviderTopology.tsx b/src/app/(dashboard)/home/ProviderTopology.tsx
-index 2324d93d8..8499c542c 100644
+index 2324d93d8..90995e721 100644
 --- a/src/app/(dashboard)/home/ProviderTopology.tsx
 +++ b/src/app/(dashboard)/home/ProviderTopology.tsx
-@@ -2,13 +2,23 @@
+@@ -2,24 +2,51 @@
  
  import { useMemo } from "react";
  import { useTranslations } from "next-intl";
@@ -448,9 +521,52 @@ index 2324d93d8..8499c542c 100644
 +import { getTopologyHandles } from "./topologyHandles";
  import { resolveTopologyNodeLabel } from "./topologyLabel";
  
- // Rings: [capacity, rx, ry]. Each successive ring fits ~6 more nodes.
-@@ -41,59 +51,49 @@ type ProviderNodeData = {
+-// Rings: [capacity, rx, ry]. Each successive ring fits ~6 more nodes.
+-const RINGS: [number, number, number][] = [
+-  [8, 210, 132],
+-  [14, 370, 233],
+-  [20, 530, 334],
+-  [26, 690, 435],
+-  [32, 850, 536],
+-  [38, 1010, 637],
+-];
++// ONE ring whose radius grows with the provider count — never a second ring.
++//
++// The previous layout used a fixed ladder of rings ([8, 210, 132], [14, 370, 233], ...)
++// and pushed provider N+1 outward once a ring filled up. With 11 providers that put 8 on
++// the inner ring and spilled 3 onto the next one, and because every ring starts its walk
++// at -PI/2 (straight up), the first node of ring 2 landed on the SAME vertical axis as the
++// first node of ring 1 — two nodes stacked directly above one another, which reads as a
++// vertical list bolted onto a star rather than a topology map. Any provider count that is
++// not exactly a ring capacity reproduces it.
++//
++// 9Router never had this because it never had a second ring: it derives ONE radius from
++// the node count and lets the single ellipse grow. Same here — `count` nodes are spread
++// evenly over a full turn of one ellipse, so spokes stay radial and no two nodes can share
++// an axis. The minimum keeps a 1-2 provider map from collapsing onto the router.
++const RING_MIN_RX = 210;
++const RING_MIN_RY = 132;
++// Arc length each node needs so neighbours never touch (node width + breathing room).
++const RING_NODE_ARC = 176;
++const RING_ELLIPSE_RATIO = 0.63;
++
++function ringRadii(count: number): { rx: number; ry: number } {
++  // Circumference must fit every node: 2*PI*rx >= count * arc.
++  const rx = Math.max(RING_MIN_RX, (count * RING_NODE_ARC) / (2 * Math.PI));
++  const ry = Math.max(RING_MIN_RY, rx * RING_ELLIPSE_RATIO);
++  return { rx, ry };
++}
+ 
+ type ProviderConfig = { color?: string; name?: string; textIcon?: string };
+ 
+@@ -39,81 +66,92 @@ type ProviderNodeData = {
+   label: string;
+   color: string;
    providerId: string;
++  /** Operator-supplied remote icon URL (#2166), threaded from provider_nodes.icon_url. */
++  iconUrl?: string;
++  /** Short badge ("AC"/"CC"/"OC") shown when no logo resolves, never a raw fallback glyph. */
++  textIcon?: string;
    active: boolean;
    error: boolean;
 -  /** Connection-health base state: a healthy connection with no in-flight traffic. */
@@ -461,7 +577,7 @@ index 2324d93d8..8499c542c 100644
  
  function ProviderNode({ data }: { data: ProviderNodeData }) {
 -  const { label, color, providerId, active, error, healthy, last } = data;
-+  const { label, color, providerId, active, error } = data;
++  const { label, color, providerId, iconUrl, textIcon, active, error } = data;
    const GREEN = FLOW_EDGE_COLORS.active;
    const RED = FLOW_EDGE_COLORS.error;
 -  const AMBER = FLOW_EDGE_COLORS.last;
@@ -522,7 +638,30 @@ index 2324d93d8..8499c542c 100644
        />
  
        <div
-@@ -106,14 +106,14 @@ function ProviderNode({ data }: { data: ProviderNodeData }) {
+         className="size-6 rounded flex items-center justify-center shrink-0"
+         style={{ backgroundColor: `${color}18` }}
+       >
+-        <ProviderIcon providerId={providerId} size={16} type="color" />
++        {/*
++          Same props the provider pages pass, so one node renders identically everywhere.
++          Calling ProviderIcon with only `providerId` (as this did) skips the operator's
++          icon_url AND the "AC"/"CC"/"OC" badge, so a compatible node — whose generated id
++          is a UUID that matches no bundled logo — fell through every resolution step to
++          the generic circle-plus glyph. The provider page looked right only because IT
++          passed src/fallbackText; the topology did not. Threading the same values here
++          removes that divergence rather than papering over it at this one call site.
++        */}
++        <ProviderIcon
++          providerId={providerId}
++          src={iconUrl}
++          alt={label}
++          size={16}
++          type="color"
++          fallbackText={textIcon}
++          fallbackColor={color}
++        />
+       </div>
+ 
        <span
          className="text-xs font-medium truncate flex-1"
          style={{
@@ -540,7 +679,7 @@ index 2324d93d8..8499c542c 100644
        )}
      </div>
    );
-@@ -122,39 +122,41 @@ function ProviderNode({ data }: { data: ProviderNodeData }) {
+@@ -122,39 +160,41 @@ function ProviderNode({ data }: { data: ProviderNodeData }) {
  type RouterNodeData = { activeCount: number };
  
  function RouterNode({ data }: { data: RouterNodeData }) {
@@ -593,7 +732,7 @@ index 2324d93d8..8499c542c 100644
            {data.activeCount}
          </span>
        )}
-@@ -167,20 +169,13 @@ const nodeTypes: NodeTypes = {
+@@ -167,19 +207,21 @@ const nodeTypes: NodeTypes = {
    router: RouterNode as any,
  };
  
@@ -602,8 +741,8 @@ index 2324d93d8..8499c542c 100644
 +};
 +
  type ProviderHealth = "active" | "error" | "idle";
- type ProviderEntry = { id?: string; provider: string; name?: string; status?: ProviderHealth };
- 
+-type ProviderEntry = { id?: string; provider: string; name?: string; status?: ProviderHealth };
+-
 -function getHandles(angle: number, cx: number): { sourceHandle: string; targetHandle: string } {
 -  const rel = (((angle + Math.PI / 2) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
 -  if (rel < Math.PI / 4 || rel > (7 * Math.PI) / 4)
@@ -614,11 +753,20 @@ index 2324d93d8..8499c542c 100644
 -    ? { sourceHandle: "right", targetHandle: "left" }
 -    : { sourceHandle: "left", targetHandle: "right" };
 -}
--
++type ProviderEntry = {
++  id?: string;
++  provider: string;
++  name?: string;
++  /** provider_nodes.icon_url for compatible nodes; absent for registry providers. */
++  iconUrl?: string;
++  /** Badge text for compatible nodes ("AC"/"CC"/"OC"); registry providers use their own. */
++  textIcon?: string;
++  status?: ProviderHealth;
++};
+ 
  function buildLayout(
    providers: ProviderEntry[],
-   activeSet: Set<string>,
-@@ -189,8 +184,8 @@ function buildLayout(
+@@ -189,8 +231,8 @@ function buildLayout(
  ): { nodes: Node[]; edges: Edge[] } {
    const nodeW = 156;
    const nodeH = 28;
@@ -629,7 +777,7 @@ index 2324d93d8..8499c542c 100644
  
    const nodes: Node[] = [];
    const edges: Edge[] = [];
-@@ -205,21 +200,13 @@ function buildLayout(
+@@ -205,78 +247,72 @@ function buildLayout(
  
    if (providers.length === 0) return { nodes, edges };
  
@@ -656,19 +804,15 @@ index 2324d93d8..8499c542c 100644
 +    a.provider.toLowerCase().localeCompare(b.provider.toLowerCase())
 +  );
  
-   let provIdx = 0;
-   for (let ri = 0; ri < RINGS.length && provIdx < sorted.length; ri++) {
-@@ -229,27 +216,22 @@ function buildLayout(
-     for (let i = 0; i < count; i++) {
-       const p = sorted[provIdx++];
-       const pid = p.provider.toLowerCase();
-+      // Edge/node state is driven PURELY by transient traffic, exactly like 9Router:
-+      //   active (in-flight) > last (single most-recent) > error (a live failed request).
-+      // Connection-health (`p.status`) is deliberately NOT painted onto the edge — that
-+      // was an Omni-only addition that kept a line lit permanently for a quiet
-+      // or test-failed connection. With it gone the connector changes and then fades to
-+      // the muted idle stroke once traffic stops, matching 9Router's calm-at-rest map.
-       const active = activeSet.has(pid);
+-  let provIdx = 0;
+-  for (let ri = 0; ri < RINGS.length && provIdx < sorted.length; ri++) {
+-    const [cap, rx, ry] = RINGS[ri];
+-    const count = Math.min(cap, sorted.length - provIdx);
+-
+-    for (let i = 0; i < count; i++) {
+-      const p = sorted[provIdx++];
+-      const pid = p.provider.toLowerCase();
+-      const active = activeSet.has(pid);
 -      // Traffic signals (live/recent request) take precedence; connection health is the
 -      // base state shown when a provider has no in-flight or recent traffic, so the map
 -      // still reflects "what is connected" at rest instead of going blank after a restart.
@@ -682,49 +826,102 @@ index 2324d93d8..8499c542c 100644
 -      const healthError = !active && !trafficError && p.status === "error";
 -      const healthy = !active && !trafficError && !healthError && p.status === "active";
 -      const error = trafficError || healthError;
-+      const error = !active && errorSet.has(pid);
-+      const last = !active && !error && lastSet.has(pid);
-       const config = getProviderConfig(p.provider);
-       const nodeId = `provider-${p.provider}`;
- 
-       const angle = -Math.PI / 2 + (2 * Math.PI * i) / count;
-       const cx = rx * Math.cos(angle);
-       const cy = ry * Math.sin(angle);
+-      const config = getProviderConfig(p.provider);
+-      const nodeId = `provider-${p.provider}`;
+-
+-      const angle = -Math.PI / 2 + (2 * Math.PI * i) / count;
+-      const cx = rx * Math.cos(angle);
+-      const cy = ry * Math.sin(angle);
 -      const { sourceHandle, targetHandle } = getHandles(angle, cx);
-+      const { sourceHandle, targetHandle } = getTopologyHandles(angle, cx);
- 
-       nodes.push({
-         id: nodeId,
-@@ -261,20 +243,24 @@ function buildLayout(
-           providerId: p.provider,
-           active,
-           error,
+-
+-      nodes.push({
+-        id: nodeId,
+-        type: "provider",
+-        position: { x: cx - nodeW / 2, y: cy - nodeH / 2 },
+-        data: {
+-          label: resolveTopologyNodeLabel(p.name, config.name, p.provider),
+-          color: config.color || "#6b7280",
+-          providerId: p.provider,
+-          active,
+-          error,
 -          healthy,
 -          last,
-         } satisfies ProviderNodeData,
-         draggable: false,
-       });
- 
-       edges.push({
-         id: `e-${nodeId}`,
-+        type: "kame",
-         source: "router",
-         sourceHandle,
-         target: nodeId,
-         targetHandle,
+-        } satisfies ProviderNodeData,
+-        draggable: false,
+-      });
+-
+-      edges.push({
+-        id: `e-${nodeId}`,
+-        source: "router",
+-        sourceHandle,
+-        target: nodeId,
+-        targetHandle,
 -        animated: active,
 -        style: edgeStyle(active, last, error, healthy),
-+        // The kame beam runs its own SVG animation on active edges; the flat
-+        // BaseEdge fallback (idle/last/error) is styled by edgeStyle(). Healthy-but-quiet
-+        // connections fall through to the muted idle stroke on purpose — the map stays
-+        // calm at rest and only lights up on real traffic, matching 9Router.
-+        animated: false,
-+        data: { active },
-+        style: edgeStyle(active, last, error),
-       });
-     }
+-      });
+-    }
++  const count = sorted.length;
++  const { rx, ry } = ringRadii(count);
++
++  for (let i = 0; i < count; i++) {
++    const p = sorted[i];
++    const pid = p.provider.toLowerCase();
++    // Edge/node state is driven PURELY by transient traffic, exactly like 9Router:
++    //   active (in-flight) > last (single most-recent) > error (a live failed request).
++    // Connection-health (`p.status`) is deliberately NOT painted onto the edge — that
++    // was an Omni-only addition that kept a line lit permanently for a quiet
++    // or test-failed connection. With it gone the connector changes and then fades to
++    // the muted idle stroke once traffic stops, matching 9Router's calm-at-rest map.
++    const active = activeSet.has(pid);
++    const error = !active && errorSet.has(pid);
++    const last = !active && !error && lastSet.has(pid);
++    const config = getProviderConfig(p.provider);
++    const nodeId = `provider-${p.provider}`;
++
++    const angle = -Math.PI / 2 + (2 * Math.PI * i) / count;
++    const cx = rx * Math.cos(angle);
++    const cy = ry * Math.sin(angle);
++    const { sourceHandle, targetHandle } = getTopologyHandles(angle, cx);
++
++    nodes.push({
++      id: nodeId,
++      type: "provider",
++      position: { x: cx - nodeW / 2, y: cy - nodeH / 2 },
++      data: {
++        // A node LABEL is read by a human, so it stays the operator's display name
++        // ("Eric Ding"), never the prefix. The prefix is the machine identifier — it is
++        // required wherever a value lands in a model path or is copied by the user, and
++        // must not be used for a caption. `providerId` below carries the identity.
++        label: resolveTopologyNodeLabel(p.name, config.name, p.provider),
++        color: config.color || "#6b7280",
++        providerId: p.provider,
++        iconUrl: p.iconUrl,
++        textIcon: p.textIcon || config.textIcon,
++        active,
++        error,
++      } satisfies ProviderNodeData,
++      draggable: false,
++    });
++
++    edges.push({
++      id: `e-${nodeId}`,
++      type: "kame",
++      source: "router",
++      sourceHandle,
++      target: nodeId,
++      targetHandle,
++      // The kame beam runs its own SVG animation on active edges; the flat
++      // BaseEdge fallback (idle/last/error) is styled by edgeStyle(). Healthy-but-quiet
++      // connections fall through to the muted idle stroke on purpose — the map stays
++      // calm at rest and only lights up on real traffic, matching 9Router.
++      animated: false,
++      data: { active },
++      style: edgeStyle(active, last, error),
++    });
    }
-@@ -308,6 +294,17 @@ export default function ProviderTopology({
+ 
+   return { nodes, edges };
+@@ -308,6 +344,17 @@ export default function ProviderTopology({
    const lastKey = lastProvider.toLowerCase();
    const errorKey = errorProvider.toLowerCase();
  
@@ -742,7 +939,7 @@ index 2324d93d8..8499c542c 100644
    const activeSet = useMemo(
      () => new Set<string>(activeKey ? activeKey.split(",") : []),
      [activeKey]
-@@ -330,8 +327,15 @@ export default function ProviderTopology({
+@@ -330,8 +377,15 @@ export default function ProviderTopology({
      [providers]
    );
  
@@ -759,7 +956,7 @@ index 2324d93d8..8499c542c 100644
  
    if (providers.length === 0) {
      return (
-@@ -349,6 +353,7 @@ export default function ProviderTopology({
+@@ -349,6 +403,7 @@ export default function ProviderTopology({
        nodes={nodes}
        edges={edges}
        nodeTypes={nodeTypes}
@@ -1002,10 +1199,10 @@ index 2130bda65..0e2bd7a05 100644
  .bg-vibrancy {
    backdrop-filter: blur(20px);
 diff --git a/src/i18n/messages/ar.json b/src/i18n/messages/ar.json
-index 79428c358..6b8e29a99 100644
+index 662ef34f9..011af33db 100644
 --- a/src/i18n/messages/ar.json
 +++ b/src/i18n/messages/ar.json
-@@ -1723,7 +1723,12 @@
+@@ -1730,7 +1730,12 @@
      "updateAvailableDesc": "نسخة جديدة متاحة. انقر للتحديث.",
      "updateStarted": "بدأ التحديث...",
      "reloadingPageAutomatically": "جارٍ إعادة تحميل الصفحة تلقائيًا...",
@@ -1020,10 +1217,10 @@ index 79428c358..6b8e29a99 100644
    "analytics": {
      "title": "التحليلات",
 diff --git a/src/i18n/messages/az.json b/src/i18n/messages/az.json
-index be5708867..c31c6b280 100644
+index fe43d5855..438c77d0a 100644
 --- a/src/i18n/messages/az.json
 +++ b/src/i18n/messages/az.json
-@@ -1723,7 +1723,12 @@
+@@ -1730,7 +1730,12 @@
      "updateAvailableDesc": "A new version is available. Click to update.",
      "updateStarted": "Update started...",
      "reloadingPageAutomatically": "Səhifə avtomatik yenidən yüklənir...",
@@ -1038,10 +1235,10 @@ index be5708867..c31c6b280 100644
    "analytics": {
      "title": "Analytics",
 diff --git a/src/i18n/messages/bg.json b/src/i18n/messages/bg.json
-index d193f2266..960a17789 100644
+index 09fbd55fa..5286536e3 100644
 --- a/src/i18n/messages/bg.json
 +++ b/src/i18n/messages/bg.json
-@@ -1723,7 +1723,12 @@
+@@ -1730,7 +1730,12 @@
      "updateAvailableDesc": "Налична е нова версия. Кликнете, за да актуализирате.",
      "updateStarted": "Актуализацията започна...",
      "reloadingPageAutomatically": "Страницата се презарежда автоматично...",
@@ -1056,10 +1253,10 @@ index d193f2266..960a17789 100644
    "analytics": {
      "title": "Анализ",
 diff --git a/src/i18n/messages/bn.json b/src/i18n/messages/bn.json
-index 2ce7d6398..29efa46f1 100644
+index 295b6d945..2229844f2 100644
 --- a/src/i18n/messages/bn.json
 +++ b/src/i18n/messages/bn.json
-@@ -1723,7 +1723,12 @@
+@@ -1730,7 +1730,12 @@
      "updateAvailableDesc": "A new version is available. Click to update.",
      "updateStarted": "Update started...",
      "reloadingPageAutomatically": "স্বয়ংক্রিয়ভাবে পৃষ্ঠা পুনরায় লোড হচ্ছে...",
@@ -1074,10 +1271,10 @@ index 2ce7d6398..29efa46f1 100644
    "analytics": {
      "title": "Analytics",
 diff --git a/src/i18n/messages/cs.json b/src/i18n/messages/cs.json
-index 1ff0df078..50812d67a 100644
+index 83f3310e7..e036f7236 100644
 --- a/src/i18n/messages/cs.json
 +++ b/src/i18n/messages/cs.json
-@@ -1723,7 +1723,12 @@
+@@ -1730,7 +1730,12 @@
      "updateAvailableDesc": "K dispozici je nová verze. Kliknutím aktualizujte.",
      "updateStarted": "Aktualizace začala...",
      "reloadingPageAutomatically": "Automatické opětovné načítání stránky...",
@@ -1092,10 +1289,10 @@ index 1ff0df078..50812d67a 100644
    "analytics": {
      "title": "Analytika",
 diff --git a/src/i18n/messages/da.json b/src/i18n/messages/da.json
-index d151871ba..a9efd30a8 100644
+index 1f824bdde..4c159c8c7 100644
 --- a/src/i18n/messages/da.json
 +++ b/src/i18n/messages/da.json
-@@ -1723,7 +1723,12 @@
+@@ -1730,7 +1730,12 @@
      "updateAvailableDesc": "En ny version er tilgængelig. Klik for at opdatere.",
      "updateStarted": "Opdatering startet...",
      "reloadingPageAutomatically": "Genindlæser siden automatisk...",
@@ -1110,10 +1307,10 @@ index d151871ba..a9efd30a8 100644
    "analytics": {
      "title": "Analytics",
 diff --git a/src/i18n/messages/de.json b/src/i18n/messages/de.json
-index 0ac31fdf3..782aa4006 100644
+index fafcb0d1a..b020f706f 100644
 --- a/src/i18n/messages/de.json
 +++ b/src/i18n/messages/de.json
-@@ -1723,7 +1723,12 @@
+@@ -1730,7 +1730,12 @@
      "updateAvailableDesc": "Eine neue Version ist verfügbar. Klicken Sie zum Aktualisieren.",
      "updateStarted": "Aktualisierung gestartet...",
      "reloadingPageAutomatically": "Seite wird automatisch neu geladen...",
@@ -1128,10 +1325,10 @@ index 0ac31fdf3..782aa4006 100644
    "analytics": {
      "title": "Analytik",
 diff --git a/src/i18n/messages/en.json b/src/i18n/messages/en.json
-index 041809351..b3008d036 100644
+index e325ecf1e..797c572bd 100644
 --- a/src/i18n/messages/en.json
 +++ b/src/i18n/messages/en.json
-@@ -1723,7 +1723,12 @@
+@@ -1730,7 +1730,12 @@
      "updateAvailableDesc": "A new version is available. Click to update.",
      "updateStarted": "Update started...",
      "reloadingPageAutomatically": "Reloading page automatically...",
@@ -1146,10 +1343,10 @@ index 041809351..b3008d036 100644
    "analytics": {
      "title": "Analytics",
 diff --git a/src/i18n/messages/es.json b/src/i18n/messages/es.json
-index 2641a717e..95d18f3ab 100644
+index c80d2a625..57a593d5e 100644
 --- a/src/i18n/messages/es.json
 +++ b/src/i18n/messages/es.json
-@@ -1723,7 +1723,12 @@
+@@ -1730,7 +1730,12 @@
      "updateAvailableDesc": "Hay una nueva versión disponible. Haga clic para actualizar.",
      "updateStarted": "Actualización iniciada...",
      "reloadingPageAutomatically": "Recargando página automáticamente...",
@@ -1164,10 +1361,10 @@ index 2641a717e..95d18f3ab 100644
    "analytics": {
      "title": "Analítica",
 diff --git a/src/i18n/messages/fa.json b/src/i18n/messages/fa.json
-index 3d104cd0d..aafae10f7 100644
+index eaa78af1c..fb58da855 100644
 --- a/src/i18n/messages/fa.json
 +++ b/src/i18n/messages/fa.json
-@@ -1723,7 +1723,12 @@
+@@ -1730,7 +1730,12 @@
      "updateAvailableDesc": "A new version is available. Click to update.",
      "updateStarted": "Update started...",
      "reloadingPageAutomatically": "بارگیری مجدد صفحه به صورت خودکار...",
@@ -1182,10 +1379,10 @@ index 3d104cd0d..aafae10f7 100644
    "analytics": {
      "title": "Analytics",
 diff --git a/src/i18n/messages/fi.json b/src/i18n/messages/fi.json
-index d913266f8..4528f163a 100644
+index 184c31500..d74d339c7 100644
 --- a/src/i18n/messages/fi.json
 +++ b/src/i18n/messages/fi.json
-@@ -1723,7 +1723,12 @@
+@@ -1730,7 +1730,12 @@
      "updateAvailableDesc": "Uusi versio on saatavilla. Päivitä napsauttamalla.",
      "updateStarted": "Päivitys aloitettu...",
      "reloadingPageAutomatically": "Ladataan sivua automaattisesti uudelleen...",
@@ -1200,10 +1397,10 @@ index d913266f8..4528f163a 100644
    "analytics": {
      "title": "Analytics",
 diff --git a/src/i18n/messages/fr.json b/src/i18n/messages/fr.json
-index 693451c4b..fe6952c9f 100644
+index f68757aee..cb89b66c4 100644
 --- a/src/i18n/messages/fr.json
 +++ b/src/i18n/messages/fr.json
-@@ -1723,7 +1723,12 @@
+@@ -1730,7 +1730,12 @@
      "updateAvailableDesc": "Une nouvelle version est disponible. Cliquez pour mettre à jour.",
      "updateStarted": "Mise à jour démarrée...",
      "reloadingPageAutomatically": "Rechargement automatique de la page...",
@@ -1218,10 +1415,10 @@ index 693451c4b..fe6952c9f 100644
    "analytics": {
      "title": "Analyse",
 diff --git a/src/i18n/messages/gu.json b/src/i18n/messages/gu.json
-index 84d66c855..58bbc66b2 100644
+index 6c87077ac..cfdb0d2ce 100644
 --- a/src/i18n/messages/gu.json
 +++ b/src/i18n/messages/gu.json
-@@ -1723,7 +1723,12 @@
+@@ -1730,7 +1730,12 @@
      "updateAvailableDesc": "A new version is available. Click to update.",
      "updateStarted": "Update started...",
      "reloadingPageAutomatically": "પૃષ્ઠને આપમેળે ફરીથી લોડ કરી રહ્યું છે...",
@@ -1236,10 +1433,10 @@ index 84d66c855..58bbc66b2 100644
    "analytics": {
      "title": "Analytics",
 diff --git a/src/i18n/messages/he.json b/src/i18n/messages/he.json
-index cb08730ea..469cc5487 100644
+index 50a84aa9e..90859e01a 100644
 --- a/src/i18n/messages/he.json
 +++ b/src/i18n/messages/he.json
-@@ -1723,7 +1723,12 @@
+@@ -1730,7 +1730,12 @@
      "updateAvailableDesc": "גרסה חדשה זמינה. לחץ לעדכון.",
      "updateStarted": "העדכון התחיל...",
      "reloadingPageAutomatically": "טוען מחדש את הדף באופן אוטומטי...",
@@ -1254,10 +1451,10 @@ index cb08730ea..469cc5487 100644
    "analytics": {
      "title": "אנליטיקס",
 diff --git a/src/i18n/messages/hi.json b/src/i18n/messages/hi.json
-index 16559f3dd..4357cd1f7 100644
+index 2c9191bfb..dd3060bea 100644
 --- a/src/i18n/messages/hi.json
 +++ b/src/i18n/messages/hi.json
-@@ -1723,7 +1723,12 @@
+@@ -1730,7 +1730,12 @@
      "updateAvailableDesc": "A new version is available. Click to update.",
      "updateStarted": "Update started...",
      "reloadingPageAutomatically": "पृष्ठ स्वचालित रूप से पुनः लोड हो रहा है...",
@@ -1272,10 +1469,10 @@ index 16559f3dd..4357cd1f7 100644
    "analytics": {
      "title": "विश्लेषिकी",
 diff --git a/src/i18n/messages/hu.json b/src/i18n/messages/hu.json
-index 6c3937f50..a001d7c62 100644
+index e11a33074..5b335c790 100644
 --- a/src/i18n/messages/hu.json
 +++ b/src/i18n/messages/hu.json
-@@ -1723,7 +1723,12 @@
+@@ -1730,7 +1730,12 @@
      "updateAvailableDesc": "Új verzió érhető el. Kattintson a frissítéshez.",
      "updateStarted": "Frissítés elindult...",
      "reloadingPageAutomatically": "Oldal automatikus újratöltése...",
@@ -1290,10 +1487,10 @@ index 6c3937f50..a001d7c62 100644
    "analytics": {
      "title": "Analytics",
 diff --git a/src/i18n/messages/id.json b/src/i18n/messages/id.json
-index c9f9c1579..a06aff2a3 100644
+index 0fd5440b5..3d2a20b51 100644
 --- a/src/i18n/messages/id.json
 +++ b/src/i18n/messages/id.json
-@@ -1723,7 +1723,12 @@
+@@ -1730,7 +1730,12 @@
      "updateAvailableDesc": "Versi baru tersedia. Klik untuk memperbarui.",
      "updateStarted": "Pembaruan dimulai...",
      "reloadingPageAutomatically": "Memuat ulang halaman secara otomatis...",
@@ -1308,10 +1505,10 @@ index c9f9c1579..a06aff2a3 100644
    "analytics": {
      "title": "Analisis",
 diff --git a/src/i18n/messages/in.json b/src/i18n/messages/in.json
-index 0599aa60b..8c3dc06ea 100644
+index 332464070..6fc2b2568 100644
 --- a/src/i18n/messages/in.json
 +++ b/src/i18n/messages/in.json
-@@ -1723,7 +1723,12 @@
+@@ -1730,7 +1730,12 @@
      "updateAvailableDesc": "A new version is available. Click to update.",
      "updateStarted": "Update started...",
      "reloadingPageAutomatically": "Memuat ulang halaman secara otomatis...",
@@ -1326,10 +1523,10 @@ index 0599aa60b..8c3dc06ea 100644
    "analytics": {
      "title": "Analytics",
 diff --git a/src/i18n/messages/it.json b/src/i18n/messages/it.json
-index 654d58432..9a9f92be4 100644
+index 757291d68..6c56ced00 100644
 --- a/src/i18n/messages/it.json
 +++ b/src/i18n/messages/it.json
-@@ -1723,7 +1723,12 @@
+@@ -1730,7 +1730,12 @@
      "updateAvailableDesc": "Una nuova versione è disponibile. Fai clic per aggiornare.",
      "updateStarted": "Aggiornamento avviato...",
      "reloadingPageAutomatically": "Ricaricamento pagina automaticamente...",
@@ -1344,10 +1541,10 @@ index 654d58432..9a9f92be4 100644
    "analytics": {
      "title": "Analitica",
 diff --git a/src/i18n/messages/ja.json b/src/i18n/messages/ja.json
-index 2ef17f122..b65e2f7a7 100644
+index 846587a2a..88fda3a0b 100644
 --- a/src/i18n/messages/ja.json
 +++ b/src/i18n/messages/ja.json
-@@ -1723,7 +1723,12 @@
+@@ -1730,7 +1730,12 @@
      "updateAvailableDesc": "新しいバージョンが利用可能です。クリックして更新。",
      "updateStarted": "更新を開始しました...",
      "reloadingPageAutomatically": "ページを自動的に再読み込みしています...",
@@ -1362,10 +1559,10 @@ index 2ef17f122..b65e2f7a7 100644
    "analytics": {
      "title": "分析",
 diff --git a/src/i18n/messages/ko.json b/src/i18n/messages/ko.json
-index 523ed7586..912490f59 100644
+index a178aa775..1bf9b91a1 100644
 --- a/src/i18n/messages/ko.json
 +++ b/src/i18n/messages/ko.json
-@@ -1723,7 +1723,12 @@
+@@ -1730,7 +1730,12 @@
      "updateAvailableDesc": "새 버전을 사용할 수 있습니다. 클릭하여 업데이트하세요.",
      "updateStarted": "업데이트 시작됨...",
      "reloadingPageAutomatically": "페이지를 자동으로 새로고침하는 중...",
@@ -1380,10 +1577,10 @@ index 523ed7586..912490f59 100644
    "analytics": {
      "title": "분석",
 diff --git a/src/i18n/messages/mr.json b/src/i18n/messages/mr.json
-index d7bd5ddef..c7d4e0854 100644
+index 4ed7c9fbe..99d1aa4ab 100644
 --- a/src/i18n/messages/mr.json
 +++ b/src/i18n/messages/mr.json
-@@ -1723,7 +1723,12 @@
+@@ -1730,7 +1730,12 @@
      "updateAvailableDesc": "A new version is available. Click to update.",
      "updateStarted": "Update started...",
      "reloadingPageAutomatically": "पृष्ठ स्वयंचलितपणे रीलोड करत आहे...",
@@ -1398,10 +1595,10 @@ index d7bd5ddef..c7d4e0854 100644
    "analytics": {
      "title": "Analytics",
 diff --git a/src/i18n/messages/ms.json b/src/i18n/messages/ms.json
-index b6d2d3bf0..d596787dc 100644
+index 2eafb97d9..10bb8f089 100644
 --- a/src/i18n/messages/ms.json
 +++ b/src/i18n/messages/ms.json
-@@ -1723,7 +1723,12 @@
+@@ -1730,7 +1730,12 @@
      "updateAvailableDesc": "Versi baharu tersedia. Klik untuk mengemas kini.",
      "updateStarted": "Kemas kini bermula...",
      "reloadingPageAutomatically": "Memuat semula halaman secara automatik...",
@@ -1416,10 +1613,10 @@ index b6d2d3bf0..d596787dc 100644
    "analytics": {
      "title": "Analitis",
 diff --git a/src/i18n/messages/nl.json b/src/i18n/messages/nl.json
-index 8234d8482..3e8b9625f 100644
+index 75d8bcbf9..f21b3f5e6 100644
 --- a/src/i18n/messages/nl.json
 +++ b/src/i18n/messages/nl.json
-@@ -1723,7 +1723,12 @@
+@@ -1730,7 +1730,12 @@
      "updateAvailableDesc": "Er is een nieuwe versie beschikbaar. Klik om bij te werken.",
      "updateStarted": "Update gestart...",
      "reloadingPageAutomatically": "Pagina automatisch herladen...",
@@ -1434,10 +1631,10 @@ index 8234d8482..3e8b9625f 100644
    "analytics": {
      "title": "Analyses",
 diff --git a/src/i18n/messages/no.json b/src/i18n/messages/no.json
-index 3959147a0..e90e3daad 100644
+index 13bbbc03e..9057f5328 100644
 --- a/src/i18n/messages/no.json
 +++ b/src/i18n/messages/no.json
-@@ -1723,7 +1723,12 @@
+@@ -1730,7 +1730,12 @@
      "updateAvailableDesc": "En ny versjon er tilgjengelig. Klikk for å oppdatere.",
      "updateStarted": "Oppdatering startet...",
      "reloadingPageAutomatically": "Laster siden automatisk på nytt...",
@@ -1452,10 +1649,10 @@ index 3959147a0..e90e3daad 100644
    "analytics": {
      "title": "Analytics",
 diff --git a/src/i18n/messages/phi.json b/src/i18n/messages/phi.json
-index e60e94c78..d8c546b49 100644
+index 31a7bce3a..a8ff2ad37 100644
 --- a/src/i18n/messages/phi.json
 +++ b/src/i18n/messages/phi.json
-@@ -1723,7 +1723,12 @@
+@@ -1730,7 +1730,12 @@
      "updateAvailableDesc": "Available ang isang bagong bersyon. I-click para mag-update.",
      "updateStarted": "Nagsimula ang pag-update...",
      "reloadingPageAutomatically": "Awtomatikong nire-reload ang page...",
@@ -1470,10 +1667,10 @@ index e60e94c78..d8c546b49 100644
    "analytics": {
      "title": "Analytics",
 diff --git a/src/i18n/messages/pl.json b/src/i18n/messages/pl.json
-index 66f92a026..03fc24ea1 100644
+index 378b493ab..36097f6fe 100644
 --- a/src/i18n/messages/pl.json
 +++ b/src/i18n/messages/pl.json
-@@ -1723,7 +1723,12 @@
+@@ -1730,7 +1730,12 @@
      "updateAvailableDesc": "Dostępna jest nowa wersja. Kliknij, aby zaktualizować.",
      "updateStarted": "Rozpoczęto aktualizację...",
      "reloadingPageAutomatically": "Automatyczne przeładowywanie strony...",
@@ -1488,10 +1685,10 @@ index 66f92a026..03fc24ea1 100644
    "analytics": {
      "title": "Analityka",
 diff --git a/src/i18n/messages/pt-BR.json b/src/i18n/messages/pt-BR.json
-index 717dd612c..95a09a552 100644
+index 71defad2f..7c7e10f5f 100644
 --- a/src/i18n/messages/pt-BR.json
 +++ b/src/i18n/messages/pt-BR.json
-@@ -1723,7 +1723,12 @@
+@@ -1730,7 +1730,12 @@
      "updateAvailableDesc": "Uma nova versão está disponível. Clique para atualizar.",
      "updateStarted": "Atualização iniciada...",
      "reloadingPageAutomatically": "Recarregando a página automaticamente...",
@@ -1506,10 +1703,10 @@ index 717dd612c..95a09a552 100644
    "analytics": {
      "title": "Análises",
 diff --git a/src/i18n/messages/pt.json b/src/i18n/messages/pt.json
-index 7134c1faf..1a9678010 100644
+index 4e7f8127b..96a5e6588 100644
 --- a/src/i18n/messages/pt.json
 +++ b/src/i18n/messages/pt.json
-@@ -1723,7 +1723,12 @@
+@@ -1730,7 +1730,12 @@
      "updateAvailableDesc": "Uma nova versão está disponível. Clique para atualizar.",
      "updateStarted": "Atualização iniciada...",
      "reloadingPageAutomatically": "Recarregando a página automaticamente...",
@@ -1524,10 +1721,10 @@ index 7134c1faf..1a9678010 100644
    "analytics": {
      "title": "Análise",
 diff --git a/src/i18n/messages/ro.json b/src/i18n/messages/ro.json
-index 0ef4582ac..2f905ccbc 100644
+index cbf800b52..d5245a4b3 100644
 --- a/src/i18n/messages/ro.json
 +++ b/src/i18n/messages/ro.json
-@@ -1723,7 +1723,12 @@
+@@ -1730,7 +1730,12 @@
      "updateAvailableDesc": "Este disponibilă o nouă versiune. Faceți clic pentru a actualiza.",
      "updateStarted": "Actualizarea a început...",
      "reloadingPageAutomatically": "Se reîncarcă pagina automat...",
@@ -1542,10 +1739,10 @@ index 0ef4582ac..2f905ccbc 100644
    "analytics": {
      "title": "Analytics",
 diff --git a/src/i18n/messages/ru.json b/src/i18n/messages/ru.json
-index 24aa47343..32cda1e36 100644
+index 6ab25ef0c..694367adc 100644
 --- a/src/i18n/messages/ru.json
 +++ b/src/i18n/messages/ru.json
-@@ -1723,7 +1723,12 @@
+@@ -1730,7 +1730,12 @@
      "updateAvailableDesc": "Доступна новая версия. Нажмите для обновления.",
      "updateStarted": "Обновление начато...",
      "reloadingPageAutomatically": "Автоматическая перезагрузка страницы...",
@@ -1560,10 +1757,10 @@ index 24aa47343..32cda1e36 100644
    "analytics": {
      "title": "Аналитика",
 diff --git a/src/i18n/messages/sk.json b/src/i18n/messages/sk.json
-index 09e2184ce..9296ca282 100644
+index f89c26f81..5ec373071 100644
 --- a/src/i18n/messages/sk.json
 +++ b/src/i18n/messages/sk.json
-@@ -1723,7 +1723,12 @@
+@@ -1730,7 +1730,12 @@
      "updateAvailableDesc": "K dispozícii je nová verzia. Kliknutím aktualizujte.",
      "updateStarted": "Aktualizácia spustená...",
      "reloadingPageAutomatically": "Automaticky sa znova načítava stránka...",
@@ -1578,10 +1775,10 @@ index 09e2184ce..9296ca282 100644
    "analytics": {
      "title": "Analytics",
 diff --git a/src/i18n/messages/sv.json b/src/i18n/messages/sv.json
-index 1b5119477..746229052 100644
+index 1572555fb..9b4099e34 100644
 --- a/src/i18n/messages/sv.json
 +++ b/src/i18n/messages/sv.json
-@@ -1723,7 +1723,12 @@
+@@ -1730,7 +1730,12 @@
      "updateAvailableDesc": "En ny version finns tillgänglig. Klicka för att uppdatera.",
      "updateStarted": "Uppdatering startade...",
      "reloadingPageAutomatically": "Laddar om sidan automatiskt...",
@@ -1596,10 +1793,10 @@ index 1b5119477..746229052 100644
    "analytics": {
      "title": "Analytics",
 diff --git a/src/i18n/messages/sw.json b/src/i18n/messages/sw.json
-index 021b604f4..c23d4b6da 100644
+index d25e1b557..c8a4d49b6 100644
 --- a/src/i18n/messages/sw.json
 +++ b/src/i18n/messages/sw.json
-@@ -1723,7 +1723,12 @@
+@@ -1730,7 +1730,12 @@
      "updateAvailableDesc": "A new version is available. Click to update.",
      "updateStarted": "Update started...",
      "reloadingPageAutomatically": "Inapakia upya ukurasa kiotomatiki...",
@@ -1614,10 +1811,10 @@ index 021b604f4..c23d4b6da 100644
    "analytics": {
      "title": "Analytics",
 diff --git a/src/i18n/messages/ta.json b/src/i18n/messages/ta.json
-index cb91eea30..49e875332 100644
+index caad2f34a..99129363b 100644
 --- a/src/i18n/messages/ta.json
 +++ b/src/i18n/messages/ta.json
-@@ -1723,7 +1723,12 @@
+@@ -1730,7 +1730,12 @@
      "updateAvailableDesc": "A new version is available. Click to update.",
      "updateStarted": "Update started...",
      "reloadingPageAutomatically": "தானாக பக்கத்தை மீண்டும் ஏற்றுகிறது...",
@@ -1632,10 +1829,10 @@ index cb91eea30..49e875332 100644
    "analytics": {
      "title": "Analytics",
 diff --git a/src/i18n/messages/te.json b/src/i18n/messages/te.json
-index 65b74c02c..94dbe550b 100644
+index 4d95f6d2c..8f73b5ce9 100644
 --- a/src/i18n/messages/te.json
 +++ b/src/i18n/messages/te.json
-@@ -1723,7 +1723,12 @@
+@@ -1730,7 +1730,12 @@
      "updateAvailableDesc": "A new version is available. Click to update.",
      "updateStarted": "Update started...",
      "reloadingPageAutomatically": "పేజీని స్వయంచాలకంగా రీలోడ్ చేస్తోంది...",
@@ -1650,10 +1847,10 @@ index 65b74c02c..94dbe550b 100644
    "analytics": {
      "title": "Analytics",
 diff --git a/src/i18n/messages/th.json b/src/i18n/messages/th.json
-index 2c3403dd9..67facd289 100644
+index 46d620498..a207b9412 100644
 --- a/src/i18n/messages/th.json
 +++ b/src/i18n/messages/th.json
-@@ -1723,7 +1723,12 @@
+@@ -1730,7 +1730,12 @@
      "updateAvailableDesc": "มีเวอร์ชันใหม่ให้ใช้งานแล้ว คลิกเพื่ออัปเดต",
      "updateStarted": "เริ่มการอัพเดต...",
      "reloadingPageAutomatically": "กำลังโหลดหน้าซ้ำโดยอัตโนมัติ...",
@@ -1668,10 +1865,10 @@ index 2c3403dd9..67facd289 100644
    "analytics": {
      "title": "การวิเคราะห์",
 diff --git a/src/i18n/messages/tr.json b/src/i18n/messages/tr.json
-index 997857b82..40e8e5e24 100644
+index c417f3109..a8f1b3509 100644
 --- a/src/i18n/messages/tr.json
 +++ b/src/i18n/messages/tr.json
-@@ -1723,7 +1723,12 @@
+@@ -1730,7 +1730,12 @@
      "updateAvailableDesc": "Yeni bir sürüm mevcut. Güncellemek için tıklayın.",
      "updateStarted": "Güncelleme başladı...",
      "reloadingPageAutomatically": "Sayfa otomatik olarak yeniden yükleniyor...",
@@ -1686,10 +1883,10 @@ index 997857b82..40e8e5e24 100644
    "analytics": {
      "title": "Analitik",
 diff --git a/src/i18n/messages/uk-UA.json b/src/i18n/messages/uk-UA.json
-index 1c866707f..33e3f742e 100644
+index 4ce5299bb..03ed7cdca 100644
 --- a/src/i18n/messages/uk-UA.json
 +++ b/src/i18n/messages/uk-UA.json
-@@ -1723,7 +1723,12 @@
+@@ -1730,7 +1730,12 @@
      "updateAvailableDesc": "Доступна нова версія. Натисніть, щоб оновити.",
      "updateStarted": "Оновлення розпочато...",
      "reloadingPageAutomatically": "Автоматичне перезавантаження сторінки...",
@@ -1704,10 +1901,10 @@ index 1c866707f..33e3f742e 100644
    "analytics": {
      "title": "Аналітика",
 diff --git a/src/i18n/messages/ur.json b/src/i18n/messages/ur.json
-index d2e06a7d4..e26376af9 100644
+index fb1cde82c..4ba71e343 100644
 --- a/src/i18n/messages/ur.json
 +++ b/src/i18n/messages/ur.json
-@@ -1723,7 +1723,12 @@
+@@ -1730,7 +1730,12 @@
      "updateAvailableDesc": "A new version is available. Click to update.",
      "updateStarted": "Update started...",
      "reloadingPageAutomatically": "صفحہ خودکار طور پر دوبارہ لوڈ ہو رہا ہے...",
@@ -1722,10 +1919,10 @@ index d2e06a7d4..e26376af9 100644
    "analytics": {
      "title": "Analytics",
 diff --git a/src/i18n/messages/vi.json b/src/i18n/messages/vi.json
-index 620248b46..c78b74b7d 100644
+index db090037b..1c615923d 100644
 --- a/src/i18n/messages/vi.json
 +++ b/src/i18n/messages/vi.json
-@@ -1723,7 +1723,12 @@
+@@ -1730,7 +1730,12 @@
      "updateAvailableDesc": "Đã có phiên bản mới. Nhấp để cập nhật.",
      "updateStarted": "Đã bắt đầu cập nhật...",
      "reloadingPageAutomatically": "Đang tự động tải lại trang...",
@@ -1740,10 +1937,10 @@ index 620248b46..c78b74b7d 100644
    "analytics": {
      "title": "Phân tích",
 diff --git a/src/i18n/messages/zh-CN.json b/src/i18n/messages/zh-CN.json
-index 51440180c..f576e8b0f 100644
+index 548f345c6..9fa805390 100644
 --- a/src/i18n/messages/zh-CN.json
 +++ b/src/i18n/messages/zh-CN.json
-@@ -1723,7 +1723,12 @@
+@@ -1730,7 +1730,12 @@
      "updateAvailableDesc": "有新版本可用。点击更新。",
      "updateStarted": "更新已开始...",
      "reloadingPageAutomatically": "自动重新加载页面...",
@@ -1758,10 +1955,10 @@ index 51440180c..f576e8b0f 100644
    "analytics": {
      "title": "分析",
 diff --git a/src/i18n/messages/zh-TW.json b/src/i18n/messages/zh-TW.json
-index 6b7bd75ae..9bbc1b8bf 100644
+index e83bb4308..959d65bf4 100644
 --- a/src/i18n/messages/zh-TW.json
 +++ b/src/i18n/messages/zh-TW.json
-@@ -1723,7 +1723,12 @@
+@@ -1730,7 +1730,12 @@
      "updateAvailableDesc": "有新版本可用。點選更新。",
      "updateStarted": "更新已開始...",
      "reloadingPageAutomatically": "自動重新載入頁面...",
@@ -1829,10 +2026,10 @@ index 7a8ef741b..75ca23cd4 100644
      )
      .all() as ProviderMetricRow[];
 diff --git a/src/lib/usage/callLogs.ts b/src/lib/usage/callLogs.ts
-index 26ed4f687..423311e30 100644
+index b2713c64f..d6c4306e9 100644
 --- a/src/lib/usage/callLogs.ts
 +++ b/src/lib/usage/callLogs.ts
-@@ -776,6 +776,33 @@ function pushLikeFilter(
+@@ -782,6 +782,33 @@ function pushLikeFilter(
    params[paramKey] = `%${value}%`;
  }
  
@@ -1866,7 +2063,7 @@ index 26ed4f687..423311e30 100644
  export async function getCallLogs(filter: any = {}) {
    const db = getDbInstance();
    let sql = `
-@@ -789,19 +816,7 @@ export async function getCallLogs(filter: any = {}) {
+@@ -795,19 +822,7 @@ export async function getCallLogs(filter: any = {}) {
    const conditions: string[] = [];
    const params: Record<string, unknown> = {};
  
@@ -1887,7 +2084,7 @@ index 26ed4f687..423311e30 100644
  
    if (filter.model) {
      conditions.push("(cl.model LIKE @modelQ OR cl.requested_model LIKE @modelQ)");
-@@ -824,6 +839,14 @@ export async function getCallLogs(filter: any = {}) {
+@@ -830,6 +845,14 @@ export async function getCallLogs(filter: any = {}) {
    if (filter.combo) {
      conditions.push("cl.combo_name IS NOT NULL");
    }

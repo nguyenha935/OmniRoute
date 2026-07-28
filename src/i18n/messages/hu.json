@@ -7298,6 +7298,10 @@
         "label": "Kevesebb kód",
         "description": "YAGNI-létra: a legkisebb működő változtatás, nem kért absztrakciók nélkül."
       },
+      "ponytail": {
+        "label": "Ponytail (lazy senior dev)",
+        "description": "Lazy senior-dev discipline: climb the YAGNI ladder, fix root cause, smallest working diff."
+      },
       "terse-cjk": {
         "label": "Tömör CJK (文言)",
         "description": "Klasszikus kínai ultratömör stílus (csak kínai nyelven érhető el)."
@@ -10518,7 +10522,9 @@
     "deleteGroupConfirm": "Törlöd ezt a csoportot? A pooljait előbb át kell rendelni vagy el kell távolítani.",
     "deleteGroupHasPools": "Ez a csoport még tartalmaz poolokat — előbb rendeld át vagy töröld őket.",
     "ungroupedTitle": "Csoportosítatlan",
-    "ungroupedHint": "Ezek a poolok nincsenek ismert csoporthoz rendelve. Szerkessz egy poolt, hogy áthelyezd egy valódi csoportba."
+    "ungroupedHint": "Ezek a poolok nincsenek ismert csoporthoz rendelve. Szerkessz egy poolt, hogy áthelyezd egy valódi csoportba.",
+    "removeFailed": "Could not remove this pool.",
+    "dismiss": "Dismiss"
   },
   "plugins": {
     "title": "Plugins",
