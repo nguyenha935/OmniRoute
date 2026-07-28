@@ -307,23 +307,46 @@ materialize_workspace() {
 }
 
 assemble_native_assets() {
-  local source_better="$SOURCE_TREE/node_modules/better-sqlite3/build/Release/better_sqlite3.node"
-  local staged_better="$PACKAGE_STAGE/node_modules/better-sqlite3/build/Release/better_sqlite3.node"
-  local source_wreq="" staged_wreq="" wreq_name="" candidate
+  # better-sqlite3 ships its Linux x64 addon at TWO different paths depending on major:
+  #   v12 and older: build/Release/better_sqlite3.node   (node-gyp / prebuild-install)
+  #   v13 and newer: prebuilds/linux-x64.node            (bundled per-platform addons)
+  # v13 publishes NO GitHub release assets at all, so prebuild-install downloads nothing
+  # and node-gyp never runs — `npm ci` still "succeeds" because the package is an
+  # optionalDependency, and the addon simply arrives at the new path instead. Probing only
+  # the v12 path therefore reported "missing from the hosted development install" for a
+  # package that was present and fully working (verified: deleting build/ entirely still
+  # opens a database, because lib/binding.js tries prebuilds/ FIRST and only falls back to
+  # build/Release). Probe both, in the same order the package's own loader does, using the
+  # multi-candidate pattern wreq-js below already uses. The staged path mirrors whichever
+  # source path won, so the runtime loader finds it where it expects.
+  local source_better="" staged_better="" better_relative="" candidate
+  local source_wreq="" staged_wreq="" wreq_name=""
   local source_tls="$SOURCE_TREE/node_modules/tls-client-node/bin"
   local staged_tls="$PACKAGE_STAGE/node_modules/tls-client-node/bin"
 
   if jq -e '.optionalDependencies["better-sqlite3"] | type == "string"' "$SOURCE_TREE/package.json" >/dev/null; then
     [ -d "$PACKAGE_STAGE/node_modules/better-sqlite3" ] \
       || die "better-sqlite3 is missing from the Linux production install"
+    for candidate in \
+      "prebuilds/linux-x64.node" \
+      "build/Release/better_sqlite3.node"; do
+      if [ -f "$SOURCE_TREE/node_modules/better-sqlite3/$candidate" ]; then
+        better_relative="$candidate"
+        break
+      fi
+    done
+    [ -n "$better_relative" ] \
+      || die "better-sqlite3 Linux x64 addon is missing from the hosted development install (checked prebuilds/linux-x64.node and build/Release/better_sqlite3.node)"
+    source_better="$SOURCE_TREE/node_modules/better-sqlite3/$better_relative"
+    staged_better="$PACKAGE_STAGE/node_modules/better-sqlite3/$better_relative"
     copy_native_file "$source_better" "$staged_better" "better-sqlite3"
     validate_dlopen "$staged_better" "better-sqlite3"
     if [ -d "$PACKAGE_STAGE/dist/node_modules/better-sqlite3" ]; then
       copy_native_file "$source_better" \
-        "$PACKAGE_STAGE/dist/node_modules/better-sqlite3/build/Release/better_sqlite3.node" \
+        "$PACKAGE_STAGE/dist/node_modules/better-sqlite3/$better_relative" \
         "standalone better-sqlite3"
       validate_dlopen \
-        "$PACKAGE_STAGE/dist/node_modules/better-sqlite3/build/Release/better_sqlite3.node" \
+        "$PACKAGE_STAGE/dist/node_modules/better-sqlite3/$better_relative" \
         "standalone better-sqlite3"
     fi
   fi
