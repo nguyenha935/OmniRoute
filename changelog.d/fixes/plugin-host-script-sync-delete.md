@@ -1,1 +1,0 @@
-- **fix(plugins):** the generated plugin host script is now deleted synchronously — an async `rm()` lost the race against process exit, so every plugin load under `node --test --test-force-exit` leaked one temp `.mjs` into the OS temp dir; two plugin manager tests also stopped leaking child processes

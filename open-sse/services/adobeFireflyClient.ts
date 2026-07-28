@@ -660,13 +660,18 @@ export function resolveAdobeVideoModel(model: string): {
   return { id: "sora-2", spec: ADOBE_FIREFLY_VIDEO_MODELS["sora-2"] };
 }
 
+/**
+ * Map OpenAI/VibeProxy quality tiers onto Firefly gpt-image `generationSettings.detailLevel`.
+ * Wire range is integer 1–5 (discovery schema). Default is **maximal (5)** —
+ * the SPA often defaults to 3, but detail is critical for GPT Image 2 output quality.
+ * Explicit low/medium still honor the caller's choice.
+ */
 function gptDetailLevel(quality: unknown): number {
-  // Live firefly.adobe.com default for gpt-image is detailLevel 3 (medium).
-  const q = String(quality ?? "medium").trim().toLowerCase();
-  if (q === "high" || q === "4k" || q === "ultra") return 5;
-  if (q === "low" || q === "1k") return 1;
-  if (q === "medium" || q === "2k" || q === "standard" || q === "hd" || q === "auto") return 3;
-  return 3;
+  const q = String(quality ?? "high").trim().toLowerCase();
+  if (q === "low" || q === "1k" || q === "1") return 1;
+  if (q === "medium" || q === "2k" || q === "standard" || q === "hd" || q === "3") return 3;
+  // high / 4k / ultra / auto / empty / unknown → max detail
+  return 5;
 }
 
 export function buildAdobeImagePayload(opts: {

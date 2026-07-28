@@ -1,1 +1,0 @@
-- **fix(sse):** task-aware routing defaults use `auto/*` intents instead of hardcoded provider/model ids (#8602), and the longest-pattern-first fitness table match that landed upstream in 9f5be229b gains a direct regression guard, so rows like `gpt-4o-mini` cannot be shadowed by `gpt-4o` again (#8603) ([#8605](https://github.com/diegosouzapw/OmniRoute/pull/8605)) — thanks @MumuTW

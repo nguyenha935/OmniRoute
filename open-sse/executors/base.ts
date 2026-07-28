@@ -1,4 +1,9 @@
 import { HTTP_STATUS, FETCH_TIMEOUT_MS } from "../config/constants.ts";
+import { getRegistryEntry } from "../config/providerRegistry.ts";
+import {
+  resolveAlternateFormat,
+  type AlternateFormat,
+} from "../config/providers/alternateFormats.ts";
 import {
   CLAUDE_CLI_BILLING_VERSION,
   CLAUDE_CLI_STAINLESS_RUNTIME_VERSION,
@@ -420,8 +425,23 @@ export class BaseExecutor {
    */
   protected resolveBaseUrl(credentials: ProviderCredentials | null, fallback?: string): string {
     const psdBaseUrl = credentials?.providerSpecificData?.baseUrl;
-    return (
-      (typeof psdBaseUrl === "string" ? psdBaseUrl : "") || fallback || this.config.baseUrl || ""
+    // Operator's manual override always wins (#6147).
+    if (typeof psdBaseUrl === "string" && psdBaseUrl) return psdBaseUrl;
+    // An alternate protocol selected on the connection carries its own URL.
+    const alternate = this.resolveAlternate(credentials);
+    if (alternate?.baseUrl) return alternate.baseUrl;
+    return fallback || this.config.baseUrl || "";
+  }
+
+  /**
+   * Alternate protocol selected on this connection, if the provider declares one
+   * that matches. Centralizes the registry lookup so every call-site resolves the
+   * same way.
+   */
+  protected resolveAlternate(credentials: ProviderCredentials | null): AlternateFormat | null {
+    return resolveAlternateFormat(
+      getRegistryEntry(this.provider),
+      credentials?.providerSpecificData
     );
   }
 
@@ -463,9 +483,11 @@ export class BaseExecutor {
     credentials: ProviderCredentials,
     stream: boolean
   ): { headers: Record<string, string>; effectiveKey: string | undefined } {
+    const alternate = this.resolveAlternate(credentials);
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
       ...this.config.headers,
+      ...(alternate?.headers || {}),
     };
 
     // Allow per-provider User-Agent override via environment variable.

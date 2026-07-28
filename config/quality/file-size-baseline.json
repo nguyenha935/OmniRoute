@@ -197,13 +197,14 @@
     "tests/unit/search-handler-extended.test.ts": 1071,
     "tests/unit/sse-auth.test.ts": 1600,
     "tests/unit/stream-utils.test.ts": 2445,
-    "tests/unit/token-refresh-service.test.ts": 1311,
+    "tests/unit/token-refresh-service.test.ts": 1378,
     "tests/unit/translator-openai-responses-req.test.ts": 1194,
     "tests/unit/translator-openai-to-gemini.test.ts": 1616,
     "tests/unit/translator-openai-to-kiro.test.ts": 1250,
     "tests/unit/translator-resp-gemini-to-openai.test.ts": 1234,
     "tests/unit/usage-service-hardening.test.ts": 1483,
-    "tests/unit/vscode-token-routes.test.ts": 1256
+    "tests/unit/vscode-token-routes.test.ts": 1256,
+    "tests/unit/executor-antigravity.test.ts": 1098
   },
   "_rebaseline_2026_06_09": "Re-baseline consciente pre-release v3.8.19: 9 arquivos cresceram durante o ciclo (features mergeadas: RequestLoggerV2 +281 request-logger rework, stream +101, combo +73, chatCore +45, catalog +32 fable-5/catalog-flag, callLogs +4, accountFallback +2, usageHistory novo 840) + core.ts +7 (fix resetAllDbModuleState, PR 3536). A catraca segue valendo destes valores — proximo crescimento falha. Decisao: encolher (esp. RequestLoggerV2/chatCore) e a issue #3501 ficam para o ciclo seguinte.",
   "_rebaseline_2026_06_11_phase1f": "Phase 1f (#3501): ProviderDetailPageClient.tsx 4948→4062 (-886 LOC); 3 novos hooks extraídos. useProviderConnections.ts=954 acima do cap=800 — justificado: extração direta do god-component (zero lógica nova), própria redução do cliente supera o custo. useProviderSettings.ts=263 e useProviderModels.ts=154 já abaixo do cap.",
@@ -340,8 +341,8 @@
     "_rebaseline_2026_07_25_adobe_firefly_reference_images": "Follow-up to #8006: storage upload + referenceBlobs for image/video and /v1/images/edits dispatch. adobeFireflyClient.ts 1958->2317 (+upload helpers, extract sources, resolve blob ids). Note: 2317 not 2316 — check-file-size.mjs counts LOC via split(\"\\n\").length (counts the trailing-newline empty element), which is 1 higher than `wc -l` on a file ending in \\n; the PR's original entry (2316) was measured with wc -l and undercounted by 1 against the actual gate.",
     "_rebaseline_pr1043_minimax_tts": "Upstream port decolua/9router#1043 (toanalien) own growth: audioSpeech.ts 965->1061 (+96). Adds MiniMax T2A v2 TTS dispatch (handleMinimaxSpeech + hexToBytes helper) — provider entry was already in audioRegistry (format: minimax-tts) but no handler existed, falling through to the OpenAI-compatible default that fails (T2A has custom shape + hex-encoded audio + base_resp envelope). New branch sits next to the other inline provider branches (xiaomi-mimo, coqui, tortoise, aws-polly) — extracting would just create indirection. Covered by tests/unit/minimax-tts-1043.test.ts (3 tests, GREEN: success, base_resp error, invalid-hex).",
     "_rebaseline_pr4592_exclude_exhausted_auto": "Reconcile #4592 already-merged growth: combo.ts 2991->3036 (+45, terminal-status quota-cutoff exclusion in buildAutoCandidates + opt-in gate). Fast-gate PR->release does not run check:file-size.",
-    "open-sse/executors/antigravity.ts": 1493,
-    "open-sse/executors/base.ts": 1540,
+    "open-sse/executors/antigravity.ts": 1528,
+    "open-sse/executors/base.ts": 1562,
     "open-sse/executors/chatgpt-web.ts": 3241,
     "open-sse/executors/codex.ts": 1534,
     "open-sse/executors/cursor.ts": 1560,
@@ -357,7 +358,7 @@
     "open-sse/mcp-server/server.ts": 1407,
     "open-sse/mcp-server/tools/advancedTools.ts": 1120,
     "open-sse/services/accountFallback.ts": 1966,
-    "open-sse/services/adobeFireflyClient.ts": 2317,
+    "open-sse/services/adobeFireflyClient.ts": 2322,
     "open-sse/services/claudeCodeCompatible.ts": 1202,
     "open-sse/services/combo.ts": 3648,
     "open-sse/services/compression/strategySelector.ts": 1060,
@@ -374,7 +375,7 @@
     "src/app/(dashboard)/dashboard/costs/quota-share/components/PoolWizard.tsx": 1022,
     "src/app/(dashboard)/dashboard/endpoint/EndpointPageClient.tsx": 2615,
     "src/app/(dashboard)/dashboard/health/page.tsx": 1165,
-    "src/app/(dashboard)/dashboard/providers/[id]/components/modals/EditConnectionModal.tsx": 1283,
+    "src/app/(dashboard)/dashboard/providers/[id]/components/modals/EditConnectionModal.tsx": 1316,
     "src/app/(dashboard)/dashboard/providers/page.tsx": 1923,
     "src/app/(dashboard)/dashboard/runtime/RuntimePageClient.tsx": 1201,
     "src/app/(dashboard)/dashboard/settings/components/PricingTab.tsx": 1019,
@@ -406,5 +407,10 @@
     "open-sse/executors/hyperagent.ts": 1026
   },
   "_rebaseline_2026_07_27_v3849_train2": "Merge-train 2 (7 PRs) — owner-approved 2026-07-27. Single entry: chatCore.ts 4955->5006 (#8595, Responses multi-turn image compaction before the context hard-reject). Genuine irreducible growth at the existing compaction chokepoint in handleChatCore — the PR adds a last-resort retry against the concrete budget plus the estimateFinalInputTokens helper, both wired at the pre-existing call site rather than a new branch. Covered by tests/unit/8560-responses-image-compaction.test.ts (4 tests).",
-  "_rebaseline_2026_07_27_v3849_train3": "Merge-train 3 (13 PRs) — owner-approved 2026-07-27. Both entries are genuine irreducible growth at existing chokepoints, not new branches: src/lib/db/apiKeys.ts 1518->1529 (#8805 cx/* ≡ codex/* API-key model permissions); open-sse/handlers/chatCore.ts 5006->5020 (#8806 real response payload into plugin onResponse hooks). Covered by tests/unit/db-apiKeys-crud.test.ts (4 new cases) and the two plugin-hook test files updated in #8806 respectively."
+  "_rebaseline_2026_07_27_v3849_train3": "Merge-train 3 (13 PRs) — owner-approved 2026-07-27. Both entries are genuine irreducible growth at existing chokepoints, not new branches: src/lib/db/apiKeys.ts 1518->1529 (#8805 cx/* ≡ codex/* API-key model permissions); open-sse/handlers/chatCore.ts 5006->5020 (#8806 real response payload into plugin onResponse hooks). Covered by tests/unit/db-apiKeys-crud.test.ts (4 new cases) and the two plugin-hook test files updated in #8806 respectively.",
+  "_rebaseline_2026_07_28_8842_antigravity_projectid_refresh": "PR #8842 (fix/antigravity-projectid-refresh) own growth: open-sse/executors/antigravity.ts 1493->1528 (+35 = projectId discovery in refreshCredentials: import ensureAntigravityProjectAssigned + trim projectId + call ensureAntigravityProjectAssigned with 8s timeout + persistDiscoveredAntigravityProjectId + log success/failure). Irreducible wiring at the existing credential-refresh chokepoint. Covered by tests/unit/executor-antigravity.test.ts (4 new test cases).",
+  "_rebaseline_2026_07_28_8842_antigravity_test": "PR #8842 test growth: tests/unit/executor-antigravity.test.ts new testFrozen 1098 (4 new test cases for projectId discovery during refresh: discovers when empty, skips when set, handles failure, skips when access_token not a string). All above cap 1000 on day one.",
+  "_rebaseline_2026_07_28_8860_tokenrefresh_projectid": "PR #8860 (fix/antigravity-projectid-centralized) own test growth: tests/unit/token-refresh-service.test.ts 1311->1378 (+67 = 4 cases covering projectId discovery on the tokenRefresh.ts path — the Dashboard/health-check refresh route, which #8842 did not reach since that fixed the executor path). Covered by the same file.",
+  "_rebaseline_2026_07_28_8861_xiaomi_token_plan": "PR #8861 (feat/xiaomi-token-plan-protocol-selector) own growth: EditConnectionModal.tsx 1283->1316 (+33 = the per-connection API-protocol selector field) and open-sse/executors/base.ts 1540->1562 (+22 = alternate-format resolution at the existing buildUrl/headers chokepoint). Both are irreducible wiring at existing call sites.",
+  "_rebaseline_2026_07_28_8863_firefly_detail_level": "PR #8863 (fix/adobe-firefly-gpt-detail-level-max) own growth: adobeFireflyClient.ts 2317->2322 (+5 = gpt-image detailLevel defaulting to maximal at the existing payload-build site). Covered by tests/unit/adobe-firefly.test.ts."
 }

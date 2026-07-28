@@ -1,1 +1,0 @@
-- **docs(codex):** document session affinity (`sessionAffinityTtlMs`) and stream idle timeout (`STREAM_IDLE_TIMEOUT_MS`) for multi-hour Codex CLI tasks, with a concrete recommended config, diagnosability string, and an explicit "defaults stay opt-in" decision — mirrored in `skills/config-codex-cli` (#7287)

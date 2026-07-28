@@ -1,1 +1,0 @@
-- **feat(search):** add Firecrawl to `POST /v1/search` supported providers with two sources (web|news) ([#8814](https://github.com/diegosouzapw/OmniRoute/pull/8814)) — thanks @allanvb
