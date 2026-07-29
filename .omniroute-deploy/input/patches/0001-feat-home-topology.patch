@@ -1,23 +1,25 @@
 diff --git a/changelog.d/features/8450-home-topology-live-feed.md b/changelog.d/features/8450-home-topology-live-feed.md
 new file mode 100644
-index 000000000..ee1c8ac31
+index 000000000..7efbbaa1e
 --- /dev/null
 +++ b/changelog.d/features/8450-home-topology-live-feed.md
 @@ -0,0 +1 @@
-+- **feat(home):** the home Provider Topology now shows a logo-only router core with an electric "kame beam" on active links, a live **Recent Requests** panel (polls `/api/usage/call-logs` every ~3s, gated by the topology appearance toggle + page visibility), a ring that grows with the provider count so many providers no longer overlap, and only surfaces providers with an enabled connection — untested/failing connections no longer clutter the map. Nodes are ordered by creation time, so adding a provider appends it instead of pushing the existing map around, and a compatible node without a custom `icon_url` now renders the same bundled logo the providers page shows instead of a generic glyph. The error counter and the red edges reflect **every** currently-failing provider (`/api/provider-metrics` gained `topology.errorProviders`); previously only the most recent failure was reported, so a second failure silently cleared the first. All topology animations honour `prefers-reduced-motion` ([#8450](https://github.com/diegosouzapw/OmniRoute/pull/8450)) — thanks @nguyenha935
++- **feat(home):** the home Provider Topology now shows a logo-only router core with an electric "kame beam" on active links, a live **Recent Requests** panel (polls `/api/usage/call-logs` every ~3s, gated by the topology appearance toggle + page visibility), a ring that grows with the provider count so many providers no longer overlap, and only surfaces providers with an enabled connection — untested/failing connections no longer clutter the map. The router core is a landscape tile whose in-flight counter sits beside the logo (and holds its slot when idle, so the core cannot drift off the ring's centre as calls start and stop). Nodes are ordered by connection `global_priority` and then by creation time, so adding a provider appends it instead of pushing the existing map around, and a compatible node without a custom `icon_url` now renders the same bundled logo the providers page shows instead of a generic glyph. The error counter and the red edges reflect **every** currently-failing provider (`/api/provider-metrics` gained `topology.errorProviders`); previously only the most recent failure was reported, so a second failure silently cleared the first. A failure also now **expires on its own** after 10s instead of leaving a provider red forever once it stopped being called. All topology animations honour `prefers-reduced-motion` ([#8450](https://github.com/diegosouzapw/OmniRoute/pull/8450)) — thanks @nguyenha935
 diff --git a/src/app/(dashboard)/dashboard/HomePageClient.tsx b/src/app/(dashboard)/dashboard/HomePageClient.tsx
-index 24cec3140..e65c68d13 100644
+index 24cec3140..6ba5ec747 100644
 --- a/src/app/(dashboard)/dashboard/HomePageClient.tsx
 +++ b/src/app/(dashboard)/dashboard/HomePageClient.tsx
-@@ -17,6 +17,7 @@ import { useNotificationStore } from "@/store/notificationStore";
+@@ -16,7 +16,9 @@ import {
+ import { useNotificationStore } from "@/store/notificationStore";
  import { extractApiErrorMessage } from "@/shared/http/apiErrorMessage";
  import { copyToClipboard } from "@/shared/utils/clipboard";
++import { toNumber } from "@/shared/utils/numeric";
  import { getProviderDisplayLabel } from "@/shared/utils/providerDisplayLabel";
 +import { resolveCompatibleProviderCatalogEntry } from "@/lib/providers/catalog";
  import { useIsElectron, useOpenExternal } from "@/shared/hooks/useElectron";
  import { HomeProviderTopologySection } from "./HomeProviderTopologySection";
  import { shouldShowProviderTopologyOnHome } from "./homeAppearance";
-@@ -116,9 +117,30 @@ export default function HomePageClient({ machineId }: HomePageClientProps) {
+@@ -116,9 +118,30 @@ export default function HomePageClient({ machineId }: HomePageClientProps) {
    const [baseUrl, setBaseUrl] = useState("/v1");
    const [selectedProvider, setSelectedProvider] = useState(null);
    const [providerMetrics, setProviderMetrics] = useState<Record<string, ProviderMetricSummary>>({});
@@ -50,7 +52,7 @@ index 24cec3140..e65c68d13 100644
    >([]);
  
    // The live in-flight request feed for the Provider Topology pulse animation is owned by
-@@ -309,9 +331,20 @@ export default function HomePageClient({ machineId }: HomePageClientProps) {
+@@ -309,9 +332,20 @@ export default function HomePageClient({ machineId }: HomePageClientProps) {
            const data = await metricsRes.json();
            if (!cancelled) {
              setProviderMetrics(data.metrics || {});
@@ -72,7 +74,7 @@ index 24cec3140..e65c68d13 100644
              });
            }
          }
-@@ -425,7 +458,19 @@ export default function HomePageClient({ machineId }: HomePageClientProps) {
+@@ -425,7 +459,19 @@ export default function HomePageClient({ machineId }: HomePageClientProps) {
    }, [providerConnections, t, tp, router]);
  
    const providerStats = useMemo(() => {
@@ -93,7 +95,7 @@ index 24cec3140..e65c68d13 100644
        const connections = providerConnections.filter((conn) => conn.provider === providerId);
        const connected = connections.filter((connection) =>
          isProviderConnectionConnected(connection)
-@@ -434,7 +479,9 @@ export default function HomePageClient({ machineId }: HomePageClientProps) {
+@@ -434,7 +480,9 @@ export default function HomePageClient({ machineId }: HomePageClientProps) {
          isProviderConnectionErrored(connection)
        ).length;
  
@@ -104,9 +106,40 @@ index 24cec3140..e65c68d13 100644
        const providerModels = models.filter((m) => providerKeys.has(m.provider));
  
        const authType = NOAUTH_PROVIDERS[providerId]
-@@ -452,8 +499,60 @@ export default function HomePageClient({ machineId }: HomePageClientProps) {
+@@ -443,6 +491,28 @@ export default function HomePageClient({ machineId }: HomePageClientProps) {
+           ? "oauth"
+           : "apikey";
+ 
++      // Best (lowest) global priority among this provider's ENABLED connections, or
++      // undefined when none of them carries one.
++      //
++      // `global_priority` is the only priority that means anything ACROSS providers:
++      // `priority` is assigned per provider as MAX(priority)+1 within that provider, so
++      // codex#1, gemini#1 and kiro#1 all exist and comparing them is meaningless. It is also
++      // sparse in practice — most connections have no global priority at all, and
++      // `cleanNulls` (src/lib/db/caseMapping.ts) strips the key entirely rather than
++      // returning null, so this is `number | undefined`, never `number | null`.
++      //
++      // A provider owns one topology node but may own many connections, so the tiers have to
++      // collapse to one value: lowest wins, i.e. a provider is ranked by its best-placed
++      // connection. Disabled connections are skipped because a disabled connection cannot
++      // route, so its priority should not pull the provider forward.
++      let priority: number | undefined;
++      for (const connection of connections) {
++        if (connection.isActive === false) continue;
++        const candidate = toNumber(connection.globalPriority);
++        if (!Number.isFinite(candidate) || candidate <= 0) continue;
++        if (priority === undefined || candidate < priority) priority = candidate;
++      }
++
+       return {
+         id: providerId,
+         provider: providerInfo,
+@@ -451,9 +521,62 @@ export default function HomePageClient({ machineId }: HomePageClientProps) {
+         errors,
          modelCount: providerModels.length,
          authType,
++        priority,
        };
 -    });
 -  }, [providerConnections, models]);
@@ -167,7 +200,7 @@ index 24cec3140..e65c68d13 100644
  
    const selectedProviderModels = useMemo(() => {
      if (!selectedProvider) return [];
-@@ -467,54 +566,63 @@ export default function HomePageClient({ machineId }: HomePageClientProps) {
+@@ -467,54 +590,66 @@ export default function HomePageClient({ machineId }: HomePageClientProps) {
      type ProviderHealth = "active" | "error" | "idle";
      const byProvider = new Map<
        string,
@@ -180,6 +213,8 @@ index 24cec3140..e65c68d13 100644
 +        textIcon?: string;
 +        apiType?: string | null;
 +        createdAt?: string | null;
++        /** Best global priority across this provider's enabled connections; see providerStats. */
++        priority?: number;
 +        status: ProviderHealth;
 +      }
      >();
@@ -207,10 +242,6 @@ index 24cec3140..e65c68d13 100644
 -        stat.connected > 0 ? "active" : stat.errors > 0 ? "error" : "idle"
 -      );
 -    }
--
--    const addProvider = (providerId?: string | null, name?: string) => {
--      const rawProviderId = typeof providerId === "string" ? providerId.trim() : "";
--      if (!rawProviderId) return;
 +      // `connected` counts enabled connections whose test status is healthy/unknown;
 +      // `errors` counts enabled connections that failed their test. Their sum is the
 +      // number of enabled connections — disabled ones (isActive === false) are in
@@ -218,6 +249,10 @@ index 24cec3140..e65c68d13 100644
 +      const enabled = stat.connected + stat.errors;
 +      if (enabled <= 0) continue;
  
+-    const addProvider = (providerId?: string | null, name?: string) => {
+-      const rawProviderId = typeof providerId === "string" ? providerId.trim() : "";
+-      if (!rawProviderId) return;
+-
 -      const canonicalProviderId = normalizeProviderId(rawProviderId);
 -      if (!canonicalProviderId || byProvider.has(canonicalProviderId)) return;
 +      const canonical = normalizeProviderId(stat.id);
@@ -248,6 +283,7 @@ index 24cec3140..e65c68d13 100644
 +        textIcon: stat.provider?.textIcon,
 +        apiType: stat.provider?.apiType,
 +        createdAt: stat.provider?.createdAt,
++        priority: stat.priority,
 +        status: stat.connected > 0 ? "active" : "error",
        });
 -    };
@@ -267,7 +303,7 @@ index 24cec3140..e65c68d13 100644
  
    const pollBackgroundUpdate = useCallback(
      async ({
-@@ -1177,7 +1285,7 @@ export default function HomePageClient({ machineId }: HomePageClientProps) {
+@@ -1177,7 +1312,7 @@ export default function HomePageClient({ machineId }: HomePageClientProps) {
          <HomeProviderTopologySection
            providers={topologyProviders}
            lastProvider={lastProvider}
@@ -277,10 +313,10 @@ index 24cec3140..e65c68d13 100644
          />
        )}
 diff --git a/src/app/(dashboard)/dashboard/HomeProviderTopologySection.tsx b/src/app/(dashboard)/dashboard/HomeProviderTopologySection.tsx
-index 034088e7b..0f5368b61 100644
+index 034088e7b..780792277 100644
 --- a/src/app/(dashboard)/dashboard/HomeProviderTopologySection.tsx
 +++ b/src/app/(dashboard)/dashboard/HomeProviderTopologySection.tsx
-@@ -3,16 +3,21 @@
+@@ -3,16 +3,27 @@
  import { useTranslations } from "next-intl";
  import dynamic from "next/dynamic";
  
@@ -299,12 +335,18 @@ index 034088e7b..0f5368b61 100644
 +  iconUrl?: string;
 +  textIcon?: string;
 +  apiType?: string | null;
-+  /** provider_nodes.created_at — ring order, so a newly added provider appends. */
++  /** provider_nodes.created_at — ring order tie-break, so a newly added provider appends. */
 +  createdAt?: string | null;
++  /**
++   * Best (lowest) global priority across this provider's enabled connections, or undefined
++   * when none carries one. Outranks `createdAt` in the ring order — see
++   * compareTopologyProviders.
++   */
++  priority?: number;
    /** Connection-health base state, so the topology can colour a node at rest. */
    status?: "active" | "error" | "idle";
  };
-@@ -20,12 +25,13 @@ type TopologyProvider = {
+@@ -20,12 +31,13 @@ type TopologyProvider = {
  export function HomeProviderTopologySection({
    providers,
    lastProvider,
@@ -320,7 +362,7 @@ index 034088e7b..0f5368b61 100644
    enabled?: boolean;
  }) {
    const t = useTranslations("home");
-@@ -36,15 +42,46 @@ export function HomeProviderTopologySection({
+@@ -36,15 +48,46 @@ export function HomeProviderTopologySection({
    // section is actually shown on the home page.
    const { activeRequests: liveActiveRequests } = useLiveRequests({ enabled });
    const activeRequests = selectActiveRequests(liveActiveRequests);
@@ -370,7 +412,7 @@ index 034088e7b..0f5368b61 100644
            </p>
          </div>
          <div className="flex items-center gap-3 text-[11px] text-text-muted">
-@@ -62,12 +99,15 @@ export function HomeProviderTopologySection({
+@@ -62,12 +105,15 @@ export function HomeProviderTopologySection({
            </span>
          </div>
        </div>
@@ -639,10 +681,10 @@ index 000000000..abe6f57ed
 +  );
 +}
 diff --git a/src/app/(dashboard)/home/ProviderTopology.tsx b/src/app/(dashboard)/home/ProviderTopology.tsx
-index 2324d93d8..717c81e77 100644
+index 2324d93d8..e49bbecba 100644
 --- a/src/app/(dashboard)/home/ProviderTopology.tsx
 +++ b/src/app/(dashboard)/home/ProviderTopology.tsx
-@@ -2,24 +2,52 @@
+@@ -2,24 +2,60 @@
  
  import { useMemo } from "react";
  import { useTranslations } from "next-intl";
@@ -691,11 +733,19 @@ index 2324d93d8..717c81e77 100644
 +// the node count and lets the single ellipse grow. Same here — `count` nodes are spread
 +// evenly over a full turn of one ellipse, so spokes stay radial and no two nodes can share
 +// an axis. The minimum keeps a 1-2 provider map from collapsing onto the router.
-+const RING_MIN_RX = 210;
-+const RING_MIN_RY = 132;
++// These three floors/ratios are 9Router's, measured from its own buildLayout
++// (src/app/(dashboard)/dashboard/usage/components/ProviderTopology.js:271-273):
++// `rx = Math.max(320, minRx)`, `ry = Math.max(200, rx * 0.55)`. The earlier values here
++// (210 / 132 / 0.63) drew the same map at roughly two thirds the size, which is what read as
++// the diagram being shrunk into a corner of its frame.
++const RING_MIN_RX = 320;
++const RING_MIN_RY = 200;
 +// Arc length each node needs so neighbours never touch (node width + breathing room).
-+const RING_NODE_ARC = 176;
-+const RING_ELLIPSE_RATIO = 0.63;
++// 9Router budgets `nodeW 180 + nodeGap 24` (same file, :263-267); its nodes are 24px wider
++// than ours, so this is deliberately generous rather than exact — nodes stay apart at high
++// provider counts instead of crowding as the ring fills.
++const RING_NODE_ARC = 204;
++const RING_ELLIPSE_RATIO = 0.55;
 +
 +function ringRadii(count: number): { rx: number; ry: number } {
 +  // Circumference must fit every node: 2*PI*rx >= count * arc.
@@ -706,7 +756,7 @@ index 2324d93d8..717c81e77 100644
  
  type ProviderConfig = { color?: string; name?: string; textIcon?: string };
  
-@@ -39,81 +67,100 @@ type ProviderNodeData = {
+@@ -39,81 +75,100 @@ type ProviderNodeData = {
    label: string;
    color: string;
    providerId: string;
@@ -834,7 +884,7 @@ index 2324d93d8..717c81e77 100644
        )}
      </div>
    );
-@@ -122,39 +169,41 @@ function ProviderNode({ data }: { data: ProviderNodeData }) {
+@@ -122,42 +177,56 @@ function ProviderNode({ data }: { data: ProviderNodeData }) {
  type RouterNodeData = { activeCount: number };
  
  function RouterNode({ data }: { data: RouterNodeData }) {
@@ -842,7 +892,7 @@ index 2324d93d8..717c81e77 100644
    return (
 -    <div className="flex items-center gap-2 px-5 py-3 rounded-xl border-2 border-primary bg-primary/8 shadow-lg min-w-[140px] justify-center">
 +    <div
-+      className={`relative flex items-center justify-center size-12 rounded-xl border border-primary/70 bg-primary/8 transition-all duration-300${
++      className={`relative flex h-12 w-24 items-center justify-center gap-2 rounded-xl border border-primary/70 bg-primary/8 transition-all duration-300${
 +        active ? " topology-router-core" : ""
 +      }`}
 +    >
@@ -881,13 +931,31 @@ index 2324d93d8..717c81e77 100644
 -      <span className="text-sm font-bold text-primary">OmniRoute</span>
 -      {data.activeCount > 0 && (
 -        <span className="ml-1 px-1.5 py-0.5 rounded-full bg-primary text-white text-[10px] font-bold leading-none">
+-          {data.activeCount}
+-        </span>
+-      )}
 +      <OmniRouteLogo size={24} className={`text-primary${active ? " topology-router-icon" : ""}`} />
-+      {active && (
-+        <span className="topology-router-badge absolute -top-2 -right-2 flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-primary text-white text-[10px] font-bold leading-none">
-           {data.activeCount}
-         </span>
-       )}
-@@ -167,19 +216,28 @@ const nodeTypes: NodeTypes = {
++      {/* The in-flight counter sits INSIDE the core, to the right of the logo, rather than
++       * hanging off the top-right corner as an absolute badge.
++       *
++       * It also always occupies its slot — muted "0" at rest, filled when routing. That is a
++       * geometry requirement, not a style choice: React Flow positions a node by its TOP-LEFT
++       * corner (`position: { x: -routerW / 2 }` in buildLayout), so a counter that appears and
++       * disappears changes the core's rendered width and slides it off the ring's centre every
++       * time a call starts or ends. Reserving the slot keeps the core centred. */}
++      <span
++        className={`topology-router-count flex h-5 min-w-[20px] items-center justify-center rounded-full px-1.5 text-[10px] font-bold leading-none tabular-nums transition-colors duration-300${
++          active
++            ? " topology-router-badge bg-primary text-white"
++            : " bg-primary/10 text-text-muted"
++        }`}
++      >
++        {data.activeCount}
++      </span>
+     </div>
+   );
+ }
+@@ -167,19 +236,33 @@ const nodeTypes: NodeTypes = {
    router: RouterNode as any,
  };
  
@@ -919,27 +987,36 @@ index 2324d93d8..717c81e77 100644
 +  /** provider_nodes.api_type — picks between the two OpenAI-compatible logos. */
 +  apiType?: string | null;
 +  /**
-+   * provider_nodes.created_at — drives ring order so a newly added provider appends at the
-+   * end. Absent for built-in registry providers, which have no creation record.
++   * provider_nodes.created_at — tie-breaks ring order so a newly added provider appends at
++   * the end. Absent for built-in registry providers, which have no creation record.
 +   */
 +  createdAt?: string | null;
++  /**
++   * Best (lowest) global priority across this provider's enabled connections. Outranks
++   * `createdAt`; undefined for providers with no global priority set.
++   */
++  priority?: number;
 +  status?: ProviderHealth;
 +};
  
  function buildLayout(
    providers: ProviderEntry[],
-@@ -189,8 +247,8 @@ function buildLayout(
+@@ -189,8 +272,12 @@ function buildLayout(
  ): { nodes: Node[]; edges: Edge[] } {
    const nodeW = 156;
    const nodeH = 28;
 -  const routerW = 148;
 -  const routerH = 44;
-+  const routerW = 48;
++  // Must match RouterNode's rendered box (h-12 w-24). The core is a landscape rectangle, not
++  // a square: the logo and the in-flight counter sit side by side on one row. Keep these in
++  // sync with the Tailwind classes — the value only recentres the node (`-routerW / 2`), it
++  // does not size it, so a stale number here silently offsets the core from the ring centre.
++  const routerW = 96;
 +  const routerH = 48;
  
    const nodes: Node[] = [];
    const edges: Edge[] = [];
-@@ -205,78 +263,78 @@ function buildLayout(
+@@ -205,78 +292,78 @@ function buildLayout(
  
    if (providers.length === 0) return { nodes, edges };
  
@@ -1090,7 +1167,7 @@ index 2324d93d8..717c81e77 100644
    }
  
    return { nodes, edges };
-@@ -286,14 +344,23 @@ type Props = {
+@@ -286,14 +373,23 @@ type Props = {
    providers?: ProviderEntry[];
    activeRequests?: Array<{ provider?: string; model?: string }>;
    lastProvider?: string;
@@ -1116,7 +1193,7 @@ index 2324d93d8..717c81e77 100644
  }: Props) {
    const t = useTranslations("common");
    const activeKey = useMemo(
-@@ -306,17 +373,51 @@ export default function ProviderTopology({
+@@ -306,17 +402,51 @@ export default function ProviderTopology({
      [activeRequests]
    );
    const lastKey = lastProvider.toLowerCase();
@@ -1170,7 +1247,7 @@ index 2324d93d8..717c81e77 100644
      // eslint-disable-next-line react-hooks/exhaustive-deps
      [providers, activeSet, lastKey, errorKey]
    );
-@@ -330,8 +431,15 @@ export default function ProviderTopology({
+@@ -330,8 +460,19 @@ export default function ProviderTopology({
      [providers]
    );
  
@@ -1181,13 +1258,17 @@ index 2324d93d8..717c81e77 100644
 +  // with a solid surface behind it the wallpaper could never bleed through. Matches
 +  // 9Router, where the topology tile sits directly on the page grid and only Recent
 +  // Requests is a solid card.
++  // Frame height matches 9Router's topology tile (h-[320px] sm:h-[480px], its
++  // ProviderTopology.js:440). The larger ring above needs the extra room; FlowCanvas
++  // auto-fits on init, on ResizeObserver and on node-count change, so the bigger geometry
++  // scales to whatever height this resolves to rather than being clipped.
    const containerClass =
 -    "h-[300px] w-full min-w-0 rounded-xl border border-border bg-bg-subtle/20 overflow-hidden sm:h-[420px]";
-+    "h-[300px] w-full min-w-0 rounded-xl border border-border bg-transparent overflow-hidden sm:h-[420px]";
++    "h-[320px] w-full min-w-0 rounded-xl border border-border bg-transparent overflow-hidden sm:h-[480px]";
  
    if (providers.length === 0) {
      return (
-@@ -349,6 +457,7 @@ export default function ProviderTopology({
+@@ -349,6 +490,7 @@ export default function ProviderTopology({
        nodes={nodes}
        edges={edges}
        nodeTypes={nodeTypes}
@@ -1231,7 +1312,7 @@ index 000000000..e388af953
 +    : { sourceHandle: "left", targetHandle: "right" };
 +}
 diff --git a/src/app/(dashboard)/home/topologyUtils.ts b/src/app/(dashboard)/home/topologyUtils.ts
-index ef731f72f..fc98b950a 100644
+index ef731f72f..0629136c0 100644
 --- a/src/app/(dashboard)/home/topologyUtils.ts
 +++ b/src/app/(dashboard)/home/topologyUtils.ts
 @@ -2,6 +2,7 @@
@@ -1242,7 +1323,7 @@ index ef731f72f..fc98b950a 100644
  /** Minimal shape expected by <ProviderTopology activeRequests={...}> */
  export interface TopologyActiveRequest {
    provider: string;
-@@ -25,3 +26,92 @@ interface InFlightRequest {
+@@ -25,3 +26,129 @@ interface InFlightRequest {
  export function selectActiveRequests(requests: InFlightRequest[]): TopologyActiveRequest[] {
    return requests.map(({ provider, model }) => ({ provider, model }));
  }
@@ -1253,10 +1334,21 @@ index ef731f72f..fc98b950a 100644
 +  name?: string;
 +  /** `provider_nodes.created_at` — present only for operator-added compatible nodes. */
 +  createdAt?: string | null;
++  /**
++   * Best (lowest) `provider_connections.global_priority` across this provider's enabled
++   * connections, or undefined when none of them has one set.
++   */
++  priority?: number;
 +}
 +
 +function orderableLabel(entry: TopologyOrderable): string {
 +  return (entry.name?.trim() || entry.provider || "").toLowerCase();
++}
++
++function orderablePriority(entry: TopologyOrderable): number | null {
++  const raw = entry.priority;
++  if (typeof raw !== "number" || !Number.isFinite(raw) || raw <= 0) return null;
++  return raw;
 +}
 +
 +function orderableCreatedAt(entry: TopologyOrderable): number | null {
@@ -1283,8 +1375,34 @@ index ef731f72f..fc98b950a 100644
 + * would make the ring reshuffle whenever a node is added. Ties fall through to the
 + * provider id so the comparator is total — otherwise React Flow node order (and the
 + * memo key built from it) could differ between renders for equal keys.
++ *
++ * ORDERING TIERS — operator priority first, then the age rules above.
++ *
++ * 9Router lays its ring out in connection-priority order (its connectionsRepo sorts
++ * `(a.priority || 999) - (b.priority || 999)` before UsageStats dedupes to one entry per
++ * provider), so position carries operational meaning rather than being chronological. That
++ * is the behaviour being adopted here — but only via `global_priority`, which is the one
++ * priority column comparable ACROSS providers. `priority` is allocated per provider as
++ * MAX(priority)+1 within that provider, so several providers each own a "1"; ranking the
++ * ring by it would produce an order decided entirely by the tie-breaks below, i.e. noise
++ * dressed up as intent.
++ *
++ * A provider WITH a priority always precedes one without. Global priority is sparse in
++ * practice (most connections leave it unset), and treating "unset" as 0 or as any numeric
++ * default would float the unranked majority to the front and bury the few the operator
++ * actually ranked. Unranked providers therefore keep their existing relative order behind
++ * the ranked block, which is why the createdAt tier is retained rather than replaced.
 + */
 +export function compareTopologyProviders(a: TopologyOrderable, b: TopologyOrderable): number {
++  const aPriority = orderablePriority(a);
++  const bPriority = orderablePriority(b);
++
++  if (aPriority !== null && bPriority === null) return -1;
++  if (aPriority === null && bPriority !== null) return 1;
++  if (aPriority !== null && bPriority !== null && aPriority !== bPriority) {
++    return aPriority - bPriority;
++  }
++
 +  const aCreated = orderableCreatedAt(a);
 +  const bCreated = orderableCreatedAt(b);
 +
@@ -1336,10 +1454,39 @@ index ef731f72f..fc98b950a 100644
 +  return result;
 +}
 diff --git a/src/app/api/provider-metrics/route.ts b/src/app/api/provider-metrics/route.ts
-index 3b6e16a0a..566f990e7 100644
+index 3b6e16a0a..d8de1d08e 100644
 --- a/src/app/api/provider-metrics/route.ts
 +++ b/src/app/api/provider-metrics/route.ts
-@@ -33,6 +33,12 @@ export async function GET() {
+@@ -8,6 +8,28 @@ import { toNumber } from "@/shared/utils/numeric";
+ 
+ const logger = pino({ name: "provider-metrics-api" });
+ 
++/**
++ * How long a failure keeps a provider flagged as currently-in-error.
++ *
++ * Taken from 9Router, which expires its error highlight after exactly this long
++ * (src/lib/db/repos/usageRepo.js:237 — `Date.now() - lastErrorProvider.ts < 10000`).
++ *
++ * Without a window, "currently in error" meant only "the most recent call failed", which
++ * never becomes false on its own: a provider that fails and is then left alone has no newer
++ * call to clear the flag, so it stays red indefinitely. A red edge nobody can clear stops
++ * being a signal.
++ *
++ * The window is evaluated HERE, server-side, against the one clock that also produced
++ * `lastErrorAt`. Deriving it in the browser would compare a server timestamp against the
++ * client's clock, so a skewed machine would expire failures early or never.
++ *
++ * Note this is a real improvement over 9Router rather than a copy: 9Router keeps the failure
++ * in process memory (`global._lastErrorProvider`), a single slot that holds ONE provider and
++ * is lost on restart. Here the timestamps come from persisted call_logs, so the window
++ * applies per provider and survives a restart.
++ */
++const TOPOLOGY_ERROR_TTL_MS = 10_000;
++
+ /**
+  * GET /api/provider-metrics — Aggregate per-provider stats from call_logs
+  * Returns aggregate metrics plus topology recency/error hints for dashboard visualization.
+@@ -33,6 +55,16 @@ export async function GET() {
      let lastProviderTs = 0;
      let errorProvider = "";
      let errorProviderTs = 0;
@@ -1349,18 +1496,46 @@ index 3b6e16a0a..566f990e7 100644
 +    // second provider succeeding handed the flag back. Anything that needs to show all
 +    // failures (the home topology's red edges and its error count) must read this.
 +    const errorProviders: string[] = [];
++    // One timestamp for the whole sweep, so every provider is aged against the same instant.
++    // Calling Date.now() per row would let a slow iteration expire later providers against a
++    // slightly later clock than earlier ones.
++    const requestStartedAt = Date.now();
  
      for (const row of rows) {
        const provider =
-@@ -69,6 +75,7 @@ export async function GET() {
+@@ -66,12 +98,26 @@ export async function GET() {
+       // Only flag as errorProvider if the provider's MOST RECENT request was itself
+       // a failure. A provider with a historical lastErrorAt but a recent success
+       // (lastStatus 2xx/3xx) must not be shown as currently errored (#3619).
++      const lastFailed = lastStatus !== null && (lastStatus < 200 || lastStatus >= 400);
++      const lastErrorTs = lastErrorAt ? Date.parse(lastErrorAt) : NaN;
++      // ...and only while that failure is still RECENT. "The last call failed" is a
++      // condition that cannot clear itself: once a provider fails and stops being called,
++      // there is no newer call to flip the flag, so it stayed flagged forever. Pairing it
++      // with TOPOLOGY_ERROR_TTL_MS gives the state an exit — a failure ages out on its own,
++      // exactly as it does in 9Router.
        const isCurrentlyInError =
-         lastStatus !== null && (lastStatus < 200 || lastStatus >= 400);
-       const errorTs = isCurrentlyInError && lastErrorAt ? Date.parse(lastErrorAt) : 0;
-+      if (isCurrentlyInError) errorProviders.push(provider);
-       if (Number.isFinite(errorTs) && errorTs > errorProviderTs) {
-         errorProvider = provider;
-         errorProviderTs = errorTs;
-@@ -80,7 +87,10 @@ export async function GET() {
+-        lastStatus !== null && (lastStatus < 200 || lastStatus >= 400);
+-      const errorTs = isCurrentlyInError && lastErrorAt ? Date.parse(lastErrorAt) : 0;
+-      if (Number.isFinite(errorTs) && errorTs > errorProviderTs) {
+-        errorProvider = provider;
+-        errorProviderTs = errorTs;
++        lastFailed &&
++        Number.isFinite(lastErrorTs) &&
++        requestStartedAt - lastErrorTs <= TOPOLOGY_ERROR_TTL_MS;
++      if (isCurrentlyInError) {
++        errorProviders.push(provider);
++        // The legacy singular field tracks the most recent of the still-live failures only.
++        // It is derived from the same TTL-gated condition so the two fields can never
++        // disagree — a provider named here is always present in errorProviders too.
++        if (lastErrorTs > errorProviderTs) {
++          errorProvider = provider;
++          errorProviderTs = lastErrorTs;
++        }
+       }
+     }
+ 
+@@ -80,7 +126,10 @@ export async function GET() {
        topology: {
          providers: Object.keys(metrics),
          lastProvider,
@@ -3048,12 +3223,242 @@ index 1c0e2bffb..313fdca35 100644
  test("ProviderTopology treats live activeRequests as the current snapshot without frontend timeout filtering", () => {
    assert.doesNotMatch(
      providerTopologySrc,
+diff --git a/tests/unit/home-topology-core-and-error-ttl.test.ts b/tests/unit/home-topology-core-and-error-ttl.test.ts
+new file mode 100644
+index 000000000..f54eb2b6f
+--- /dev/null
++++ b/tests/unit/home-topology-core-and-error-ttl.test.ts
+@@ -0,0 +1,224 @@
++// Round-two coverage for the live /home topology, after an operator looked at the deployed
++// map and reported: the router core is an ugly square, the in-flight count hangs off its
++// corner instead of sitting next to the logo, the whole diagram is shrunk, and a red error
++// state has no visible way to ever clear.
++//
++// Everything here is asserted against the source text rather than a rendered tree, because
++// the properties that broke are structural (which element holds the counter, which constant
++// sizes the ring, whether a TTL exists at all) and each one is invisible in a unit render:
++// a square core renders fine, a permanent red edge renders fine.
++import test, { describe } from "node:test";
++import assert from "node:assert/strict";
++import { readFileSync } from "node:fs";
++import { fileURLToPath } from "node:url";
++
++import { compareTopologyProviders } from "../../src/app/(dashboard)/home/topologyUtils.ts";
++
++const read = (rel: string) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
++
++const topologySrc = read("../../src/app/(dashboard)/home/ProviderTopology.tsx");
++const metricsRouteSrc = read("../../src/app/api/provider-metrics/route.ts");
++const homePageClientSrc = read("../../src/app/(dashboard)/dashboard/HomePageClient.tsx");
++
++describe("router core is a landscape rectangle with the counter inline", () => {
++  test("the core box is wider than it is tall", () => {
++    // Was `size-12` — a 48x48 square. The operator's words: "để cục đó hình vuông thì hơi
++    // xấu... kéo dài ra 1 chút".
++    assert.match(
++      topologySrc,
++      /className=\{`relative flex h-12 w-24 items-center justify-center gap-2 rounded-xl/,
++      "RouterNode must render a 96x48 landscape box with a row gap"
++    );
++    assert.doesNotMatch(
++      topologySrc,
++      /justify-center size-12 rounded-xl/,
++      "the square core class must be gone, not merely overridden"
++    );
++  });
++
++  test("buildLayout's routerW matches the rendered width", () => {
++    // routerW only recentres the node (`x: -routerW / 2`); it does not size it. A stale
++    // value silently offsets the core from the ring centre, which is exactly the kind of
++    // half-fix that looks correct in code review and wrong on screen.
++    assert.match(topologySrc, /const routerW = 96;/, "routerW must track the w-24 box");
++    assert.match(topologySrc, /const routerH = 48;/);
++    assert.match(
++      topologySrc,
++      /position: \{ x: -routerW \/ 2, y: -routerH \/ 2 \}/,
++      "the core must stay centred through the same two constants"
++    );
++  });
++
++  test("the counter is inline, not an absolutely positioned corner badge", () => {
++    assert.match(
++      topologySrc,
++      /<span\s+className=\{`topology-router-count flex h-5 min-w-\[20px\]/,
++      "the count must be a normal flex child next to the logo"
++    );
++    assert.doesNotMatch(
++      topologySrc,
++      /absolute -top-2 -right-2/,
++      "the corner badge positioning must be removed"
++    );
++  });
++
++  test("the counter keeps its slot when idle so the core cannot shift", () => {
++    // Rendering the count only while active changes the core's width the instant a call
++    // starts, and React Flow positions by the top-left corner — so the core would visibly
++    // jump off centre on every request. The slot is reserved and only its styling changes.
++    assert.doesNotMatch(
++      topologySrc,
++      /\{active && \(\s*<span className="topology-router-badge/,
++      "the counter must not be conditionally mounted"
++    );
++    // Positive anchor: the active/idle distinction is carried by classes on one element.
++    assert.match(
++      topologySrc,
++      /active\s*\?\s*" topology-router-badge bg-primary text-white"\s*:\s*" bg-primary\/10 text-text-muted"/,
++      "idle vs routing must be a class swap on the always-present counter"
++    );
++    assert.match(
++      topologySrc,
++      /tabular-nums/,
++      "digits must be tabular so 1 -> 2 cannot change the counter's width either"
++    );
++  });
++});
++
++describe("error state expires on its own", () => {
++  test("a named TTL constant exists and matches 9Router's 10 seconds", () => {
++    // 9Router: src/lib/db/repos/usageRepo.js:237 — `Date.now() - lastErrorProvider.ts < 10000`.
++    assert.match(
++      metricsRouteSrc,
++      /const TOPOLOGY_ERROR_TTL_MS = 10_000;/,
++      "the window must be a named constant, not a magic number at the call site"
++    );
++  });
++
++  test("being currently-in-error requires a RECENT failure, not just a failed last call", () => {
++    // The old condition was `lastStatus outside 2xx/3xx` alone. That can never become false
++    // on its own: a provider that fails and is then left alone has no newer call to clear
++    // the flag, so it stayed red forever. This is the operator's question — "trạng thái đỏ
++    // bao giờ sẽ mất vậy?" — and the answer used to be "never".
++    assert.match(
++      metricsRouteSrc,
++      /const isCurrentlyInError =\s*\n\s*lastFailed &&\s*\n\s*Number\.isFinite\(lastErrorTs\) &&\s*\n\s*requestStartedAt - lastErrorTs <= TOPOLOGY_ERROR_TTL_MS;/,
++      "the error flag must be gated on both a failed last call AND the TTL"
++    );
++  });
++
++  test("the whole sweep is aged against a single timestamp", () => {
++    // Calling Date.now() per row would age later providers against a slightly later clock.
++    assert.match(metricsRouteSrc, /const requestStartedAt = Date\.now\(\);/);
++  });
++
++  test("the TTL is applied server-side, not in the browser", () => {
++    // lastErrorAt comes from the server's clock; comparing it against a client clock would
++    // expire failures early (or never) on a skewed machine.
++    // Narrowly: no TTL constant and no age arithmetic on the client. `lastErrorAt` itself is
++    // fine to MENTION — it is a field on the metrics type the client stores — so matching the
++    // bare name here would fail on a type declaration that re-derives nothing.
++    assert.doesNotMatch(
++      homePageClientSrc,
++      /TOPOLOGY_ERROR_TTL_MS|Date\.parse\(\s*[^)]*lastErrorAt/,
++      "the client must consume the already-decided list, never re-derive the window"
++    );
++    assert.match(
++      homePageClientSrc,
++      /Array\.isArray\(data\.topology\?\.errorProviders\)/,
++      "the client reads the server's decision"
++    );
++  });
++
++  test("expiry did not reintroduce the single-slot overwrite", () => {
++    // 9Router pays for its TTL with a global single slot (`global._lastErrorProvider`), so
++    // one provider failing clears another's red edge. That was the round-one bug here; the
++    // plural list must survive this change.
++    assert.match(
++      metricsRouteSrc,
++      /const errorProviders: string\[\] = \[\];/,
++      "every failing provider must still be reported"
++    );
++    assert.match(
++      metricsRouteSrc,
++      /if \(isCurrentlyInError\) \{\s*\n\s*errorProviders\.push\(provider\);/,
++      "the list must be filled from the same TTL-gated condition"
++    );
++    // The legacy singular field must be derived from the same gate, so the two can never
++    // disagree about whether a provider is failing.
++    assert.match(
++      metricsRouteSrc,
++      /if \(lastErrorTs > errorProviderTs\) \{/,
++      "the singular field narrows the live failures rather than tracking its own condition"
++    );
++  });
++});
++
++describe("ring geometry is no longer shrunk", () => {
++  test("the ring floors match 9Router's", () => {
++    // 9Router buildLayout: `rx = Math.max(320, minRx)`, `ry = Math.max(200, rx * 0.55)`.
++    // The previous 210 / 132 / 0.63 drew the same map at roughly two thirds the size.
++    assert.match(topologySrc, /const RING_MIN_RX = 320;/);
++    assert.match(topologySrc, /const RING_MIN_RY = 200;/);
++    assert.match(topologySrc, /const RING_ELLIPSE_RATIO = 0\.55;/);
++    assert.match(topologySrc, /const RING_NODE_ARC = 204;/);
++  });
++
++  test("the ring still grows with the provider count", () => {
++    // A bigger floor must not replace the growth rule, or a crowded map goes back to
++    // overlapping nodes.
++    assert.match(
++      topologySrc,
++      /const rx = Math\.max\(RING_MIN_RX, \(count \* RING_NODE_ARC\) \/ \(2 \* Math\.PI\)\);/
++    );
++  });
++
++  test("the frame is tall enough for the larger ring", () => {
++    assert.match(
++      topologySrc,
++      /"h-\[320px\] w-full min-w-0 rounded-xl border border-border bg-transparent overflow-hidden sm:h-\[480px\]"/,
++      "frame height must match 9Router's topology tile"
++    );
++  });
++});
++
++describe("priority reaches the ring from the connection data", () => {
++  test("HomePageClient derives one priority per provider from enabled connections", () => {
++    // A provider owns one node but many connections, so the tiers must collapse to one
++    // value. Lowest wins; disabled connections cannot route, so they must not rank it.
++    assert.match(
++      homePageClientSrc,
++      /if \(connection\.isActive === false\) continue;/,
++      "disabled connections must not contribute a priority"
++    );
++    assert.match(
++      homePageClientSrc,
++      /const candidate = toNumber\(connection\.globalPriority\);/,
++      "global_priority is the cross-provider comparable column"
++    );
++    assert.match(
++      homePageClientSrc,
++      /if \(priority === undefined \|\| candidate < priority\) priority = candidate;/,
++      "the provider is ranked by its best-placed connection"
++    );
++  });
++
++  test("priority is threaded all the way to the topology entry", () => {
++    assert.match(homePageClientSrc, /priority: stat\.priority,/);
++    assert.match(topologySrc, /priority\?: number;/);
++  });
++
++  test("the comparator is the single place ring order is decided", () => {
++    assert.match(topologySrc, /\[\.\.\.providers\]\.sort\(compareTopologyProviders\)/);
++    // And it really does rank on priority — guarding the wiring above is worthless if the
++    // comparator ignores the field.
++    assert.equal(
++      compareTopologyProviders(
++        { provider: "ranked", priority: 3 },
++        { provider: "unranked" }
++      ) < 0,
++      true,
++      "a ranked provider must precede an unranked one"
++    );
++  });
++});
 diff --git a/tests/unit/home-topology-node-identity.test.ts b/tests/unit/home-topology-node-identity.test.ts
 new file mode 100644
-index 000000000..7f31ca7af
+index 000000000..32fd1b86f
 --- /dev/null
 +++ b/tests/unit/home-topology-node-identity.test.ts
-@@ -0,0 +1,162 @@
+@@ -0,0 +1,220 @@
 +// Regression coverage for four defects an operator hit on the live /home topology.
 +// All four survived earlier work because each one is invisible until you look at a real
 +// instance: the icon bug needs a compatible node with NO icon_url, the ordering bug needs
@@ -3171,6 +3576,64 @@ index 000000000..7f31ca7af
 +    const b = { provider: "same", name: "Same", createdAt: "2026-07-25T00:00:00Z" };
 +    assert.equal(compareTopologyProviders(a, b), 0);
 +    assert.equal(compareTopologyProviders(b, a), 0);
++  });
++});
++
++describe("topology ring order honours operator priority", () => {
++  // 9Router lays its ring out in connection-priority order, so a node's position carries
++  // operational meaning. Adopted here via `global_priority` — the only priority column that
++  // is comparable across providers (`priority` restarts at 1 inside every provider, so
++  // several providers each own a "1").
++  test("a lower priority number sorts earlier", () => {
++    const providers = [
++      { provider: "gemini", name: "Gemini", priority: 7 },
++      { provider: "kiro", name: "Kiro", priority: 2 },
++      { provider: "codex", name: "Codex", priority: 4 },
++    ];
++    assert.deepEqual(
++      [...providers].sort(compareTopologyProviders).map((p) => p.name),
++      ["Kiro", "Codex", "Gemini"]
++    );
++  });
++
++  test("a ranked provider precedes an unranked one regardless of name or age", () => {
++    // Global priority is sparse — most connections leave it unset. If "unset" were treated
++    // as 0 (or any numeric default) the unranked majority would float to the front and bury
++    // the few the operator actually ranked.
++    const providers = [
++      { provider: "anthropic", name: "Anthropic" },
++      { provider: "zhipu", name: "Zhipu", priority: 5 },
++      { provider: "compat-new", name: "New Gateway", createdAt: "2026-07-28T10:00:00Z" },
++    ];
++    assert.deepEqual(
++      [...providers].sort(compareTopologyProviders).map((p) => p.name),
++      ["Zhipu", "Anthropic", "New Gateway"]
++    );
++  });
++
++  test("providers on the same priority fall back to the createdAt rules", () => {
++    // Same tier, so the age tiers still decide: built-ins (no createdAt) alphabetically
++    // first, then operator-added nodes oldest to newest.
++    const providers = [
++      { provider: "compat-b", name: "Added Later", priority: 3, createdAt: "2026-07-27T00:00:00Z" },
++      { provider: "compat-a", name: "Added First", priority: 3, createdAt: "2026-07-25T00:00:00Z" },
++      { provider: "openai", name: "OpenAI", priority: 3 },
++    ];
++    assert.deepEqual(
++      [...providers].sort(compareTopologyProviders).map((p) => p.name),
++      ["OpenAI", "Added First", "Added Later"]
++    );
++  });
++
++  test("a non-positive or non-finite priority counts as unset, not as best", () => {
++    // 0 / NaN must not outrank a real priority of 1 — otherwise a column default or a bad
++    // parse would seize the first slot.
++    const providers = [
++      { provider: "real", name: "Real", priority: 1 },
++      { provider: "zeroed", name: "Zeroed", priority: 0 },
++      { provider: "nan", name: "NaN", priority: Number.NaN },
++    ];
++    assert.equal([...providers].sort(compareTopologyProviders)[0].name, "Real");
 +  });
 +});
 +
