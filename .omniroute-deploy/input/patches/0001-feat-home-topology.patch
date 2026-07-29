@@ -681,7 +681,7 @@ index 000000000..abe6f57ed
 +  );
 +}
 diff --git a/src/app/(dashboard)/home/ProviderTopology.tsx b/src/app/(dashboard)/home/ProviderTopology.tsx
-index 2324d93d8..aa07d55b5 100644
+index 2324d93d8..f2026ad4c 100644
 --- a/src/app/(dashboard)/home/ProviderTopology.tsx
 +++ b/src/app/(dashboard)/home/ProviderTopology.tsx
 @@ -2,24 +2,60 @@
@@ -756,7 +756,7 @@ index 2324d93d8..aa07d55b5 100644
  
  type ProviderConfig = { color?: string; name?: string; textIcon?: string };
  
-@@ -39,81 +75,100 @@ type ProviderNodeData = {
+@@ -39,81 +75,116 @@ type ProviderNodeData = {
    label: string;
    color: string;
    providerId: string;
@@ -790,7 +790,13 @@ index 2324d93d8..aa07d55b5 100644
    return (
      <div
 -      className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border-2 transition-all duration-300 bg-bg"
-+      className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border transition-all duration-300 bg-bg"
++      // Sized ONE step up from the previous px-2.5/py-1.5/1px-border node, which read as a
++      // speck once the ring floor grew to 320x200. Deliberately NOT 9Router's px-4 py-2.5
++      // border-2 / 150px / 32px-tile / 16px-label node: that is a different, chunkier design
++      // and copying it wholesale overcorrects a "too small" complaint into "too big". The
++      // border does go to 2px because a hairline washes out under the fitView downscale a
++      // crowded ring settles into — that is legibility, not bulk.
++      className="flex items-center gap-2 px-3 py-2 rounded-lg border-2 transition-all duration-300 bg-bg"
        style={{
 -        borderColor: error ? RED : active ? color : healthy ? GREEN : "var(--color-border)",
 -        boxShadow: error
@@ -806,8 +812,11 @@ index 2324d93d8..aa07d55b5 100644
 +        // lights a node up, matching 9Router's calm-at-rest map. Without this, every
 +        // configured provider glowed green at rest and the map carried no signal.
 +        borderColor: error ? RED : active ? color : "var(--color-border)",
-+        boxShadow: error ? `0 0 10px ${RED}26` : active ? `0 0 10px ${color}26` : "none",
-+        minWidth: "128px",
++        // Glow lifted from 10px/15% to 13px/26% so an active or failing node still reads once
++        // fitView scales the ring down. Short of 9Router's 16px/40%, which bleeds into
++        // neighbouring nodes at the tighter spacing used here.
++        boxShadow: error ? `0 0 13px ${RED}33` : active ? `0 0 13px ${color}33` : "none",
++        minWidth: "138px",
        }}
      >
        <Handle
@@ -839,8 +848,13 @@ index 2324d93d8..aa07d55b5 100644
 +        className="topology-connector-handle"
        />
  
++      {/* 28px tile holding an 18px logo — one step up from 24px/16px, where the logo was the
++          smallest thing on the map despite being what an operator scans for. Not 9Router's
++          32px/20px: that belongs to its chunkier node and would push this one wider than the
++          ring spacing allows. */}
        <div
-         className="size-6 rounded flex items-center justify-center shrink-0"
+-        className="size-6 rounded flex items-center justify-center shrink-0"
++        className="size-7 rounded-md flex items-center justify-center shrink-0"
          style={{ backgroundColor: `${color}18` }}
        >
 -        <ProviderIcon providerId={providerId} size={16} type="color" />
@@ -859,7 +873,7 @@ index 2324d93d8..aa07d55b5 100644
 +          providerId={providerId}
 +          src={iconUrl}
 +          alt={label}
-+          size={16}
++          size={18}
 +          type="color"
 +          fallbackText={textIcon}
 +          fallbackColor={color}
@@ -868,7 +882,11 @@ index 2324d93d8..aa07d55b5 100644
        </div>
  
        <span
-         className="text-xs font-medium truncate flex-1"
+-        className="text-xs font-medium truncate flex-1"
++        // 14px: one step up from the previous 12px, which was the smallest text on the
++        // dashboard and is the label an operator reads to identify a node. Short of
++        // 9Router's 16px, which would widen every node enough to crowd the ring.
++        className="text-sm font-medium truncate flex-1"
          style={{
 -          color: active ? color : error ? RED : healthy ? GREEN : "var(--color-text-main)",
 +          color: active ? color : error ? RED : "var(--color-text-main)",
@@ -884,7 +902,7 @@ index 2324d93d8..aa07d55b5 100644
        )}
      </div>
    );
-@@ -122,39 +177,53 @@ function ProviderNode({ data }: { data: ProviderNodeData }) {
+@@ -122,39 +193,53 @@ function ProviderNode({ data }: { data: ProviderNodeData }) {
  type RouterNodeData = { activeCount: number };
  
  function RouterNode({ data }: { data: RouterNodeData }) {
@@ -949,7 +967,7 @@ index 2324d93d8..aa07d55b5 100644
            {data.activeCount}
          </span>
        )}
-@@ -167,19 +236,33 @@ const nodeTypes: NodeTypes = {
+@@ -167,19 +252,33 @@ const nodeTypes: NodeTypes = {
    router: RouterNode as any,
  };
  
@@ -995,12 +1013,20 @@ index 2324d93d8..aa07d55b5 100644
  
  function buildLayout(
    providers: ProviderEntry[],
-@@ -189,8 +272,12 @@ function buildLayout(
+@@ -187,10 +286,18 @@ function buildLayout(
+   lastSet: Set<string>,
+   errorSet: Set<string>
  ): { nodes: Node[]; edges: Edge[] } {
-   const nodeW = 156;
-   const nodeH = 28;
+-  const nodeW = 156;
+-  const nodeH = 28;
 -  const routerW = 148;
 -  const routerH = 44;
++  // Must track ProviderNode's rendered box: minWidth 138 plus label growth, and a height of
++  // py-2 (16) + border-2 (4) + the 28px icon tile. Like routerW/routerH these values only
++  // recentre a node (`x: cx - nodeW / 2`), so a stale number offsets every node from its own
++  // ring slot — the previous 28 was already short of the real box height.
++  const nodeW = 164;
++  const nodeH = 48;
 +  // Must match RouterNode's rendered box (h-12 w-24). The core is a landscape rectangle, not
 +  // a square: the logo and the in-flight counter sit side by side on one row. Keep these in
 +  // sync with the Tailwind classes — the value only recentres the node (`-routerW / 2`), it
@@ -1010,7 +1036,7 @@ index 2324d93d8..aa07d55b5 100644
  
    const nodes: Node[] = [];
    const edges: Edge[] = [];
-@@ -205,78 +292,78 @@ function buildLayout(
+@@ -205,78 +312,78 @@ function buildLayout(
  
    if (providers.length === 0) return { nodes, edges };
  
@@ -1161,7 +1187,7 @@ index 2324d93d8..aa07d55b5 100644
    }
  
    return { nodes, edges };
-@@ -286,14 +373,23 @@ type Props = {
+@@ -286,14 +393,23 @@ type Props = {
    providers?: ProviderEntry[];
    activeRequests?: Array<{ provider?: string; model?: string }>;
    lastProvider?: string;
@@ -1187,7 +1213,7 @@ index 2324d93d8..aa07d55b5 100644
  }: Props) {
    const t = useTranslations("common");
    const activeKey = useMemo(
-@@ -306,17 +402,51 @@ export default function ProviderTopology({
+@@ -306,17 +422,51 @@ export default function ProviderTopology({
      [activeRequests]
    );
    const lastKey = lastProvider.toLowerCase();
@@ -1241,7 +1267,7 @@ index 2324d93d8..aa07d55b5 100644
      // eslint-disable-next-line react-hooks/exhaustive-deps
      [providers, activeSet, lastKey, errorKey]
    );
-@@ -330,8 +460,19 @@ export default function ProviderTopology({
+@@ -330,8 +480,19 @@ export default function ProviderTopology({
      [providers]
    );
  
@@ -1262,7 +1288,7 @@ index 2324d93d8..aa07d55b5 100644
  
    if (providers.length === 0) {
      return (
-@@ -349,6 +490,7 @@ export default function ProviderTopology({
+@@ -349,6 +510,7 @@ export default function ProviderTopology({
        nodes={nodes}
        edges={edges}
        nodeTypes={nodeTypes}
@@ -3219,10 +3245,10 @@ index 1c0e2bffb..313fdca35 100644
      providerTopologySrc,
 diff --git a/tests/unit/home-topology-core-and-error-ttl.test.ts b/tests/unit/home-topology-core-and-error-ttl.test.ts
 new file mode 100644
-index 000000000..cc88f3286
+index 000000000..6dc8cea99
 --- /dev/null
 +++ b/tests/unit/home-topology-core-and-error-ttl.test.ts
-@@ -0,0 +1,245 @@
+@@ -0,0 +1,290 @@
 +// Round-two coverage for the live /home topology, after an operator looked at the deployed
 +// map and reported: the router core is an ugly square, the in-flight count hangs off its
 +// corner instead of sitting next to the logo, the whole diagram is shrunk, and a red error
@@ -3425,6 +3451,51 @@ index 000000000..cc88f3286
 +      /"h-\[320px\] w-full min-w-0 rounded-xl border border-border bg-transparent overflow-hidden sm:h-\[480px\]"/,
 +      "frame height must match 9Router's topology tile"
 +    );
++  });
++});
++
++describe("provider nodes are legible without being bulky", () => {
++  // The ring floor grew to 320x200 while the nodes kept their original padding, 1px border,
++  // 24px icon tile and 12px label — so they read as specks inside a much larger ring. Nothing
++  // guarded node size, which is why the regression shipped unnoticed.
++  test("node chrome is one step up from the shrunken version", () => {
++    assert.match(
++      topologySrc,
++      /className="flex items-center gap-2 px-3 py-2 rounded-lg border-2 transition-all duration-300 bg-bg"/,
++      "provider node must use the padded, 2px-border box"
++    );
++    assert.doesNotMatch(
++      topologySrc,
++      /gap-2 px-2\.5 py-1\.5 rounded-lg border transition/,
++      "the cramped 1px-border node must be gone"
++    );
++  });
++
++  test("icon tile and logo are sized to be scannable", () => {
++    assert.match(topologySrc, /className="size-7 rounded-md flex items-center justify-center shrink-0"/);
++    assert.match(topologySrc, /size=\{18\}/, "the provider logo must be 18px");
++    assert.doesNotMatch(topologySrc, /className="size-6 rounded flex/, "the 24px tile must be gone");
++  });
++
++  test("the label is no longer the smallest text on the dashboard", () => {
++    assert.match(topologySrc, /className="text-sm font-medium truncate flex-1"/);
++    assert.doesNotMatch(topologySrc, /className="text-xs font-medium truncate flex-1"/);
++  });
++
++  test("it stops short of 9Router's chunkier node rather than copying it", () => {
++    // "Too small" was the complaint; matching 9Router's px-4 py-2.5 / 150px / 32px tile /
++    // 16px label wholesale would overcorrect into "too big" and crowd the ring.
++    assert.doesNotMatch(topologySrc, /px-4 py-2\.5 rounded-lg border-2/);
++    assert.match(topologySrc, /minWidth: "138px"/, "width floor sits between 128 and 150");
++    assert.doesNotMatch(topologySrc, /minWidth: "150px"/);
++  });
++
++  test("buildLayout's node box matches what the node actually renders", () => {
++    // nodeW/nodeH only recentre a node (`x: cx - nodeW / 2`), so a stale value offsets every
++    // node from its own ring slot. The old nodeH of 28 was already short of the real height.
++    assert.match(topologySrc, /const nodeW = 164;/);
++    assert.match(topologySrc, /const nodeH = 48;/, "py-2 (16) + border-2 (4) + 28px tile = 48");
++    assert.doesNotMatch(topologySrc, /const nodeH = 28;/);
 +  });
 +});
 +
