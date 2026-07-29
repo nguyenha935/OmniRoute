@@ -681,7 +681,7 @@ index 000000000..abe6f57ed
 +  );
 +}
 diff --git a/src/app/(dashboard)/home/ProviderTopology.tsx b/src/app/(dashboard)/home/ProviderTopology.tsx
-index 2324d93d8..e49bbecba 100644
+index 2324d93d8..aa07d55b5 100644
 --- a/src/app/(dashboard)/home/ProviderTopology.tsx
 +++ b/src/app/(dashboard)/home/ProviderTopology.tsx
 @@ -2,24 +2,60 @@
@@ -884,7 +884,7 @@ index 2324d93d8..e49bbecba 100644
        )}
      </div>
    );
-@@ -122,42 +177,56 @@ function ProviderNode({ data }: { data: ProviderNodeData }) {
+@@ -122,39 +177,53 @@ function ProviderNode({ data }: { data: ProviderNodeData }) {
  type RouterNodeData = { activeCount: number };
  
  function RouterNode({ data }: { data: RouterNodeData }) {
@@ -931,30 +931,24 @@ index 2324d93d8..e49bbecba 100644
 -      <span className="text-sm font-bold text-primary">OmniRoute</span>
 -      {data.activeCount > 0 && (
 -        <span className="ml-1 px-1.5 py-0.5 rounded-full bg-primary text-white text-[10px] font-bold leading-none">
--          {data.activeCount}
--        </span>
--      )}
 +      <OmniRouteLogo size={24} className={`text-primary${active ? " topology-router-icon" : ""}`} />
-+      {/* The in-flight counter sits INSIDE the core, to the right of the logo, rather than
-+       * hanging off the top-right corner as an absolute badge.
++      {/* In-flight counter — rendered ONLY while something is routing, exactly like 9Router
++       * (its RouterNode: `{data.activeCount > 0 && <span …>{data.activeCount}</span>}`).
 +       *
-+       * It also always occupies its slot — muted "0" at rest, filled when routing. That is a
-+       * geometry requirement, not a style choice: React Flow positions a node by its TOP-LEFT
-+       * corner (`position: { x: -routerW / 2 }` in buildLayout), so a counter that appears and
-+       * disappears changes the core's rendered width and slides it off the ring's centre every
-+       * time a call starts or ends. Reserving the slot keeps the core centred. */}
-+      <span
-+        className={`topology-router-count flex h-5 min-w-[20px] items-center justify-center rounded-full px-1.5 text-[10px] font-bold leading-none tabular-nums transition-colors duration-300${
-+          active
-+            ? " topology-router-badge bg-primary text-white"
-+            : " bg-primary/10 text-text-muted"
-+        }`}
-+      >
-+        {data.activeCount}
-+      </span>
-     </div>
-   );
- }
++       * The BOX is the fixed thing here, not this counter. The core is `h-12 w-24` with
++       * `justify-center`, so its width never changes and React Flow's top-left positioning
++       * (`x: -routerW / 2`) keeps it centred on the ring no matter what is inside. The
++       * contents re-centre themselves within that fixed box when the counter appears.
++       *
++       * An earlier revision reserved a permanent slot for the counter instead, which forced a
++       * literal "0" to sit next to the logo at all times — noise at rest, and it crowded the
++       * logo badly. Reserving space is only necessary when the CONTAINER is sized by its
++       * content; it is not, so there is nothing to reserve. */}
++      {active && (
++        <span className="topology-router-badge flex h-5 min-w-[20px] items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-bold leading-none text-white tabular-nums">
+           {data.activeCount}
+         </span>
+       )}
 @@ -167,19 +236,33 @@ const nodeTypes: NodeTypes = {
    router: RouterNode as any,
  };
@@ -3225,10 +3219,10 @@ index 1c0e2bffb..313fdca35 100644
      providerTopologySrc,
 diff --git a/tests/unit/home-topology-core-and-error-ttl.test.ts b/tests/unit/home-topology-core-and-error-ttl.test.ts
 new file mode 100644
-index 000000000..f54eb2b6f
+index 000000000..cc88f3286
 --- /dev/null
 +++ b/tests/unit/home-topology-core-and-error-ttl.test.ts
-@@ -0,0 +1,224 @@
+@@ -0,0 +1,245 @@
 +// Round-two coverage for the live /home topology, after an operator looked at the deployed
 +// map and reported: the router core is an ugly square, the in-flight count hangs off its
 +// corner instead of sitting next to the logo, the whole diagram is shrunk, and a red error
@@ -3283,7 +3277,7 @@ index 000000000..f54eb2b6f
 +  test("the counter is inline, not an absolutely positioned corner badge", () => {
 +    assert.match(
 +      topologySrc,
-+      /<span\s+className=\{`topology-router-count flex h-5 min-w-\[20px\]/,
++      /<span className="topology-router-badge flex h-5 min-w-\[20px\]/,
 +      "the count must be a normal flex child next to the logo"
 +    );
 +    assert.doesNotMatch(
@@ -3293,25 +3287,46 @@ index 000000000..f54eb2b6f
 +    );
 +  });
 +
-+  test("the counter keeps its slot when idle so the core cannot shift", () => {
-+    // Rendering the count only while active changes the core's width the instant a call
-+    // starts, and React Flow positions by the top-left corner — so the core would visibly
-+    // jump off centre on every request. The slot is reserved and only its styling changes.
-+    assert.doesNotMatch(
-+      topologySrc,
-+      /\{active && \(\s*<span className="topology-router-badge/,
-+      "the counter must not be conditionally mounted"
-+    );
-+    // Positive anchor: the active/idle distinction is carried by classes on one element.
++  test("the counter appears only while routing — no idle zero beside the logo", () => {
++    // Matches 9Router, whose RouterNode renders `{data.activeCount > 0 && <span …>}`.
 +    assert.match(
 +      topologySrc,
-+      /active\s*\?\s*" topology-router-badge bg-primary text-white"\s*:\s*" bg-primary\/10 text-text-muted"/,
-+      "idle vs routing must be a class swap on the always-present counter"
++      /\{active && \(\s*\n\s*<span className="topology-router-badge/,
++      "the counter must be conditionally mounted on active traffic"
++    );
++    // A permanent slot holding a literal "0" was the wrong fix: it put a dead number against
++    // the logo at all times and crowded it. Guard the exact idle-styling that revision used
++    // so it cannot come back.
++    assert.doesNotMatch(
++      topologySrc,
++      /bg-primary\/10 text-text-muted/,
++      "there must be no muted resting state for the counter — it simply is not rendered"
++    );
++    assert.doesNotMatch(
++      topologySrc,
++      /topology-router-count/,
++      "the reserved-slot marker class must be gone"
++    );
++  });
++
++  test("the BOX is what stays fixed, so mounting the counter cannot move the core", () => {
++    // This is why no slot needs reserving: the container is a fixed h-12 w-24 with
++    // justify-center, so its width is independent of its contents and React Flow's
++    // top-left positioning keeps it centred. The contents re-centre inside it.
++    assert.match(
++      topologySrc,
++      /flex h-12 w-24 items-center justify-center gap-2 rounded-xl/,
++      "the core must be a fixed-size, content-centring box"
++    );
++    assert.doesNotMatch(
++      topologySrc,
++      /min-w-\[\d+px\] h-12|w-auto|max-w-\[/,
++      "the core must not be sized by its content"
 +    );
 +    assert.match(
 +      topologySrc,
 +      /tabular-nums/,
-+      "digits must be tabular so 1 -> 2 cannot change the counter's width either"
++      "digits stay tabular so 9 -> 10 does not reflow the row"
 +    );
 +  });
 +});
