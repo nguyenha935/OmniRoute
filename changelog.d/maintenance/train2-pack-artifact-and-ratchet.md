@@ -1,0 +1,1 @@
+- chore(quality): align the pack-artifact expected-path fixture with the Android/Termux cache module added in #8593, and re-pin the `chatCore.ts` ceiling grown by the merge-train 2 batch

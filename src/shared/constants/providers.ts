@@ -438,7 +438,6 @@ export const USAGE_SUPPORTED_PROVIDERS = [
   "nanogpt",
   "deepseek",
   "xiaomi-mimo",
-  "xiaomi-mimo-token-plan",
   "vertex",
   "vertex-partner",
   "codebuddy-cn",

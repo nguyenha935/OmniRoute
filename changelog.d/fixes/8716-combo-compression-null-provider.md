@@ -1,0 +1,1 @@
+- **fix(sse):** combo compression-limit resolution falls back to `ResolvedComboTarget.provider` when `modelStr` lacks a `provider/` prefix, so `getTokenLimit` no longer crashes with `null.toUpperCase()` (#8716) — thanks @DinonowDev

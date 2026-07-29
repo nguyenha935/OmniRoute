@@ -1,0 +1,1 @@
+- **fix(client):** Absolute `fetch("/api/...")` and `EventSource("/api/...")` honor `OMNIROUTE_BASE_PATH` under reverse-proxy subpath deploys (no domain-root 404s for dashboard health/SSE) ([#8515](https://github.com/diegosouzapw/OmniRoute/pull/8515)) — thanks @rqzbeh

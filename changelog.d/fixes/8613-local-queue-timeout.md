@@ -1,0 +1,1 @@
+- **fix(resilience):** report local request-queue expirations as service-unavailable capacity failures instead of upstream 502 errors, preventing incorrect provider cooldowns and same-target retries ([#8613](https://github.com/diegosouzapw/OmniRoute/pull/8613)).

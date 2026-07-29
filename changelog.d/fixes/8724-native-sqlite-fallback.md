@@ -1,0 +1,1 @@
+- **fix(db):** fall back to Node's built-in SQLite driver when better-sqlite3 is unavailable, while preserving read-only and existing-file safeguards

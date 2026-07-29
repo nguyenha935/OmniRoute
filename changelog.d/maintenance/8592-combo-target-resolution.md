@@ -1,0 +1,1 @@
+- **refactor(sse):** extract combo target resolution into `combo/targetResolution.ts` (`resolveComboTargetPipeline`) — pure move, no behaviour change; #3501 PR 2 of ~7 ([#8592](https://github.com/diegosouzapw/OmniRoute/pull/8592)) — thanks @MumuTW

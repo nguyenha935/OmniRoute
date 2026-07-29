@@ -1,7 +1,6 @@
 // @ts-nocheck
 import { PROVIDERS } from "../config/constants.ts";
 import { getRegistryEntry } from "../config/providerRegistry.ts";
-import { resolveAlternateFormat } from "../config/providers/alternateFormats.ts";
 import {
   buildClaudeCodeCompatibleHeaders,
   CLAUDE_CODE_COMPATIBLE_DEFAULT_CHAT_PATH,
@@ -438,13 +437,7 @@ export function getTargetFormat(provider, providerSpecificData = null) {
   }
   // Registry-driven format lookup
   const entry = getRegistryEntry(provider);
-  if (entry) {
-    // Per-connection override (providerSpecificData.targetFormat), only valid
-    // when it matches an alternate declared by the provider.
-    const alternate = resolveAlternateFormat(entry, providerSpecificData);
-    if (alternate) return alternate.format;
-    return entry.format || "openai";
-  }
+  if (entry) return entry.format || "openai";
   const config = getProviderConfig(provider);
   return config.format || "openai";
 }

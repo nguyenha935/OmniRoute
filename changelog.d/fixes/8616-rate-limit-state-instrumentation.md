@@ -1,0 +1,1 @@
+- **fix(resilience):** recover a wedged local request limiter after an idle-capacity queue expiry by retrying the request on a fresh limiter ([#8616](https://github.com/diegosouzapw/OmniRoute/pull/8616)).

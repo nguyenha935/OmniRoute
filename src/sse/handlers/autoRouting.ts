@@ -10,17 +10,13 @@ import {
   type AutoCategory,
   type AutoTier,
 } from "@omniroute/open-sse/services/autoCombo/suffixComposition.ts";
-import {
-  isValidModelFamily,
-  type ModelFamily,
-} from "@omniroute/open-sse/services/autoCombo/modelFamily.ts";
 import { getCachedSettings } from "@/lib/localDb";
 import * as log from "../utils/logger";
 
 export type AutoRoutingState = {
   model: string;
   variant?: AutoVariant;
-  spec?: { category?: AutoCategory; tier?: AutoTier; family?: ModelFamily };
+  spec?: { category?: AutoCategory; tier?: AutoTier };
   isAutoRouting: boolean;
   recognizedBuiltInAuto: boolean;
   response: Response | null;
@@ -41,19 +37,12 @@ function classifyAutoModel(
     return { recognizedBuiltInAuto: true };
   }
   const parsedSuffix = parseAutoSuffix(suffix);
-  if (parsedSuffix.valid) {
-    return {
-      recognizedBuiltInAuto: true,
-      spec: { category: parsedSuffix.category, tier: parsedSuffix.tier },
-    };
-  }
-  if (isValidModelFamily(suffix)) {
-    return {
-      recognizedBuiltInAuto: true,
-      spec: { family: suffix as ModelFamily },
-    };
-  }
-  return { recognizedBuiltInAuto };
+  return parsedSuffix.valid
+    ? {
+        recognizedBuiltInAuto: true,
+        spec: { category: parsedSuffix.category, tier: parsedSuffix.tier },
+      }
+    : { recognizedBuiltInAuto };
 }
 
 async function applyAutoPrefix(

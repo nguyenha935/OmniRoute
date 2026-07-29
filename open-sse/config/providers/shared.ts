@@ -176,12 +176,6 @@ export interface RegistryEntry {
    * standard OpenAI array-shaped content untouched (see openai-responses.ts).
    */
   requiresPlainStringContent?: boolean;
-  /**
-   * Protocolos alternativos que este provedor aceita (ex.: um endpoint
-   * Anthropic-compatible alem do OpenAI-compatible padrao). A conexao escolhe
-   * via providerSpecificData.targetFormat; ver config/providers/alternateFormats.ts.
-   */
-  alternateFormats?: import("./alternateFormats.ts").AlternateFormat[];
 }
 
 /**
@@ -253,7 +247,7 @@ export const GPT_5_6_API_CAPABILITIES = {
   maxOutputTokens: 128000,
 } as const;
 
-// Codex's live catalog reports a 272K input context window for GPT-5.6.
+// Codex's live catalog reports a 372K context window for GPT-5.6.
 // Keep the input and output limits explicit for catalog consumers that expose them separately.
 export const GPT_5_6_CODEX_CAPABILITIES = {
   targetFormat: "openai-responses",
@@ -261,8 +255,8 @@ export const GPT_5_6_CODEX_CAPABILITIES = {
   supportsReasoning: true,
   supportsVision: true,
   supportsXHighEffort: true,
-  contextLength: 272000,
-  maxInputTokens: 272000,
+  contextLength: 372000,
+  maxInputTokens: 372000,
   maxOutputTokens: 128000,
 } as const;
 
@@ -406,10 +400,6 @@ export const CHAT_OPENAI_COMPAT_MODELS: Record<string, RegistryModel[]> = {
   upstage: buildModels(["solar-pro3", "solar-mini"]),
   maritalk: buildModels(["sabia-4", "sabia-4-thinking", "sabiazinho-4"]),
   "xiaomi-mimo": [
-    { id: "mimo-v2.5-pro", name: "MiMo-V2.5-Pro", contextLength: 1048576, maxOutputTokens: 131072 },
-    { id: "mimo-v2.5", name: "MiMo-V2.5", contextLength: 1048576, maxOutputTokens: 131072 },
-  ],
-  "xiaomi-mimo-token-plan": [
     { id: "mimo-v2.5-pro", name: "MiMo-V2.5-Pro", contextLength: 1048576, maxOutputTokens: 131072 },
     { id: "mimo-v2.5", name: "MiMo-V2.5", contextLength: 1048576, maxOutputTokens: 131072 },
   ],
