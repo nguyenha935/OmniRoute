@@ -313,17 +313,21 @@ index 24cec3140..6ba5ec747 100644
          />
        )}
 diff --git a/src/app/(dashboard)/dashboard/HomeProviderTopologySection.tsx b/src/app/(dashboard)/dashboard/HomeProviderTopologySection.tsx
-index 034088e7b..780792277 100644
+index 034088e7b..57b801183 100644
 --- a/src/app/(dashboard)/dashboard/HomeProviderTopologySection.tsx
 +++ b/src/app/(dashboard)/dashboard/HomeProviderTopologySection.tsx
-@@ -3,16 +3,27 @@
+@@ -3,16 +3,31 @@
  import { useTranslations } from "next-intl";
  import dynamic from "next/dynamic";
  
 -import { Card } from "@/shared/components";
  import { useLiveRequests } from "@/hooks/useLiveDashboard";
 -import { selectActiveRequests } from "../home/topologyUtils";
-+import { selectActiveRequests, selectDrawnErrorProviders } from "../home/topologyUtils";
++import {
++  selectActiveRequests,
++  selectDrawnErrorProviders,
++  selectDrawnProviders,
++} from "../home/topologyUtils";
  
  const ProviderTopology = dynamic(() => import("../home/ProviderTopology"), { ssr: false });
 +const HomeRecentRequests = dynamic(() => import("../home/HomeRecentRequests"), { ssr: false });
@@ -346,7 +350,7 @@ index 034088e7b..780792277 100644
    /** Connection-health base state, so the topology can colour a node at rest. */
    status?: "active" | "error" | "idle";
  };
-@@ -20,12 +31,13 @@ type TopologyProvider = {
+@@ -20,12 +35,13 @@ type TopologyProvider = {
  export function HomeProviderTopologySection({
    providers,
    lastProvider,
@@ -362,34 +366,35 @@ index 034088e7b..780792277 100644
    enabled?: boolean;
  }) {
    const t = useTranslations("home");
-@@ -36,15 +48,46 @@ export function HomeProviderTopologySection({
+@@ -35,16 +51,46 @@ export function HomeProviderTopologySection({
+   // #4596: gate the live-WS connection so it only opens while the topology
    // section is actually shown on the home page.
    const { activeRequests: liveActiveRequests } = useLiveRequests({ enabled });
-   const activeRequests = selectActiveRequests(liveActiveRequests);
+-  const activeRequests = selectActiveRequests(liveActiveRequests);
 -  const activeProviderCount = new Set(activeRequests.map(({ provider }) => provider)).size;
- 
-+  // Both counters must describe THE GRAPH BELOW, or the caption contradicts the picture.
-+  //
-+  // The active count is keyed the same way the nodes are (lowercased provider id), because
-+  // the WS feed reports whatever casing the request carried while nodes are drawn from
-+  // normalized ids — counting raw strings let a provider inflate "active" without any node
-+  // lighting up.
-+  const activeProviderCount = new Set(
-+    activeRequests
-+      .map(({ provider }) => (typeof provider === "string" ? provider.trim().toLowerCase() : ""))
-+      .filter(Boolean)
-+  ).size;
++  const reportedActiveRequests = selectActiveRequests(liveActiveRequests);
++  const drawnProviderIds = providers.map((provider) => provider.provider);
++  const drawnActiveProviders = selectDrawnProviders(
++    reportedActiveRequests.map(({ provider }) => provider),
++    drawnProviderIds
++  );
++  const activeRequests = reportedActiveRequests.filter(({ provider }) =>
++    drawnActiveProviders.has(provider.trim().toLowerCase())
++  );
 +
++  // Every active surface must describe THE GRAPH BELOW, or the caption/router contradicts
++  // the picture. The WS feed is broader than the ring and reports whatever casing the request
++  // carried, so filter the request list itself through the normalized drawn-provider set before
++  // it reaches ProviderTopology. The caption and router count then derive from that same set.
++  const activeProviderCount = drawnActiveProviders.size;
+ 
 +  // The error count was `errorProvider ? 1 : 0` — a boolean coerced to a number, so it
 +  // could never report more than one failing provider no matter how many were broken.
 +  // Intersecting with the drawn providers also removes the opposite mismatch: the metrics
 +  // source aggregates all-time request logs with no connection check, so a provider whose
 +  // connection was disabled or deleted used to contribute an error with no red node to
 +  // explain it.
-+  const errorProviderCount = selectDrawnErrorProviders(
-+    errorProviders,
-+    providers.map((provider) => provider.provider)
-+  ).size;
++  const errorProviderCount = selectDrawnErrorProviders(errorProviders, drawnProviderIds).size;
 +
 +  // The whole section is ONE bordered block (border + rounded + padding) so header,
 +  // diagram and Recent Requests read as a single component — but the block's background
@@ -412,7 +417,7 @@ index 034088e7b..780792277 100644
            </p>
          </div>
          <div className="flex items-center gap-3 text-[11px] text-text-muted">
-@@ -62,12 +105,15 @@ export function HomeProviderTopologySection({
+@@ -62,12 +108,15 @@ export function HomeProviderTopologySection({
            </span>
          </div>
        </div>
@@ -681,10 +686,10 @@ index 000000000..abe6f57ed
 +  );
 +}
 diff --git a/src/app/(dashboard)/home/ProviderTopology.tsx b/src/app/(dashboard)/home/ProviderTopology.tsx
-index 2324d93d8..f2026ad4c 100644
+index 2324d93d8..4e3066e93 100644
 --- a/src/app/(dashboard)/home/ProviderTopology.tsx
 +++ b/src/app/(dashboard)/home/ProviderTopology.tsx
-@@ -2,24 +2,60 @@
+@@ -2,24 +2,64 @@
  
  import { useMemo } from "react";
  import { useTranslations } from "next-intl";
@@ -717,7 +722,11 @@ index 2324d93d8..f2026ad4c 100644
 -  [32, 850, 536],
 -  [38, 1010, 637],
 -];
-+import { compareTopologyProviders, selectDrawnErrorProviders } from "./topologyUtils";
++import {
++  compareTopologyProviders,
++  selectDrawnErrorProviders,
++  selectDrawnProviders,
++} from "./topologyUtils";
 +
 +// ONE ring whose radius grows with the provider count — never a second ring.
 +//
@@ -756,7 +765,7 @@ index 2324d93d8..f2026ad4c 100644
  
  type ProviderConfig = { color?: string; name?: string; textIcon?: string };
  
-@@ -39,81 +75,116 @@ type ProviderNodeData = {
+@@ -39,81 +79,115 @@ type ProviderNodeData = {
    label: string;
    color: string;
    providerId: string;
@@ -796,7 +805,7 @@ index 2324d93d8..f2026ad4c 100644
 +      // and copying it wholesale overcorrects a "too small" complaint into "too big". The
 +      // border does go to 2px because a hairline washes out under the fitView downscale a
 +      // crowded ring settles into — that is legibility, not bulk.
-+      className="flex items-center gap-2 px-3 py-2 rounded-lg border-2 transition-all duration-300 bg-bg"
++      className="flex w-[164px] items-center gap-2 rounded-lg border-2 bg-bg px-3 py-2 transition-all duration-300"
        style={{
 -        borderColor: error ? RED : active ? color : healthy ? GREEN : "var(--color-border)",
 -        boxShadow: error
@@ -816,7 +825,6 @@ index 2324d93d8..f2026ad4c 100644
 +        // fitView scales the ring down. Short of 9Router's 16px/40%, which bleeds into
 +        // neighbouring nodes at the tighter spacing used here.
 +        boxShadow: error ? `0 0 13px ${RED}33` : active ? `0 0 13px ${color}33` : "none",
-+        minWidth: "138px",
        }}
      >
        <Handle
@@ -886,7 +894,7 @@ index 2324d93d8..f2026ad4c 100644
 +        // 14px: one step up from the previous 12px, which was the smallest text on the
 +        // dashboard and is the label an operator reads to identify a node. Short of
 +        // 9Router's 16px, which would widen every node enough to crowd the ring.
-+        className="text-sm font-medium truncate flex-1"
++        className="min-w-0 flex-1 truncate text-sm font-medium"
          style={{
 -          color: active ? color : error ? RED : healthy ? GREEN : "var(--color-text-main)",
 +          color: active ? color : error ? RED : "var(--color-text-main)",
@@ -902,7 +910,7 @@ index 2324d93d8..f2026ad4c 100644
        )}
      </div>
    );
-@@ -122,39 +193,53 @@ function ProviderNode({ data }: { data: ProviderNodeData }) {
+@@ -122,39 +196,53 @@ function ProviderNode({ data }: { data: ProviderNodeData }) {
  type RouterNodeData = { activeCount: number };
  
  function RouterNode({ data }: { data: RouterNodeData }) {
@@ -967,7 +975,7 @@ index 2324d93d8..f2026ad4c 100644
            {data.activeCount}
          </span>
        )}
-@@ -167,19 +252,33 @@ const nodeTypes: NodeTypes = {
+@@ -167,19 +255,33 @@ const nodeTypes: NodeTypes = {
    router: RouterNode as any,
  };
  
@@ -1013,7 +1021,7 @@ index 2324d93d8..f2026ad4c 100644
  
  function buildLayout(
    providers: ProviderEntry[],
-@@ -187,10 +286,18 @@ function buildLayout(
+@@ -187,10 +289,19 @@ function buildLayout(
    lastSet: Set<string>,
    errorSet: Set<string>
  ): { nodes: Node[]; edges: Edge[] } {
@@ -1021,10 +1029,11 @@ index 2324d93d8..f2026ad4c 100644
 -  const nodeH = 28;
 -  const routerW = 148;
 -  const routerH = 44;
-+  // Must track ProviderNode's rendered box: minWidth 138 plus label growth, and a height of
-+  // py-2 (16) + border-2 (4) + the 28px icon tile. Like routerW/routerH these values only
-+  // recentre a node (`x: cx - nodeW / 2`), so a stale number offsets every node from its own
-+  // ring slot — the previous 28 was already short of the real box height.
++  // Must track ProviderNode's rendered fixed `w-[164px]` border box and its height of py-2
++  // (16) + border-2 (4) + the 28px icon tile. The fixed width is part of the geometry contract:
++  // labels shrink/truncate inside it, so a long operator name cannot grow the box after React
++  // Flow has positioned it from `x: cx - nodeW / 2`. Like routerW/routerH these constants only
++  // recentre nodes; a stale number offsets every connector from its intended ring slot.
 +  const nodeW = 164;
 +  const nodeH = 48;
 +  // Must match RouterNode's rendered box (h-12 w-24). The core is a landscape rectangle, not
@@ -1036,7 +1045,7 @@ index 2324d93d8..f2026ad4c 100644
  
    const nodes: Node[] = [];
    const edges: Edge[] = [];
-@@ -205,78 +312,78 @@ function buildLayout(
+@@ -205,78 +316,78 @@ function buildLayout(
  
    if (providers.length === 0) return { nodes, edges };
  
@@ -1187,7 +1196,7 @@ index 2324d93d8..f2026ad4c 100644
    }
  
    return { nodes, edges };
-@@ -286,14 +393,23 @@ type Props = {
+@@ -286,37 +397,84 @@ type Props = {
    providers?: ProviderEntry[];
    activeRequests?: Array<{ provider?: string; model?: string }>;
    lastProvider?: string;
@@ -1212,9 +1221,22 @@ index 2324d93d8..f2026ad4c 100644
 +  errorProviders = [],
  }: Props) {
    const t = useTranslations("common");
++  // Keep every active surface on the same drawn-provider domain as the error state. The live
++  // feed can still contain a request for a disabled/deleted connection after its node has
++  // disappeared; such a request must not light the router or inflate its counter.
    const activeKey = useMemo(
-@@ -306,17 +422,51 @@ export default function ProviderTopology({
-     [activeRequests]
+     () =>
+-      activeRequests
+-        .map((r) => r.provider?.toLowerCase())
+-        .filter(Boolean)
++      [...selectDrawnProviders(
++        activeRequests.map((request) => request.provider || ""),
++        providers.map((provider) => provider.provider)
++      )]
+         .sort()
+         .join(","),
+-    [activeRequests]
++    [activeRequests, providers]
    );
    const lastKey = lastProvider.toLowerCase();
 -  const errorKey = errorProvider.toLowerCase();
@@ -1267,7 +1289,7 @@ index 2324d93d8..f2026ad4c 100644
      // eslint-disable-next-line react-hooks/exhaustive-deps
      [providers, activeSet, lastKey, errorKey]
    );
-@@ -330,8 +480,19 @@ export default function ProviderTopology({
+@@ -330,8 +488,19 @@ export default function ProviderTopology({
      [providers]
    );
  
@@ -1288,7 +1310,7 @@ index 2324d93d8..f2026ad4c 100644
  
    if (providers.length === 0) {
      return (
-@@ -349,6 +510,7 @@ export default function ProviderTopology({
+@@ -349,6 +518,7 @@ export default function ProviderTopology({
        nodes={nodes}
        edges={edges}
        nodeTypes={nodeTypes}
@@ -1332,7 +1354,7 @@ index 000000000..e388af953
 +    : { sourceHandle: "left", targetHandle: "right" };
 +}
 diff --git a/src/app/(dashboard)/home/topologyUtils.ts b/src/app/(dashboard)/home/topologyUtils.ts
-index ef731f72f..0629136c0 100644
+index ef731f72f..19d794dc3 100644
 --- a/src/app/(dashboard)/home/topologyUtils.ts
 +++ b/src/app/(dashboard)/home/topologyUtils.ts
 @@ -2,6 +2,7 @@
@@ -1343,7 +1365,7 @@ index ef731f72f..0629136c0 100644
  /** Minimal shape expected by <ProviderTopology activeRequests={...}> */
  export interface TopologyActiveRequest {
    provider: string;
-@@ -25,3 +26,129 @@ interface InFlightRequest {
+@@ -25,3 +26,145 @@ interface InFlightRequest {
  export function selectActiveRequests(requests: InFlightRequest[]): TopologyActiveRequest[] {
    return requests.map(({ provider, model }) => ({ provider, model }));
  }
@@ -1439,10 +1461,40 @@ index ef731f72f..0629136c0 100644
 +}
 +
 +/**
-+ * The failing providers that are actually DRAWN, lowercased for node-key comparison.
++ * Intersect a list of candidate provider ids with the providers actually DRAWN on the ring,
++ * lowercased/trimmed for node-key comparison. This is the single rule every derived topology
++ * signal obeys: a provider with no node cannot colour, count, or pulse anything, so an id
++ * that names no drawn node is dropped rather than inflating a number the picture can't back.
 + *
-+ * Two separate defects made the old single-scalar error state wrong, and both are fixed by
-+ * intersecting a full list with the drawn set:
++ * Both the active and the error signals arrive from sources broader than the graph — the WS
++ * feed reports any casing the request carried, and the metrics source aggregates all-time
++ * request logs with no connection check — so both must be filtered through the drawn set
++ * before they reach a count or a node highlight.
++ */
++export function selectDrawnProviders(
++  candidates: readonly string[] | null | undefined,
++  drawnProviders: readonly string[]
++): Set<string> {
++  const result = new Set<string>();
++  if (!Array.isArray(candidates) || candidates.length === 0) return result;
++
++  const drawn = new Set(
++    drawnProviders
++      .map((provider) => (typeof provider === "string" ? provider.trim().toLowerCase() : ""))
++      .filter(Boolean)
++  );
++  if (drawn.size === 0) return result;
++
++  for (const candidate of candidates) {
++    const key = typeof candidate === "string" ? candidate.trim().toLowerCase() : "";
++    if (key && drawn.has(key)) result.add(key);
++  }
++  return result;
++}
++
++/**
++ * The failing providers that are actually DRAWN — a thin alias over
++ * {@link selectDrawnProviders}, kept because the two defects it guards are error-specific:
 + *
 + *  - Only one provider could be flagged at a time (the API kept the max-timestamp winner),
 + *    so a second failure silently un-flagged the first, and that second provider
@@ -1457,21 +1509,7 @@ index ef731f72f..0629136c0 100644
 +  errorProviders: readonly string[] | null | undefined,
 +  drawnProviders: readonly string[]
 +): Set<string> {
-+  const result = new Set<string>();
-+  if (!Array.isArray(errorProviders) || errorProviders.length === 0) return result;
-+
-+  const drawn = new Set(
-+    drawnProviders
-+      .map((provider) => (typeof provider === "string" ? provider.trim().toLowerCase() : ""))
-+      .filter(Boolean)
-+  );
-+  if (drawn.size === 0) return result;
-+
-+  for (const candidate of errorProviders) {
-+    const key = typeof candidate === "string" ? candidate.trim().toLowerCase() : "";
-+    if (key && drawn.has(key)) result.add(key);
-+  }
-+  return result;
++  return selectDrawnProviders(errorProviders, drawnProviders);
 +}
 diff --git a/src/app/api/provider-metrics/route.ts b/src/app/api/provider-metrics/route.ts
 index 3b6e16a0a..d8de1d08e 100644
@@ -3245,10 +3283,10 @@ index 1c0e2bffb..313fdca35 100644
      providerTopologySrc,
 diff --git a/tests/unit/home-topology-core-and-error-ttl.test.ts b/tests/unit/home-topology-core-and-error-ttl.test.ts
 new file mode 100644
-index 000000000..6dc8cea99
+index 000000000..c5baf5088
 --- /dev/null
 +++ b/tests/unit/home-topology-core-and-error-ttl.test.ts
-@@ -0,0 +1,290 @@
+@@ -0,0 +1,291 @@
 +// Round-two coverage for the live /home topology, after an operator looked at the deployed
 +// map and reported: the router core is an ugly square, the in-flight count hangs off its
 +// corner instead of sitting next to the logo, the whole diagram is shrunk, and a red error
@@ -3461,8 +3499,8 @@ index 000000000..6dc8cea99
 +  test("node chrome is one step up from the shrunken version", () => {
 +    assert.match(
 +      topologySrc,
-+      /className="flex items-center gap-2 px-3 py-2 rounded-lg border-2 transition-all duration-300 bg-bg"/,
-+      "provider node must use the padded, 2px-border box"
++      /className="flex w-\[164px\] items-center gap-2 rounded-lg border-2 bg-bg px-3 py-2 transition-all duration-300"/,
++      "provider node must use the fixed-width, padded, 2px-border box"
 +    );
 +    assert.doesNotMatch(
 +      topologySrc,
@@ -3478,7 +3516,7 @@ index 000000000..6dc8cea99
 +  });
 +
 +  test("the label is no longer the smallest text on the dashboard", () => {
-+    assert.match(topologySrc, /className="text-sm font-medium truncate flex-1"/);
++    assert.match(topologySrc, /className="min-w-0 flex-1 truncate text-sm font-medium"/);
 +    assert.doesNotMatch(topologySrc, /className="text-xs font-medium truncate flex-1"/);
 +  });
 +
@@ -3486,7 +3524,8 @@ index 000000000..6dc8cea99
 +    // "Too small" was the complaint; matching 9Router's px-4 py-2.5 / 150px / 32px tile /
 +    // 16px label wholesale would overcorrect into "too big" and crowd the ring.
 +    assert.doesNotMatch(topologySrc, /px-4 py-2\.5 rounded-lg border-2/);
-+    assert.match(topologySrc, /minWidth: "138px"/, "width floor sits between 128 and 150");
++    assert.match(topologySrc, /w-\[164px\]/, "the node box is a fixed 164px border box");
++    assert.doesNotMatch(topologySrc, /minWidth: "138px"/, "the old growable floor must be gone");
 +    assert.doesNotMatch(topologySrc, /minWidth: "150px"/);
 +  });
 +
@@ -3536,6 +3575,139 @@ index 000000000..6dc8cea99
 +      ) < 0,
 +      true,
 +      "a ranked provider must precede an unranked one"
++    );
++  });
++});
+diff --git a/tests/unit/home-topology-drawn-active-and-node-width.test.ts b/tests/unit/home-topology-drawn-active-and-node-width.test.ts
+new file mode 100644
+index 000000000..a96110b11
+--- /dev/null
++++ b/tests/unit/home-topology-drawn-active-and-node-width.test.ts
+@@ -0,0 +1,127 @@
++// Post-deploy audit of the v3.8.50 home topology found two gaps the earlier rounds missed:
++//
++//  1. The active counters were not on the drawn-provider domain. `errorProviders` was already
++//     intersected with the providers that actually have a node, but `activeRequests` was not —
++//     a request for a disabled/deleted connection still lit the router core and inflated the
++//     "active" caption with no node to explain it.
++//  2. The provider node had a width FLOOR (`minWidth: 138px`) but no ceiling, and the label
++//     lacked `min-w-0`, so a long operator name grew the box past the `nodeW = 164` that
++//     buildLayout uses to centre it — the node drifted off its ring slot and its connectors
++//     no longer met the node edge.
++//
++// The structural properties are asserted against the source text (a unit render cannot see
++// CSS truncation or React Flow's top-left positioning), and the intersection rule is asserted
++// behaviourally through the pure helper.
++import test, { describe } from "node:test";
++import assert from "node:assert/strict";
++import { readFileSync } from "node:fs";
++import { fileURLToPath } from "node:url";
++
++import { selectDrawnProviders } from "../../src/app/(dashboard)/home/topologyUtils.ts";
++
++const read = (rel: string) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
++
++const topologySrc = read("../../src/app/(dashboard)/home/ProviderTopology.tsx");
++const sectionSrc = read("../../src/app/(dashboard)/dashboard/HomeProviderTopologySection.tsx");
++
++describe("active counters only count providers that have a drawn node", () => {
++  test("the caption counter intersects active requests with the drawn providers", () => {
++    // Was a raw `new Set(activeRequests.map(...)).size` — it counted any provider the WS feed
++    // reported, including one whose node had already disappeared.
++    assert.match(
++      sectionSrc,
++      /const drawnActiveProviders = selectDrawnProviders\(/,
++      "the active set must be filtered through the drawn-provider intersection"
++    );
++    assert.match(
++      sectionSrc,
++      /const activeProviderCount = drawnActiveProviders\.size;/,
++      "the caption must count the intersected set, not the raw request list"
++    );
++    assert.doesNotMatch(
++      sectionSrc,
++      /const activeProviderCount = new Set\(/,
++      "the raw request-list count must be gone"
++    );
++  });
++
++  test("the request list handed to the graph is already on the drawn domain", () => {
++    // Filtering the list itself (not just the count) keeps the node pulse and the router
++    // counter on the same set as the caption — they can never disagree about what is active.
++    assert.match(
++      sectionSrc,
++      /const activeRequests = reportedActiveRequests\.filter\(\(\{ provider \}\) =>\s*\n\s*drawnActiveProviders\.has\(provider\.trim\(\)\.toLowerCase\(\)\)\s*\n\s*\);/,
++      "only requests for drawn providers may reach ProviderTopology"
++    );
++  });
++
++  test("the router activeCount derives from the drawn-intersected active set", () => {
++    // activeKey feeds activeSet, which feeds buildLayout's `activeCount: activeSet.size`.
++    // Intersecting activeKey with the drawn providers is what keeps the core from lighting up
++    // for a provider with no node.
++    assert.match(
++      topologySrc,
++      /\[\.\.\.selectDrawnProviders\(\s*\n\s*activeRequests\.map\(\(request\) => request\.provider \|\| ""\),\s*\n\s*providers\.map\(\(provider\) => provider\.provider\)\s*\n\s*\)\]/,
++      "activeKey must be the drawn-provider intersection of activeRequests"
++    );
++    assert.match(
++      topologySrc,
++      /data: \{ activeCount: activeSet\.size \}/,
++      "the router counter must read the intersected set"
++    );
++  });
++
++  test("a request for an undrawn provider contributes nothing to the active set", () => {
++    const drawn = ["openai", "anthropic"];
++    const active = selectDrawnProviders(["openai", "ghost", "deleted-provider"], drawn);
++    assert.deepEqual([...active], ["openai"]);
++    assert.equal(active.has("ghost"), false);
++    assert.equal(active.has("deleted-provider"), false);
++    assert.equal(active.size, 1, "only the drawn provider counts as active");
++  });
++});
++
++describe("the provider node is a fixed 164px box that truncates long labels", () => {
++  test("the node box is a fixed width matching buildLayout's nodeW", () => {
++    // A floor (`minWidth`) let the box grow with its content; a fixed `w-[164px]` border box
++    // cannot. nodeW only recentres the node (`x: cx - nodeW / 2`), so the rendered width must
++    // equal it exactly or every connector drifts off the node edge.
++    assert.match(
++      topologySrc,
++      /className="flex w-\[164px\] items-center gap-2 rounded-lg border-2 bg-bg px-3 py-2 transition-all duration-300"/,
++      "the node must render a fixed 164px border box"
++    );
++    assert.match(topologySrc, /const nodeW = 164;/, "buildLayout must centre on the same width");
++    assert.doesNotMatch(
++      topologySrc,
++      /minWidth: "138px"/,
++      "the growable width floor must be gone, not kept alongside the fixed width"
++    );
++  });
++
++  test("the label can actually shrink, so truncate applies instead of growing the box", () => {
++    // A flex item defaults to `min-width: auto`, which refuses to shrink below its content —
++    // `truncate` alone does nothing without `min-w-0`. This is the exact mechanism that let a
++    // long name push the node wider than nodeW.
++    assert.match(
++      topologySrc,
++      /className="min-w-0 flex-1 truncate text-sm font-medium"/,
++      "the label must be a shrinkable, truncating flex child"
++    );
++    assert.doesNotMatch(
++      topologySrc,
++      /className="text-sm font-medium truncate flex-1"/,
++      "the non-shrinkable label class must be gone"
++    );
++  });
++
++  test("the icon tile and status dot cannot be squeezed by a long label", () => {
++    // Both are `shrink-0`, so a truncating label absorbs all the shrinkage and the node's
++    // internal layout stays stable at the fixed width.
++    assert.match(
++      topologySrc,
++      /className="size-7 rounded-md flex items-center justify-center shrink-0"/,
++      "the icon tile must not shrink"
 +    );
 +  });
 +});
@@ -3764,6 +3936,60 @@ index 000000000..32fd1b86f
 +    assert.equal(selectDrawnErrorProviders([], drawn).size, 0);
 +    assert.equal(selectDrawnErrorProviders(["", "  "], drawn).size, 0);
 +  });
++});
+diff --git a/tests/unit/topology-active-requests-3507.test.ts b/tests/unit/topology-active-requests-3507.test.ts
+index 17de32015..591d2c208 100644
+--- a/tests/unit/topology-active-requests-3507.test.ts
++++ b/tests/unit/topology-active-requests-3507.test.ts
+@@ -9,7 +9,10 @@
+ import test from "node:test";
+ import assert from "node:assert/strict";
+ 
+-import { selectActiveRequests } from "../../src/app/(dashboard)/home/topologyUtils.ts";
++import {
++  selectActiveRequests,
++  selectDrawnProviders,
++} from "../../src/app/(dashboard)/home/topologyUtils.ts";
+ 
+ // ── helpers ──────────────────────────────────────────────────────────────────
+ 
+@@ -70,3 +73,37 @@ test("selectActiveRequests: only extracts provider and model fields (not id/time
+   assert.ok(!("id" in result[0]));
+   assert.ok(!("timestamp" in result[0]));
+ });
++
++// ── drawn-provider intersection ──────────────────────────────────────────────
++//
++// The active signal must obey the same rule the error signal already does: a provider with
++// no node on the ring cannot count as active. The live feed is broader than the graph (it can
++// still carry a request for a connection that was disabled or deleted after the request
++// started), so the request list is intersected with the drawn providers before it reaches the
++// caption, the node pulse, or the router counter.
++
++test("selectDrawnProviders: keeps only providers that have a drawn node", () => {
++  const drawn = ["openai", "anthropic"];
++  const result = selectDrawnProviders(["openai", "ghost", "anthropic"], drawn);
++  assert.deepEqual([...result].sort(), ["anthropic", "openai"]);
++});
++
++test("selectDrawnProviders: drops a provider whose node disappeared mid-request", () => {
++  // A request for a disabled/deleted connection must not light the router or inflate the
++  // active count once its node is gone.
++  const drawn = ["openai"];
++  const result = selectDrawnProviders(["openai", "deleted-provider"], drawn);
++  assert.deepEqual([...result], ["openai"]);
++});
++
++test("selectDrawnProviders: normalizes casing and whitespace on both sides", () => {
++  const drawn = ["  OpenAI  ", "Anthropic"];
++  const result = selectDrawnProviders(["OPENAI", " anthropic "], drawn);
++  assert.deepEqual([...result].sort(), ["anthropic", "openai"]);
++});
++
++test("selectDrawnProviders: returns an empty set when nothing is drawn", () => {
++  assert.equal(selectDrawnProviders(["openai"], []).size, 0);
++  assert.equal(selectDrawnProviders(null, ["openai"]).size, 0);
++  assert.equal(selectDrawnProviders([], ["openai"]).size, 0);
 +});
 diff --git a/tests/unit/topology-connection-health.test.ts b/tests/unit/topology-connection-health.test.ts
 index 3b2db2f3e..9f86ff0d4 100644

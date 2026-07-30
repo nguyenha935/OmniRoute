@@ -1227,14 +1227,14 @@ index 04a05bab3..32e60dfb3 100644
    const modelCandidates = getPricingModelCandidates(model, normalizeModelName);
  
 diff --git a/src/app/api/v1/combos/route.ts b/src/app/api/v1/combos/route.ts
-index 91a4a4fb3..bd9db26be 100644
+index 91a4a4fb3..3077f2197 100644
 --- a/src/app/api/v1/combos/route.ts
 +++ b/src/app/api/v1/combos/route.ts
 @@ -14,8 +14,11 @@ import { HTTP_STATUS } from "@omniroute/open-sse/config/constants.ts";
  import { extractApiKey, isValidApiKey } from "@/sse/services/auth";
  import { isDashboardSessionAuthenticated } from "@/shared/utils/apiAuth";
  import { isRequireApiKeyEnabled } from "@/shared/utils/featureFlags";
-+import { filterListableCombos } from "@/lib/models/comboVisibility";
++import { filterCombosForApiKey } from "@/lib/models/comboVisibility";
  import { projectCombo, type PublicCombo } from "./projectCombo";
  
 +type ComboRow = Record<string, unknown>;
@@ -1242,15 +1242,23 @@ index 91a4a4fb3..bd9db26be 100644
  export async function OPTIONS() {
    return new Response(null, {
      headers: {
-@@ -43,7 +46,10 @@ export async function GET(request: Request) {
+@@ -43,7 +46,18 @@ export async function GET(request: Request) {
  
    try {
      const combos = await getCombos();
 -    const data = (Array.isArray(combos) ? combos : [])
-+    // Same listability rule `/v1/models` applies (enabled, not eye-hidden, no hidden
-+    // target model). This route used to list `getCombos()` verbatim, so hiding a model
-+    // removed it from /v1/models while a combo pointing at it stayed advertised here.
-+    const data = (await filterListableCombos(Array.isArray(combos) ? (combos as ComboRow[]) : []))
++    // Same per-key policy `/v1/models` applies (quota pools, deny-list, allow-list), and —
++    // for unscoped reads — the same listability rule (enabled, not eye-hidden, no hidden
++    // target model). The helper takes the ORIGINAL list because the quota branch must run
++    // before listability (qtSd/* combos are auto-minted hidden, #4806). A dashboard session
++    // or an anonymous read (REQUIRE_API_KEY=false) carries no API key, so it is unscoped —
++    // matching the catalog, which only filters when a key is present.
++    const data = (
++      await filterCombosForApiKey(
++        Array.isArray(combos) ? (combos as ComboRow[]) : [],
++        apiKeyOk ? apiKeyRaw : null
++      )
++    )
        // #3979: advertise resolved capabilities so importing clients enable them
        .map((c) => projectCombo(c as Record<string, unknown>, { includeCapabilities: true }))
        .filter((c): c is PublicCombo => c !== null);
@@ -2098,27 +2106,49 @@ index 47718233b..9e0aa76b4 100644
  export { OPTIONS };
  
 diff --git a/src/app/api/v1/vscode/[token]/combos/route.ts b/src/app/api/v1/vscode/[token]/combos/route.ts
-index 854419751..a4391d595 100644
+index 854419751..960e6f01a 100644
 --- a/src/app/api/v1/vscode/[token]/combos/route.ts
 +++ b/src/app/api/v1/vscode/[token]/combos/route.ts
-@@ -7,6 +7,7 @@
+@@ -7,11 +7,17 @@
   */
  import { getCombos } from "@/lib/db/combos";
  import { projectCombo, type PublicCombo } from "@/app/api/v1/combos/projectCombo";
-+import { filterListableCombos } from "@/lib/models/comboVisibility";
++import { filterCombosForApiKey } from "@/lib/models/comboVisibility";
++import { extractApiKey } from "@/sse/services/auth";
++import { withPathTokenApiKey } from "@/lib/vscode/tokenizedRequest";
  
  // Re-export Ollama-compatible endpoints from the parent [token] route
  // so VS Code can validate the server version and list models normally
-@@ -22,7 +23,13 @@ export async function GET(request: Request) {
+ export { OPTIONS } from "@/app/api/v1/vscode/[token]/route";
+-export async function GET(request: Request) {
++export async function GET(
++	request: Request,
++	{ params }: { params?: Promise<{ token: string }> | { token: string } } = {}
++) {
+ 	// If client requests /api/version or other Ollama endpoints, delegate to parent
+ 	const url = new URL(request.url);
+ 	if (url.pathname.includes("/api/version") || url.pathname.includes("/api/tags")) {
+@@ -21,8 +27,24 @@ export async function GET(request: Request) {
+ 
  	// Default: return combos metadata
  	try {
++		// The API key rides in the URL path for VS Code; normalize it into the standard
++		// headers before extracting, exactly as the sibling models route does, so the
++		// per-key policy below sees the same key `/v1/models` would.
++		const resolvedParams = params ? await params : undefined;
++		const authorizedRequest = withPathTokenApiKey(request, resolvedParams?.token);
++		const apiKey = extractApiKey(authorizedRequest);
++
  		const combos = await getCombos();
 -		const data = (Array.isArray(combos) ? combos : [])
-+		// Same listability rule `/v1/models` applies (enabled, not eye-hidden, no hidden
-+		// target model) — this route used to list `getCombos()` verbatim.
++		// Same per-key policy `/v1/models` applies (quota pools, deny-list, allow-list), and —
++		// for unscoped reads — the same listability rule. The helper takes the ORIGINAL list
++		// because the quota branch must run before listability (qtSd/* combos are auto-minted
++		// hidden, #4806).
 +		const data = (
-+			await filterListableCombos(
-+				Array.isArray(combos) ? (combos as Array<Record<string, unknown>>) : []
++			await filterCombosForApiKey(
++				Array.isArray(combos) ? (combos as Array<Record<string, unknown>>) : [],
++				apiKey
 +			)
 +		)
  			// #3979: advertise resolved capabilities so importing clients enable them
@@ -2331,27 +2361,49 @@ index c59f57b06..9e0aa76b4 100644
  export { OPTIONS };
  
 diff --git a/src/app/api/v1/vscode/raw/[token]/combos/route.ts b/src/app/api/v1/vscode/raw/[token]/combos/route.ts
-index fc2a35f4e..d04b171f8 100644
+index fc2a35f4e..f62222b7d 100644
 --- a/src/app/api/v1/vscode/raw/[token]/combos/route.ts
 +++ b/src/app/api/v1/vscode/raw/[token]/combos/route.ts
-@@ -7,6 +7,7 @@
+@@ -7,11 +7,17 @@
   */
  import { getCombos } from "@/lib/db/combos";
  import { projectCombo, type PublicCombo } from "@/app/api/v1/combos/projectCombo";
-+import { filterListableCombos } from "@/lib/models/comboVisibility";
++import { filterCombosForApiKey } from "@/lib/models/comboVisibility";
++import { extractApiKey } from "@/sse/services/auth";
++import { withPathTokenApiKey } from "@/lib/vscode/tokenizedRequest";
  
  // Re-export Ollama-compatible endpoints from the parent [token] route
  // so VS Code can validate the server version and list models normally
-@@ -22,7 +23,13 @@ export async function GET(request: Request) {
+ export { OPTIONS } from "@/app/api/v1/vscode/raw/[token]/route";
+-export async function GET(request: Request) {
++export async function GET(
++	request: Request,
++	{ params }: { params?: Promise<{ token: string }> | { token: string } } = {}
++) {
+ 	// If client requests /api/version or other Ollama endpoints, delegate to parent
+ 	const url = new URL(request.url);
+ 	if (url.pathname.includes("/api/version") || url.pathname.includes("/api/tags")) {
+@@ -21,8 +27,24 @@ export async function GET(request: Request) {
+ 
  	// Default: return combos metadata
  	try {
++		// The API key rides in the URL path for VS Code; normalize it into the standard
++		// headers before extracting, exactly as the sibling models route does, so the
++		// per-key policy below sees the same key `/v1/models` would.
++		const resolvedParams = params ? await params : undefined;
++		const authorizedRequest = withPathTokenApiKey(request, resolvedParams?.token);
++		const apiKey = extractApiKey(authorizedRequest);
++
  		const combos = await getCombos();
 -		const data = (Array.isArray(combos) ? combos : [])
-+		// Same listability rule `/v1/models` applies (enabled, not eye-hidden, no hidden
-+		// target model) — this route used to list `getCombos()` verbatim.
++		// Same per-key policy `/v1/models` applies (quota pools, deny-list, allow-list), and —
++		// for unscoped reads — the same listability rule. The helper takes the ORIGINAL list
++		// because the quota branch must run before listability (qtSd/* combos are auto-minted
++		// hidden, #4806).
 +		const data = (
-+			await filterListableCombos(
-+				Array.isArray(combos) ? (combos as Array<Record<string, unknown>>) : []
++			await filterCombosForApiKey(
++				Array.isArray(combos) ? (combos as Array<Record<string, unknown>>) : [],
++				apiKey
 +			)
 +		)
  			// #3979: advertise resolved capabilities so importing clients enable them
@@ -3592,10 +3644,10 @@ index 3e251050b..b3952e251 100755
    resetApiKeyState,
 diff --git a/src/lib/models/comboVisibility.ts b/src/lib/models/comboVisibility.ts
 new file mode 100644
-index 000000000..f03f7100b
+index 000000000..c02b6f619
 --- /dev/null
 +++ b/src/lib/models/comboVisibility.ts
-@@ -0,0 +1,134 @@
+@@ -0,0 +1,201 @@
 +/**
 + * The ONE definition of "is this combo listable?", shared by every surface that lists
 + * combos.
@@ -3730,6 +3782,73 @@ index 000000000..f03f7100b
 +  const context = await buildComboResolutionContext();
 +  return combos.filter((combo) => isComboListable(combo, combos, context));
 +}
++
++/**
++ * Apply the per-API-key policy to a combo listing, the same policy `/v1/models` enforces.
++ *
++ * WHY THIS EXISTS
++ * ---------------
++ * `GET /v1/models` scopes the catalog to what the requesting key may use (quota-exclusive
++ * pools, the `blocked_models` deny-list, the `allowed_combos` allow-list), but the endpoints
++ * that list combos directly — `/v1/combos` and both VS Code `…/combos` routes — only applied
++ * `filterListableCombos`. A key could therefore SEE combos it is not allowed to CALL: the
++ * same "visible in one place, blocked in another" split this module exists to prevent.
++ *
++ * Callers pass the ORIGINAL combo list (straight from `getCombos()`), NOT a pre-filtered one:
++ * the quota branch must run BEFORE listability. Every `qtSd/*` combo is auto-minted hidden,
++ * so filtering for listability first would drop them all and hand a quota-exclusive key an
++ * empty listing while `/v1/models` still advertised the pool (#4806). The branches mirror
++ * `catalog.ts` exactly so the two surfaces cannot drift:
++ *  - no key (anonymous, or a dashboard session) → listable combos, no per-key scoping;
++ *  - quota-exclusive key (`allowedQuotas` non-empty) → the pool's `qtSd/*` combos selected
++ *    from the raw list by the same `selectQuotaPoolCombos` the catalog uses (hidden included);
++ *  - env-var master key (valid key, no DB metadata row) → listable combos, no restrictions;
++ *  - any other key → listable combos, minus the `blocked_models` deny-list, then enforcing a
++ *    non-empty `allowed_combos` allow-list through the same `isComboAllowedByKeyRules` the
++ *    request path and the catalog share. A combo's public identifier is its `name`.
++ *
++ * The policy lookups are imported dynamically (as `catalog.ts` does) so this module never
++ * takes a static dependency on the API-key/quota layer.
++ */
++export async function filterCombosForApiKey<T extends ComboLike>(
++  combos: readonly T[],
++  apiKey: string | null | undefined
++): Promise<T[]> {
++  if (!Array.isArray(combos) || combos.length === 0) return [];
++
++  // No key (anonymous read with REQUIRE_API_KEY=false, or a dashboard session): the catalog
++  // applies no per-key scoping either, so the listing is just the listable combos.
++  if (!apiKey) return filterListableCombos(combos);
++
++  const { getApiKeyMetadata, isModelBlockedForKey } = await import("@/lib/db/apiKeys");
++  const keyMeta = await getApiKeyMetadata(apiKey);
++
++  if (keyMeta && keyMeta.allowedQuotas && keyMeta.allowedQuotas.length > 0) {
++    // Quota BEFORE listability: select from the raw list so hidden qtSd/* combos survive.
++    const { selectQuotaPoolCombos } = await import("@/lib/quota/quotaCombos");
++    return selectQuotaPoolCombos(keyMeta.allowedQuotas, combos);
++  }
++
++  // From here on the listing is the listable combos, narrowed by the key's rules.
++  const listable = await filterListableCombos(combos);
++
++  // Valid key with no DB metadata row = env-var master key: auth gates access but does not
++  // scope the listing (same as the catalog's `!keyMeta` branch).
++  if (!keyMeta) return listable;
++
++  const { isComboAllowedByKeyRules } = await import("@/shared/utils/apiKeyPolicy");
++  const filtered: T[] = [];
++  for (const combo of listable) {
++    const name = typeof combo.name === "string" ? combo.name : "";
++    if (await isModelBlockedForKey(apiKey, name)) continue;
++    // Empty `allowed_combos` = no combo restriction; a non-empty list must name the combo.
++    if (keyMeta.allowedCombos?.length && !isComboAllowedByKeyRules(keyMeta.allowedCombos, name)) {
++      continue;
++    }
++    filtered.push(combo);
++  }
++  return filtered;
++}
 diff --git a/src/lib/providers/compatibleFallbackModels.ts b/src/lib/providers/compatibleFallbackModels.ts
 new file mode 100644
 index 000000000..a06d5ff93
@@ -3803,6 +3922,78 @@ index d450edfdf..000000000
 -export function compatibleProviderSupportsModelImport(providerId: string): boolean {
 -  return !isClaudeCodeCompatibleProvider(providerId);
 -}
+diff --git a/src/lib/quota/quotaCombos.ts b/src/lib/quota/quotaCombos.ts
+index 25be9cca0..82ca304ab 100644
+--- a/src/lib/quota/quotaCombos.ts
++++ b/src/lib/quota/quotaCombos.ts
+@@ -302,23 +302,45 @@ export function filterModelsToQuotaPools<T extends { id: string }>(
+  * Fail-closed: an empty `poolSlugs` array yields an empty list (a quota key with
+  * no resolvable pools sees no models).
+  */
+-export async function buildQuotaExclusiveModels<TCombo extends { name?: unknown }>(
++/**
++ * Select the combos a quota-exclusive key may use: the auto-minted `qtSd/*` combos whose
++ * group slug is in the key's resolved pool scope, preserving input order.
++ *
++ * This is the ONE definition of quota-combo selection, shared by the catalog
++ * (`buildQuotaExclusiveModels`) and the combo-listing policy (`filterCombosForApiKey`), so
++ * `/v1/models` and `/v1/combos` can never disagree about which quota combos a key sees.
++ *
++ * Deliberately operates on the RAW combo list, not a listability-filtered one: every
++ * `qtSd/*` combo is auto-minted with `isHidden: true`, so running `filterListableCombos`
++ * first would drop them all and hand a quota-exclusive key an empty listing even though
++ * `/v1/models` still advertised the pool's models (#4806).
++ */
++export async function selectQuotaPoolCombos<TCombo extends { name?: unknown }>(
+   allowedQuotas: string[],
+-  combos: TCombo[],
+-  timestamp: number,
+-  metadataFor: (combo: TCombo) => Record<string, unknown>
+-): Promise<Array<Record<string, unknown>>> {
++  combos: readonly TCombo[]
++): Promise<TCombo[]> {
+   const { resolveQuotaKeyScope } = await import("./quotaKey");
+   const scope = await resolveQuotaKeyScope(allowedQuotas);
+   if (scope.poolSlugs.length === 0) return [];
+   const slugSet = new Set(scope.poolSlugs);
+-  const out: Array<Record<string, unknown>> = [];
+-  for (const combo of combos) {
++  return combos.filter((combo) => {
+     const name = typeof combo.name === "string" ? combo.name : "";
+-    if (!isQuotaModelName(name)) continue;
++    if (!isQuotaModelName(name)) return false;
+     const parsed = parseQuotaModelName(name);
+-    if (!parsed || !slugSet.has(parsed.groupSlug)) continue;
+-    out.push({
++    return Boolean(parsed && slugSet.has(parsed.groupSlug));
++  });
++}
++
++export async function buildQuotaExclusiveModels<TCombo extends { name?: unknown }>(
++  allowedQuotas: string[],
++  combos: TCombo[],
++  timestamp: number,
++  metadataFor: (combo: TCombo) => Record<string, unknown>
++): Promise<Array<Record<string, unknown>>> {
++  const selected = await selectQuotaPoolCombos(allowedQuotas, combos);
++  return selected.map((combo) => {
++    const name = typeof combo.name === "string" ? combo.name : "";
++    return {
+       id: name,
+       object: "model",
+       created: timestamp,
+@@ -327,9 +349,8 @@ export async function buildQuotaExclusiveModels<TCombo extends { name?: unknown
+       root: name,
+       parent: null,
+       ...metadataFor(combo),
+-    });
+-  }
+-  return out;
++    };
++  });
+ }
+ 
+ /**
 diff --git a/src/lib/usage/providerDisplayNames.ts b/src/lib/usage/providerDisplayNames.ts
 index c5e66ea45..5fb705593 100644
 --- a/src/lib/usage/providerDisplayNames.ts
@@ -6546,6 +6737,380 @@ index 000000000..7608ae887
 +    ["low", "medium", "high"],
 +    "haiku does not"
 +  );
++});
+diff --git a/tests/unit/combo-apikey-policy-routes.test.ts b/tests/unit/combo-apikey-policy-routes.test.ts
+new file mode 100644
+index 000000000..6038d1fec
+--- /dev/null
++++ b/tests/unit/combo-apikey-policy-routes.test.ts
+@@ -0,0 +1,368 @@
++/**
++ * Post-deploy audit of v3.8.50: `/v1/models` scopes the catalog to what the requesting API
++ * key may use (quota pools, the `blocked_models` deny-list, the `allowed_combos` allow-list),
++ * but the endpoints that list combos directly — `/v1/combos` and both VS Code `…/combos`
++ * routes — only applied `filterListableCombos`. A key could therefore SEE combos it is not
++ * allowed to CALL. These tests lock in the shared policy (`filterCombosForApiKey`) now wired
++ * into all three routes, plus the auth behaviors that must NOT change: a dashboard session
++ * and an anonymous read (REQUIRE_API_KEY=false) stay unscoped.
++ */
++import test from "node:test";
++import assert from "node:assert/strict";
++import fs from "node:fs";
++import os from "node:os";
++import path from "node:path";
++import { randomUUID } from "node:crypto";
++
++const TEST_DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "omniroute-combo-policy-"));
++process.env.DATA_DIR = TEST_DATA_DIR;
++process.env.API_KEY_SECRET = process.env.API_KEY_SECRET || "combo-policy-secret";
++process.env.JWT_SECRET = process.env.JWT_SECRET || "combo-policy-jwt-secret";
++// REQUIRE_API_KEY defaults to "false"; leave it unset so the anonymous path is exercised
++// against the real default rather than an env override.
++delete process.env.REQUIRE_API_KEY;
++
++const core = await import("../../src/lib/db/core.ts");
++const apiKeysDb = await import("../../src/lib/db/apiKeys.ts");
++const combosDb = await import("../../src/lib/db/combos.ts");
++const providersDb = await import("../../src/lib/db/providers.ts");
++const combosRoute = await import("../../src/app/api/v1/combos/route.ts");
++const vscodeCombosRoute = await import("../../src/app/api/v1/vscode/[token]/combos/route.ts");
++const vscodeRawCombosRoute =
++  await import("../../src/app/api/v1/vscode/raw/[token]/combos/route.ts");
++const { filterCombosForApiKey } = await import("../../src/lib/models/comboVisibility.ts");
++const { buildQuotaExclusiveModels, syncQuotaCombos } =
++  await import("../../src/lib/quota/quotaCombos.ts");
++
++async function resetStorage() {
++  core.resetDbInstance();
++  apiKeysDb.resetApiKeyState();
++  fs.rmSync(TEST_DATA_DIR, { recursive: true, force: true });
++  fs.mkdirSync(TEST_DATA_DIR, { recursive: true });
++}
++
++/** Seed the combos every policy test reasons about. Names are the public identifiers. */
++async function seedCombos() {
++  await combosDb.createCombo({
++    name: "allowed-combo",
++    strategy: "priority",
++    models: [{ kind: "model", model: "codex/gpt-5.6-sol-high", providerId: "codex" }],
++  });
++  await combosDb.createCombo({
++    name: "other-combo",
++    strategy: "priority",
++    models: [{ kind: "model", model: "codex/gpt-5.6-sol-high", providerId: "codex" }],
++  });
++  await combosDb.createCombo({
++    name: "blocked-combo",
++    strategy: "priority",
++    models: [{ kind: "model", model: "codex/gpt-5.6-sol-high", providerId: "codex" }],
++  });
++}
++
++type ComboRow = { name?: unknown };
++type ListBody = { data?: ComboRow[] };
++
++function comboNames(body: ListBody): string[] {
++  return (body?.data || [])
++    .map((entry) => (typeof entry.name === "string" ? entry.name : ""))
++    .filter((name) => name.length > 0)
++    .sort();
++}
++
++function bearerRequest(url: string, key: string): Request {
++  return new Request(url, { headers: { authorization: `Bearer ${key}` } });
++}
++
++test.beforeEach(async () => {
++  await resetStorage();
++});
++
++test.after(async () => {
++  core.resetDbInstance();
++  apiKeysDb.resetApiKeyState();
++  fs.rmSync(TEST_DATA_DIR, { recursive: true, force: true });
++});
++
++// ── shared helper: the policy the routes now apply ───────────────────────────
++
++test("filterCombosForApiKey: no key leaves the listable set unscoped", async () => {
++  await seedCombos();
++  const all = (await combosDb.getCombos()) as ComboRow[];
++  assert.deepEqual(
++    (await filterCombosForApiKey(all, null)).map((c: ComboRow) => String(c.name)).sort(),
++    ["allowed-combo", "blocked-combo", "other-combo"]
++  );
++});
++
++test("filterCombosForApiKey: allowed_combos allow-list keeps only named combos", async () => {
++  await seedCombos();
++  const key = await apiKeysDb.createApiKey("allow-list", "machine-allow-list");
++  await apiKeysDb.updateApiKeyPermissions(key.id, { allowedCombos: ["allowed-combo"] });
++  const all = (await combosDb.getCombos()) as ComboRow[];
++  assert.deepEqual(
++    (await filterCombosForApiKey(all, key.key)).map((c: ComboRow) => String(c.name)),
++    ["allowed-combo"]
++  );
++});
++
++test("filterCombosForApiKey: blocked_models deny-list drops the named combo", async () => {
++  await seedCombos();
++  const key = await apiKeysDb.createApiKey("deny-list", "machine-deny-list");
++  await apiKeysDb.updateApiKeyPermissions(key.id, { blockedModels: ["blocked-combo"] });
++  const all = (await combosDb.getCombos()) as ComboRow[];
++  assert.deepEqual(
++    (await filterCombosForApiKey(all, key.key)).map((c: ComboRow) => String(c.name)).sort(),
++    ["allowed-combo", "other-combo"]
++  );
++});
++
++// ── /v1/combos ───────────────────────────────────────────────────────────────
++
++test("/v1/combos: a key with an allow-list sees only the allowed combo", async () => {
++  await seedCombos();
++  const key = await apiKeysDb.createApiKey("v1-allow", "machine-v1-allow");
++  await apiKeysDb.updateApiKeyPermissions(key.id, { allowedCombos: ["allowed-combo"] });
++
++  const response = await combosRoute.GET(bearerRequest("http://localhost/v1/combos", key.key));
++  const body = (await response.json()) as ListBody;
++
++  assert.equal(response.status, 200);
++  assert.deepEqual(comboNames(body), ["allowed-combo"]);
++});
++
++test("/v1/combos: a key with a deny-list does not see the blocked combo", async () => {
++  await seedCombos();
++  const key = await apiKeysDb.createApiKey("v1-deny", "machine-v1-deny");
++  await apiKeysDb.updateApiKeyPermissions(key.id, { blockedModels: ["blocked-combo"] });
++
++  const response = await combosRoute.GET(bearerRequest("http://localhost/v1/combos", key.key));
++  const body = (await response.json()) as ListBody;
++
++  assert.equal(response.status, 200);
++  assert.deepEqual(comboNames(body), ["allowed-combo", "other-combo"]);
++});
++
++test("/v1/combos: a dashboard session is unscoped (sees every listable combo)", async () => {
++  await seedCombos();
++  const { SignJWT } = await import("jose");
++  const token = await new SignJWT({ sub: "dashboard-user" })
++    .setProtectedHeader({ alg: "HS256" })
++    .setIssuedAt()
++    .setExpirationTime("1h")
++    .sign(new TextEncoder().encode(process.env.JWT_SECRET));
++
++  const response = await combosRoute.GET(
++    new Request("http://localhost/v1/combos", {
++      headers: { cookie: `auth_token=${token}` },
++    })
++  );
++  const body = (await response.json()) as ListBody;
++
++  assert.equal(response.status, 200);
++  assert.deepEqual(comboNames(body), ["allowed-combo", "blocked-combo", "other-combo"]);
++});
++
++test("/v1/combos: anonymous read is allowed and unscoped when REQUIRE_API_KEY=false", async () => {
++  await seedCombos();
++
++  const response = await combosRoute.GET(new Request("http://localhost/v1/combos"));
++  const body = (await response.json()) as ListBody;
++
++  // Default flag value is "false", so no key and no session still lists public metadata.
++  assert.equal(response.status, 200);
++  assert.deepEqual(comboNames(body), ["allowed-combo", "blocked-combo", "other-combo"]);
++});
++
++// ── VS Code path-token routes ────────────────────────────────────────────────
++
++test("vscode [token]/combos: the path key's allow-list scopes the listing", async () => {
++  await seedCombos();
++  const key = await apiKeysDb.createApiKey("vscode-allow", "machine-vscode-allow");
++  await apiKeysDb.updateApiKeyPermissions(key.id, { allowedCombos: ["allowed-combo"] });
++
++  const response = await vscodeCombosRoute.GET(
++    new Request(`http://localhost/api/v1/vscode/${encodeURIComponent(key.key)}/combos`),
++    { params: { token: key.key } }
++  );
++  const body = (await response.json()) as ListBody;
++
++  assert.equal(response.status, 200);
++  assert.deepEqual(comboNames(body), ["allowed-combo"]);
++});
++
++test("vscode [token]/combos: the path key's deny-list drops the blocked combo", async () => {
++  await seedCombos();
++  const key = await apiKeysDb.createApiKey("vscode-deny", "machine-vscode-deny");
++  await apiKeysDb.updateApiKeyPermissions(key.id, { blockedModels: ["blocked-combo"] });
++
++  const response = await vscodeCombosRoute.GET(
++    new Request(`http://localhost/api/v1/vscode/${encodeURIComponent(key.key)}/combos`),
++    { params: { token: key.key } }
++  );
++  const body = (await response.json()) as ListBody;
++
++  assert.equal(response.status, 200);
++  assert.deepEqual(comboNames(body), ["allowed-combo", "other-combo"]);
++});
++
++test("vscode raw/[token]/combos: the path key's allow-list scopes the listing", async () => {
++  await seedCombos();
++  const key = await apiKeysDb.createApiKey("vscode-raw-allow", "machine-vscode-raw-allow");
++  await apiKeysDb.updateApiKeyPermissions(key.id, { allowedCombos: ["allowed-combo"] });
++
++  const response = await vscodeRawCombosRoute.GET(
++    new Request(`http://localhost/api/v1/vscode/raw/${encodeURIComponent(key.key)}/combos`),
++    { params: { token: key.key } }
++  );
++  const body = (await response.json()) as ListBody;
++
++  assert.equal(response.status, 200);
++  assert.deepEqual(comboNames(body), ["allowed-combo"]);
++});
++
++test("vscode raw/[token]/combos: the path key's deny-list drops the blocked combo", async () => {
++  await seedCombos();
++  const key = await apiKeysDb.createApiKey("vscode-raw-deny", "machine-vscode-raw-deny");
++  await apiKeysDb.updateApiKeyPermissions(key.id, { blockedModels: ["blocked-combo"] });
++
++  const response = await vscodeRawCombosRoute.GET(
++    new Request(`http://localhost/api/v1/vscode/raw/${encodeURIComponent(key.key)}/combos`),
++    { params: { token: key.key } }
++  );
++  const body = (await response.json()) as ListBody;
++
++  assert.equal(response.status, 200);
++  assert.deepEqual(comboNames(body), ["allowed-combo", "other-combo"]);
++});
++
++// ── quota-exclusive keys: hidden qtSd/* combos must survive (#4806) ──────────
++//
++// Every qtSd/* combo is auto-minted with isHidden: true. `/v1/models` builds the quota
++// catalog from the RAW combo list (buildQuotaExclusiveModels), deliberately skipping
++// listability — so a quota-exclusive key sees the pool's models there. The combo listing
++// must select from the raw list too; running filterListableCombos first would drop the
++// hidden quota combos and hand the key an empty listing while /v1/models still advertised
++// them. The expected set is derived from buildQuotaExclusiveModels itself, so these tests
++// prove EXACT parity with the /v1/models quota contract rather than a hand-written list.
++
++const OUT_OF_SCOPE_COMBO = "qtSd/othergroup/codex/gpt-5.5";
++const REGULAR_COMBO = "regular-combo";
++
++/**
++ * Seed a quota pool deterministically: write the minimal pool rows directly (in one
++ * transaction) and run syncQuotaCombos ONCE, awaited. createPool is deliberately NOT used —
++ * it fires a fire-and-forget sync hook, so combining it with an awaited sync would leave two
++ * concurrent sync owners racing at getComboByName/createCombo (the UNIQUE(name) warning).
++ * group-demo ('GroupDemo') is seeded by migration 088 → groupSlug "groupdemo".
++ */
++async function seedQuotaScope(): Promise<string> {
++  const conn = await providersDb.createProviderConnection({
++    provider: "codex",
++    authType: "apikey",
++    name: "quota-combo-policy-conn",
++    apiKey: "sk-test-quota-combo-policy",
++  });
++  const connId = (conn as Record<string, unknown>).id as string;
++
++  const poolId = randomUUID();
++  const now = new Date().toISOString();
++  const db = core.getDbInstance();
++  const seedPool = db.transaction(() => {
++    db.prepare(
++      "INSERT INTO quota_pools (id, connection_id, name, group_id, created_at) VALUES (?, ?, ?, ?, ?)"
++    ).run(poolId, connId, "Combo Policy Pool", "group-demo", now);
++    db.prepare(
++      "INSERT INTO quota_pool_connections (pool_id, connection_id, created_at) VALUES (?, ?, ?)"
++    ).run(poolId, connId, now);
++  });
++  seedPool();
++
++  // The single sync owner. Mints one hidden qtSd/groupdemo/codex/<model> combo per codex
++  // REGISTRY model — the same raw-combo set /v1/models publishes for the key.
++  await syncQuotaCombos(poolId);
++  return poolId;
++}
++
++async function seedQuotaCombos() {
++  // A different group's quota combo — outside this key's scope.
++  await combosDb.createCombo({
++    name: OUT_OF_SCOPE_COMBO,
++    strategy: "quota-share",
++    isHidden: true,
++    models: [{ kind: "model", model: "codex/gpt-5.5", providerId: "codex" }],
++  });
++  // A normal visible combo — a quota-exclusive key must NOT see it.
++  await combosDb.createCombo({
++    name: REGULAR_COMBO,
++    strategy: "priority",
++    models: [{ kind: "model", model: "codex/gpt-5.6-sol-high", providerId: "codex" }],
++  });
++}
++
++/**
++ * The exact set `/v1/models` publishes for this quota-exclusive key — derived from the same
++ * buildQuotaExclusiveModels the catalog calls, sorted for stable comparison.
++ */
++async function expectedQuotaIds(poolId: string): Promise<string[]> {
++  const all = (await combosDb.getCombos()) as ComboRow[];
++  const catalog = await buildQuotaExclusiveModels([poolId], all, 0, () => ({}));
++  return catalog.map((model) => String(model.id)).sort();
++}
++
++/** The contract every quota listing must satisfy: exact parity + scope + exclusions. */
++function assertQuotaContract(expectedIds: string[], actualNames: string[]) {
++  assert.ok(expectedIds.length > 0, "the real pool fixture must auto-mint in-scope quota combos");
++  assert.ok(
++    expectedIds.every((id) => id.startsWith("qtSd/groupdemo/")),
++    "every expected combo must be in this pool's group scope"
++  );
++  // Exact parity with the /v1/models quota contract.
++  assert.deepEqual(actualNames, expectedIds);
++  // The out-of-scope quota combo and the non-quota combo must never leak into the listing.
++  assert.equal(actualNames.includes(OUT_OF_SCOPE_COMBO), false, "out-of-scope combo excluded");
++  assert.equal(actualNames.includes(REGULAR_COMBO), false, "non-quota combo excluded");
++}
++
++test("filterCombosForApiKey: a quota-exclusive key gets exactly the catalog's quota combos", async () => {
++  const poolId = await seedQuotaScope();
++  await seedQuotaCombos();
++  const key = await apiKeysDb.createApiKey("quota-helper", "machine-quota-helper");
++  await apiKeysDb.updateApiKeyPermissions(key.id, { allowedQuotas: [poolId] });
++
++  const all = (await combosDb.getCombos()) as ComboRow[];
++  const actual = (await filterCombosForApiKey(all, key.key))
++    .map((c: ComboRow) => String(c.name))
++    .sort();
++  assertQuotaContract(await expectedQuotaIds(poolId), actual);
++});
++
++test("/v1/combos: a quota-exclusive key's listing matches the quota catalog exactly", async () => {
++  const poolId = await seedQuotaScope();
++  await seedQuotaCombos();
++  const key = await apiKeysDb.createApiKey("quota-route", "machine-quota-route");
++  await apiKeysDb.updateApiKeyPermissions(key.id, { allowedQuotas: [poolId] });
++
++  const response = await combosRoute.GET(bearerRequest("http://localhost/v1/combos", key.key));
++  const body = (await response.json()) as ListBody;
++
++  assert.equal(response.status, 200);
++  // Was empty before the fix: filterListableCombos ran first and dropped the hidden combos.
++  assertQuotaContract(await expectedQuotaIds(poolId), comboNames(body));
++});
++
++test("vscode [token]/combos: a quota-exclusive key's listing matches the quota catalog exactly", async () => {
++  const poolId = await seedQuotaScope();
++  await seedQuotaCombos();
++  const key = await apiKeysDb.createApiKey("quota-vscode", "machine-quota-vscode");
++  await apiKeysDb.updateApiKeyPermissions(key.id, { allowedQuotas: [poolId] });
++
++  const response = await vscodeCombosRoute.GET(
++    new Request(`http://localhost/api/v1/vscode/${encodeURIComponent(key.key)}/combos`),
++    { params: { token: key.key } }
++  );
++  const body = (await response.json()) as ListBody;
++
++  assert.equal(response.status, 200);
++  assertQuotaContract(await expectedQuotaIds(poolId), comboNames(body));
 +});
 diff --git a/tests/unit/combo-target-node-prefix.test.ts b/tests/unit/combo-target-node-prefix.test.ts
 new file mode 100644
