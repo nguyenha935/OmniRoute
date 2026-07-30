@@ -1,1 +1,0 @@
-- **feat(ci):** automate ratchet shrink-banking so file-size/complexity caps stop outliving their files after successful shrinks (#8584) ([#8612](https://github.com/diegosouzapw/OmniRoute/pull/8612)) — thanks @MumuTW

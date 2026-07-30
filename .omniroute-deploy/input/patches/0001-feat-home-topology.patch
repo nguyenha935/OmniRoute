@@ -1892,7 +1892,7 @@ index fafcb0d1a..b020f706f 100644
    "analytics": {
      "title": "Analytik",
 diff --git a/src/i18n/messages/en.json b/src/i18n/messages/en.json
-index e325ecf1e..797c572bd 100644
+index 3d9bb9bc8..86226b5c5 100644
 --- a/src/i18n/messages/en.json
 +++ b/src/i18n/messages/en.json
 @@ -1730,7 +1730,12 @@
@@ -2252,7 +2252,7 @@ index 378b493ab..36097f6fe 100644
    "analytics": {
      "title": "Analityka",
 diff --git a/src/i18n/messages/pt-BR.json b/src/i18n/messages/pt-BR.json
-index 71defad2f..7c7e10f5f 100644
+index a43eb374c..52dab075a 100644
 --- a/src/i18n/messages/pt-BR.json
 +++ b/src/i18n/messages/pt-BR.json
 @@ -1730,7 +1730,12 @@
@@ -2486,7 +2486,7 @@ index fb1cde82c..4ba71e343 100644
    "analytics": {
      "title": "Analytics",
 diff --git a/src/i18n/messages/vi.json b/src/i18n/messages/vi.json
-index db090037b..1c615923d 100644
+index 600cc770e..6a02418d0 100644
 --- a/src/i18n/messages/vi.json
 +++ b/src/i18n/messages/vi.json
 @@ -1730,7 +1730,12 @@

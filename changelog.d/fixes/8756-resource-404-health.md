@@ -1,1 +1,0 @@
-- **fix(resilience):** keep missing request resources such as Files API ids from triggering model-family fallback, model lockout, or provider/account cooldown (thanks @wilsonicdev) ([#8756](https://github.com/diegosouzapw/OmniRoute/pull/8756))

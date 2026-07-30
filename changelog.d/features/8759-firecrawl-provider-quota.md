@@ -1,1 +1,0 @@
-- **feat(providers):** live monthly credit quota for Firecrawl (`GET /v2/team/credit-usage`) in Provider Limits / preflight ([#8759](https://github.com/diegosouzapw/OmniRoute/pull/8759)) — thanks @allanvb

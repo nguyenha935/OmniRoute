@@ -1,5 +1,204 @@
+diff --git a/scripts/build/assembleStandalone.mjs b/scripts/build/assembleStandalone.mjs
+index f61c7041c..27faa6c5c 100644
+--- a/scripts/build/assembleStandalone.mjs
++++ b/scripts/build/assembleStandalone.mjs
+@@ -214,6 +214,11 @@ const EXTRA_MODULE_ENTRIES = [
+     src: ["node_modules", "undici"],
+     dest: ["node_modules", "undici"],
+   },
++  {
++    label: "sql.js WASM fallback runtime",
++    src: ["node_modules", "sql.js"],
++    dest: ["node_modules", "sql.js"],
++  },
+   {
+     label: "sqlite-vec wrapper (vector memory - loaded at runtime via createRequire)",
+     src: ["node_modules", "sqlite-vec"],
+diff --git a/scripts/check/check-pack-boot.mjs b/scripts/check/check-pack-boot.mjs
+index 62a4b78ab..68c32f293 100644
+--- a/scripts/check/check-pack-boot.mjs
++++ b/scripts/check/check-pack-boot.mjs
+@@ -20,6 +20,13 @@ import path from "node:path";
+ 
+ const POLL_INTERVAL_MS = 2_000;
+ const BOOT_DEADLINE_MS = 240_000;
++const SQLJS_STARTUP_MARKER = "Pre-initializing sql.js WASM";
++
++export const REQUIRED_SQLJS_RUNTIME_FILES = Object.freeze([
++  "dist/node_modules/sql.js/package.json",
++  "dist/node_modules/sql.js/dist/sql-wasm.js",
++  "dist/node_modules/sql.js/dist/sql-wasm.wasm",
++]);
+ 
+ /** Parse `npm pack --json` output into the generated tarball filename. */
+ export function pickTarball(packJsonOutput) {
+@@ -49,6 +56,80 @@ export function pickPort(seed = process.pid) {
+   return 23000 + (seed % 4000);
+ }
+ 
++export function findMissingSqlJsRuntimeFiles(packageRoot, exists = fs.existsSync) {
++  return REQUIRED_SQLJS_RUNTIME_FILES.filter(
++    (relativePath) => !exists(path.join(packageRoot, relativePath))
++  );
++}
++
++export function evaluateSqlJsRoundTrip({
++  startupOutput,
++  beforeValue,
++  patchedValue,
++  readBackValue,
++}) {
++  const failures = [];
++  if (!startupOutput.includes(SQLJS_STARTUP_MARKER)) {
++    failures.push("server output did not confirm the forced sql.js startup path");
++  }
++  if (patchedValue !== !beforeValue) {
++    failures.push(
++      `PATCH debugMode returned ${String(patchedValue)} (expected ${String(!beforeValue)})`
++    );
++  }
++  if (readBackValue !== !beforeValue) {
++    failures.push(
++      `GET debugMode returned ${String(readBackValue)} (expected ${String(!beforeValue)})`
++    );
++  }
++  return { ok: failures.length === 0, failures };
++}
++
++async function readJsonResponse(url, options) {
++  const response = await fetch(url, options);
++  const body = await response.json().catch(() => null);
++  return { response, body };
++}
++
++async function verifySettingsRoundTrip(baseUrl, startupOutput) {
++  const initial = await readJsonResponse(`${baseUrl}/api/settings`);
++  if (initial.response.status !== 200 || !initial.body || typeof initial.body !== "object") {
++    return {
++      ok: false,
++      failures: [`initial settings HTTP ${initial.response.status} or non-JSON body`],
++    };
++  }
++
++  const beforeValue = initial.body.debugMode === true;
++  const expectedValue = !beforeValue;
++  const patched = await readJsonResponse(`${baseUrl}/api/settings`, {
++    method: "PATCH",
++    headers: { "Content-Type": "application/json" },
++    body: JSON.stringify({ debugMode: expectedValue }),
++  });
++  if (patched.response.status !== 200 || !patched.body || typeof patched.body !== "object") {
++    return {
++      ok: false,
++      failures: [`settings PATCH HTTP ${patched.response.status} or non-JSON body`],
++    };
++  }
++
++  const readBack = await readJsonResponse(`${baseUrl}/api/settings`);
++  if (readBack.response.status !== 200 || !readBack.body || typeof readBack.body !== "object") {
++    return {
++      ok: false,
++      failures: [`settings read-back HTTP ${readBack.response.status} or non-JSON body`],
++    };
++  }
++
++  return evaluateSqlJsRoundTrip({
++    startupOutput,
++    beforeValue,
++    patchedValue: patched.body.debugMode,
++    readBackValue: readBack.body.debugMode,
++  });
++}
++
+ function log(msg) {
+   console.log(`[pack-boot] ${msg}`);
+ }
+@@ -56,10 +137,14 @@ function log(msg) {
+ async function main() {
+   const ROOT = process.cwd();
+   if (!fs.existsSync(path.join(ROOT, "dist", "server.js"))) {
+-    console.error("[pack-boot] dist/server.js missing — run `npm run build:cli` first (this is a --with-build gate)");
++    console.error(
++      "[pack-boot] dist/server.js missing — run `npm run build:cli` first (this is a --with-build gate)"
++    );
+     process.exit(2);
+   }
+-  const expectedVersion = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8")).version;
++  const expectedVersion = JSON.parse(
++    fs.readFileSync(path.join(ROOT, "package.json"), "utf8")
++  ).version;
+   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "omniroute-pack-boot-"));
+   let child = null;
+   let exitCode = 1;
+@@ -77,13 +162,21 @@ async function main() {
+       encoding: "utf8",
+       maxBuffer: 64 * 1024 * 1024,
+     });
++    const packageRoot = path.join(prefix, "lib", "node_modules", "omniroute");
++    const missingSqlJsFiles = findMissingSqlJsRuntimeFiles(packageRoot);
++    if (missingSqlJsFiles.length > 0) {
++      throw new Error(
++        `installed package is missing the sql.js runtime contract: ${missingSqlJsFiles.join(", ")}`
++      );
++    }
++    log("installed package contains the complete sql.js WASM runtime");
+ 
+     const port = pickPort();
+     const dataDir = path.join(tmp, "data");
+     fs.mkdirSync(dataDir, { recursive: true });
+     const binPath = path.join(prefix, "bin", "omniroute");
+     log(`booting installed CLI on :${port} (DATA_DIR isolated)…`);
+-    child = spawn(binPath, ["serve", "--port", String(port)], {
++    child = spawn(binPath, ["serve", "--port", String(port), "--log", "--no-open"], {
+       env: {
+         ...process.env,
+         PORT: String(port),
+@@ -92,6 +185,8 @@ async function main() {
+         API_KEY_SECRET: "pack-boot-smoke-api-key-secret-long",
+         DISABLE_SQLITE_AUTO_BACKUP: "true",
+         OMNIROUTE_SKIP_SYSTEM_TRUST: "1",
++        OMNIROUTE_PACK_BOOT_SMOKE: "1",
++        OMNIROUTE_PACK_BOOT_FORCE_SQLJS: "1",
+       },
+       stdio: ["ignore", "pipe", "pipe"],
+       detached: true,
+@@ -130,11 +225,20 @@ async function main() {
+     }
+ 
+     if (verdict.ok) {
+-      log("✅ the packed tarball boots — #7065 class gate green");
+-      exitCode = 0;
+-    } else {
++      const roundTrip = await verifySettingsRoundTrip(`http://127.0.0.1:${port}`, tail.join(""));
++      if (roundTrip.ok) {
++        log("persisted settings write/read succeeded through the forced sql.js driver");
++        log("✅ the packed tarball boots — #7065 class gate green");
++        exitCode = 0;
++      } else {
++        verdict = roundTrip;
++      }
++    }
++    if (!verdict.ok) {
+       console.error(`[pack-boot] ❌ boot FAILED: ${verdict.failures.join("; ")}`);
+-      console.error("[pack-boot] last server output:\n" + tail.join("").split("\n").slice(-40).join("\n"));
++      console.error(
++        "[pack-boot] last server output:\n" + tail.join("").split("\n").slice(-40).join("\n")
++      );
+       exitCode = 1;
+     }
+   } finally {
+@@ -157,7 +261,8 @@ async function main() {
+ }
+ 
+ const isDirectRun =
+-  process.argv[1] && path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname);
++  process.argv[1] &&
++  path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname);
+ if (isDirectRun) {
+   main().catch((e) => {
+     console.error("[pack-boot] fatal:", e.message);
 diff --git a/src/lib/db/adapters/driverFactory.ts b/src/lib/db/adapters/driverFactory.ts
-index 008fd8225..eab8ef538 100644
+index 008fd8225..24a6fb08f 100644
 --- a/src/lib/db/adapters/driverFactory.ts
 +++ b/src/lib/db/adapters/driverFactory.ts
 @@ -12,6 +12,48 @@ const _require = createRequire(import.meta.url);
@@ -51,76 +250,254 @@ index 008fd8225..eab8ef538 100644
  type NodeSqliteOptions = {
    readOnly?: boolean;
  };
-@@ -152,7 +194,7 @@ export function createSyncDriverFactory(load: DriverLoader) {
+@@ -151,8 +193,25 @@ export function createSyncDriverFactory(load: DriverLoader) {
+   };
  }
  
++const openSyncDriver = createSyncDriverFactory(requireSqliteDriver);
++
++/**
++ * The installed-tarball smoke uses this paired marker to exercise the sql.js tier
++ * even on runners where better-sqlite3 or node:sqlite is available. Requiring both
++ * pack-boot-specific flags keeps this from becoming a general operator override.
++ */
++export function isPackBootForcedSqlJsSmoke(env: NodeJS.ProcessEnv): boolean {
++  return env.OMNIROUTE_PACK_BOOT_SMOKE === "1" && env.OMNIROUTE_PACK_BOOT_FORCE_SQLJS === "1";
++}
++
  /** Tenta abrir com better-sqlite3 e node:sqlite sincronamente. Retorna null se ambos falharem. */
 -export const tryOpenSync = createSyncDriverFactory(_require);
-+export const tryOpenSync = createSyncDriverFactory(requireSqliteDriver);
++export function tryOpenSync(
++  filePath: string,
++  options?: Record<string, unknown>
++): SqliteAdapter | null {
++  if (isPackBootForcedSqlJsSmoke(process.env)) return null;
++  return openSyncDriver(filePath, options);
++}
  
  /**
   * Pré-inicializa sql.js para um filePath.
 diff --git a/src/lib/db/adapters/sqljsAdapter.ts b/src/lib/db/adapters/sqljsAdapter.ts
-index 16ce501fb..8c56e47a4 100644
+index 16ce501fb..ba7382567 100644
 --- a/src/lib/db/adapters/sqljsAdapter.ts
 +++ b/src/lib/db/adapters/sqljsAdapter.ts
-@@ -27,8 +27,29 @@ function resolveSqlJsWasmPath(): string {
-   // Global Bun installs do not use the application's cwd as the package root.
-   // Resolve the actual JavaScript entrypoint so sql.js can find its sibling WASM
-   // asset when OmniRoute is launched from ~/.bun/install/global.
-+  //
-+  // This is also the ONLY candidate that works in a packaged server build: `dist/
-+  // server.js` does `process.chdir(__dirname)`, so cwd is always `dist/`, while the
-+  // installed `node_modules` sits one level up — neither cwd-relative path above can
-+  // ever exist there.
-+  //
-+  // `require.resolve` must therefore survive bundling, and by default it does not:
-+  // webpack rewrites `_require.resolve("sql.js")` into the NUMERIC internal module id
-+  // it assigned the package. `path.dirname(<number>)` then throws ("The \"path\"
-+  // argument must be of type string. Received type number"), the catch swallows it, and
-+  // the only viable candidate is silently dropped — leaving the thrown error to list
-+  // just the two impossible cwd paths.
-+  //
-+  // Reaching `resolve` through a property of an object defers the lookup to runtime,
-+  // which webpack does not fold. Verified by compiling all three shapes with the repo's
-+  // own webpack: the property form is emitted verbatim and resolves to
-+  // <install>/node_modules/sql.js/dist, while `_require.resolve("sql.js")` became
-+  // `dirname(293)`. Do NOT "simplify" this to `const r = _require.resolve` — webpack
-+  // replaces that alias with `(void 0)`, which is strictly worse: it throws on call
-+  // instead of resolving.
-+  const requireHolder: { readonly resolver: NodeJS.Require } = { resolver: _require };
-   try {
--    const sqlJsEntry = _require.resolve("sql.js");
-+    const sqlJsEntry = requireHolder.resolver.resolve("sql.js");
-     candidatePaths.push(path.join(path.dirname(sqlJsEntry), "sql-wasm.wasm"));
-   } catch {}
+@@ -1,16 +1,19 @@
+ // src/lib/db/adapters/sqljsAdapter.ts
+ import fs from "node:fs";
+-import { createRequire } from "node:module";
+ import path from "node:path";
+ import type { SqliteAdapter, PreparedStatement, RunResult } from "./types";
  
+ const SAVE_DEBOUNCE_MS = 100;
+ const CHECKPOINT_INTERVAL_MS = 60_000;
+-const _require = createRequire(import.meta.url);
+ 
+ let _sqlJsLib: Awaited<ReturnType<(typeof import("sql.js"))["default"]>> | null = null;
+ 
+ function resolveSqlJsWasmPath(): string {
++  // The standalone assembler copies the complete sql.js package into
++  // <bundle>/node_modules/sql.js. Every packaged server launcher sets cwd to that
++  // bundle directory, so the JavaScript entrypoint and its sibling WASM share one
++  // explicit runtime contract instead of relying on a require.resolve call that
++  // webpack can rewrite. The second path retains direct-source compatibility.
+   const candidatePaths = [
+     path.join(process.cwd(), "node_modules", "sql.js", "dist", "sql-wasm.wasm"),
+     path.join(
+@@ -24,14 +27,6 @@ function resolveSqlJsWasmPath(): string {
+     ),
+   ];
+ 
+-  // Global Bun installs do not use the application's cwd as the package root.
+-  // Resolve the actual JavaScript entrypoint so sql.js can find its sibling WASM
+-  // asset when OmniRoute is launched from ~/.bun/install/global.
+-  try {
+-    const sqlJsEntry = _require.resolve("sql.js");
+-    candidatePaths.push(path.join(path.dirname(sqlJsEntry), "sql-wasm.wasm"));
+-  } catch {}
+-
+   for (const candidatePath of candidatePaths) {
+     if (fs.existsSync(candidatePath)) {
+       return candidatePath;
+@@ -39,7 +34,9 @@ function resolveSqlJsWasmPath(): string {
+   }
+ 
+   throw new Error(
+-    `[sqljsAdapter] Could not locate sql-wasm.wasm. Checked:\n${candidatePaths.join("\n")}`
++    `[sqljsAdapter] Packaged sql.js runtime is incomplete: sql-wasm.wasm was not found. Checked:\n${candidatePaths.join(
++      "\n"
++    )}`
+   );
+ }
+ 
+diff --git a/tests/unit/build/assemble-standalone.test.ts b/tests/unit/build/assemble-standalone.test.ts
+index c87a1419d..323f995b0 100644
+--- a/tests/unit/build/assemble-standalone.test.ts
++++ b/tests/unit/build/assemble-standalone.test.ts
+@@ -40,6 +40,9 @@ function seedSidecarSources(root: string) {
+     "node_modules/pino-pretty/index.js",
+     "node_modules/split2/index.js",
+     "node_modules/playwright-core/index.js",
++    "node_modules/sql.js/package.json",
++    "node_modules/sql.js/dist/sql-wasm.js",
++    "node_modules/sql.js/dist/sql-wasm.wasm",
+     "node_modules/sqlite-vec/index.js",
+     "node_modules/sqlite-vec-linux-x64/vec0.so",
+     "src/lib/db/migrations/001_init.sql",
+@@ -162,6 +165,13 @@ test("async and sync sidecar copy paths produce identical bundle trees", async (
+     asyncTree.includes("src/mitm/tproxy/native/build/Release/transparent.node"),
+     "TPROXY transparent.node copied into the standalone bundle"
+   );
++  for (const sqlJsFile of [
++    "node_modules/sql.js/package.json",
++    "node_modules/sql.js/dist/sql-wasm.js",
++    "node_modules/sql.js/dist/sql-wasm.wasm",
++  ]) {
++    assert.ok(asyncTree.includes(sqlJsFile), `sql.js runtime file copied: ${sqlJsFile}`);
++  }
+   fs.rmSync(tmp, { recursive: true, force: true });
+ });
+ 
+diff --git a/tests/unit/check-pack-boot.test.ts b/tests/unit/check-pack-boot.test.ts
+index b22ca557b..bb95ee75f 100644
+--- a/tests/unit/check-pack-boot.test.ts
++++ b/tests/unit/check-pack-boot.test.ts
+@@ -3,7 +3,14 @@ import assert from "node:assert/strict";
+ import { readFileSync } from "node:fs";
+ import path from "node:path";
+ import { fileURLToPath } from "node:url";
+-import { pickTarball, evaluateBoot, pickPort } from "../../scripts/check/check-pack-boot.mjs";
++import {
++  REQUIRED_SQLJS_RUNTIME_FILES,
++  pickTarball,
++  evaluateBoot,
++  pickPort,
++  findMissingSqlJsRuntimeFiles,
++  evaluateSqlJsRoundTrip,
++} from "../../scripts/check/check-pack-boot.mjs";
+ 
+ // WS1.2 (T1, v3.8.49 quality plan) — pure-function guards for the tarball boot-smoke
+ // gate that kills the #7065 class (published artifact crashes on every boot because a
+@@ -16,7 +23,10 @@ const SCRIPT_PATH = path.join(
+ );
+ 
+ test("pickTarball extracts the filename from npm pack --json output", () => {
+-  assert.equal(pickTarball('[{"filename":"omniroute-3.8.49.tgz","size":1}]'), "omniroute-3.8.49.tgz");
++  assert.equal(
++    pickTarball('[{"filename":"omniroute-3.8.49.tgz","size":1}]'),
++    "omniroute-3.8.49.tgz"
++  );
+ });
+ 
+ test("pickTarball normalizes scoped slashes to the on-disk dash form", () => {
+@@ -49,9 +59,52 @@ test("pickPort stays inside the reserved smoke range for any pid", () => {
+   }
+ });
+ 
++test("installed package contract requires sql.js metadata, entrypoint, and WASM", () => {
++  const present = new Set(REQUIRED_SQLJS_RUNTIME_FILES.map((file) => path.join("/pkg", file)));
++  assert.deepEqual(
++    findMissingSqlJsRuntimeFiles("/pkg", (file) => present.has(file)),
++    []
++  );
++
++  present.delete(path.join("/pkg", "dist/node_modules/sql.js/dist/sql-wasm.wasm"));
++  assert.deepEqual(
++    findMissingSqlJsRuntimeFiles("/pkg", (file) => present.has(file)),
++    ["dist/node_modules/sql.js/dist/sql-wasm.wasm"]
++  );
++});
++
++test("sql.js round trip requires the forced-driver marker plus PATCH and GET persistence", () => {
++  const passing = evaluateSqlJsRoundTrip({
++    startupOutput: "[DB] Pre-initializing sql.js WASM (synchronous drivers unavailable)...",
++    beforeValue: true,
++    patchedValue: false,
++    readBackValue: false,
++  });
++  assert.deepEqual(passing, { ok: true, failures: [] });
++
++  const failing = evaluateSqlJsRoundTrip({
++    startupOutput: "[DB] SQLite database ready",
++    beforeValue: false,
++    patchedValue: true,
++    readBackValue: false,
++  });
++  assert.equal(failing.ok, false);
++  assert.equal(failing.failures.length, 2);
++  assert.match(failing.failures[0], /forced sql\.js startup path/);
++  assert.match(failing.failures[1], /GET debugMode/);
++});
++
+ test("source guard: the gate polls the real health endpoint of the INSTALLED binary", () => {
+   const src = readFileSync(SCRIPT_PATH, "utf8");
+-  assert.ok(src.includes('"install", "-g", "--prefix"'), "must install the packed tarball into a clean prefix");
++  assert.ok(
++    src.includes('"install", "-g", "--prefix"'),
++    "must install the packed tarball into a clean prefix"
++  );
+   assert.ok(src.includes("/api/monitoring/health"), "must poll the health endpoint");
++  assert.ok(src.includes("/api/settings"), "must verify a real application write and read");
++  assert.ok(
++    src.includes('OMNIROUTE_PACK_BOOT_FORCE_SQLJS: "1"'),
++    "must force the packaged sql.js tier during this smoke"
++  );
+   assert.ok(src.indexOf("npm") < src.indexOf("spawn"), "pack+install must precede the boot spawn");
+ });
+diff --git a/tests/unit/db-adapters/driverFactory.test.ts b/tests/unit/db-adapters/driverFactory.test.ts
+index 351da141d..1705af339 100644
+--- a/tests/unit/db-adapters/driverFactory.test.ts
++++ b/tests/unit/db-adapters/driverFactory.test.ts
+@@ -5,8 +5,14 @@ import os from "node:os";
+ import path from "node:path";
+ import { createRequire } from "node:module";
+ 
+-const { createSyncDriverFactory, tryOpenSync, openDatabaseAsync, preInitSqlJs, getSqlJsAdapter } =
+-  await import("../../../src/lib/db/adapters/driverFactory.ts");
++const {
++  createSyncDriverFactory,
++  isPackBootForcedSqlJsSmoke,
++  tryOpenSync,
++  openDatabaseAsync,
++  preInitSqlJs,
++  getSqlJsAdapter,
++} = await import("../../../src/lib/db/adapters/driverFactory.ts");
+ 
+ const require = createRequire(import.meta.url);
+ const isBun = Boolean(process.versions.bun);
+@@ -162,6 +168,19 @@ describe("driverFactory", () => {
+     assert.equal(openWithoutNativeDrivers(":memory:"), null);
+   });
+ 
++  test("pack-boot sql.js forcing requires both smoke-only markers", () => {
++    assert.equal(isPackBootForcedSqlJsSmoke({}), false);
++    assert.equal(isPackBootForcedSqlJsSmoke({ OMNIROUTE_PACK_BOOT_SMOKE: "1" }), false);
++    assert.equal(isPackBootForcedSqlJsSmoke({ OMNIROUTE_PACK_BOOT_FORCE_SQLJS: "1" }), false);
++    assert.equal(
++      isPackBootForcedSqlJsSmoke({
++        OMNIROUTE_PACK_BOOT_SMOKE: "1",
++        OMNIROUTE_PACK_BOOT_FORCE_SQLJS: "1",
++      }),
++      true
++    );
++  });
++
+   test("openDatabaseAsync sempre retorna um adapter válido", async () => {
+     const adapter = await openDatabaseAsync(":memory:");
+     assert.ok(["better-sqlite3", "node:sqlite", "bun:sqlite", "sql.js"].includes(adapter.driver));
 diff --git a/tests/unit/db-driver-bundling-externals.test.ts b/tests/unit/db-driver-bundling-externals.test.ts
 new file mode 100644
-index 000000000..81e1ff82f
+index 000000000..b1d920dd0
 --- /dev/null
 +++ b/tests/unit/db-driver-bundling-externals.test.ts
-@@ -0,0 +1,80 @@
-+// Guards the two `require` shapes in the SQLite stack that webpack silently rewrites
-+// when the module specifier (or the require itself) is not statically analyzable.
+@@ -0,0 +1,51 @@
++// Guards the native `require` shape that webpack silently rewrites when the
++// module specifier (or the require itself) is not statically analyzable.
 +//
-+// Neither failure can be caught by running the code: under `tsx`/`node --test` the
-+// injected loader and `require.resolve` behave normally, so the existing driverFactory
-+// tests pass in BOTH the broken and fixed shapes. The damage only appears in a packaged
-+// Next server build, and only at startup:
-+//
-+//   - `load("better-sqlite3")` (loader arrives as a parameter) → webpack cannot see what
-+//     `load` is, so the value passed in becomes its "missing module" stub, which throws
-+//     `Cannot find module 'better-sqlite3'` with code MODULE_NOT_FOUND. Every driver in
-+//     the cascade then reports itself as uninstalled although the addon is on disk, and
-+//     the process dies in the sql.js last resort — blaming sql.js for a bundling bug.
-+//
-+//   - `_require.resolve("sql.js")` → rewritten to the NUMERIC internal module id, so
-+//     `path.dirname(<number>)` throws, the surrounding catch swallows it, and the only
-+//     candidate that can work in a packaged build is dropped.
-+//
-+// Both are shape assertions on source text because the shape IS the defect: there is no
-+// runtime state to observe that distinguishes them outside a webpack build.
++// This failure cannot be caught by running the code: under `tsx`/`node --test` the
++// injected loader behaves normally, so the existing driverFactory tests pass in BOTH
++// the broken and fixed shapes. The damage only appears in a packaged Next server build.
++// The sql.js fallback is covered separately through package assembly and installed-
++// artifact boot/write/read outcomes; do not pin another resolver implementation here.
 +import test from "node:test";
 +import assert from "node:assert/strict";
 +import fs from "node:fs";
@@ -151,7 +528,8 @@ index 000000000..81e1ff82f
 +  // The production loader must be the literal-specifier wrapper, never `_require`
 +  // itself — passing `_require` through the `load` parameter is exactly what makes
 +  // webpack substitute its missing-module stub.
-+  assert.match(driverFactory, /^export const tryOpenSync = createSyncDriverFactory\(\w+\);$/m);
++  assert.match(driverFactory, /^const openSyncDriver = createSyncDriverFactory\(\w+\);$/m);
++  assert.match(driverFactory, /^export function tryOpenSync\($/m);
 +  assert.doesNotMatch(driverFactory, /createSyncDriverFactory\(\s*_require\s*\)/);
 +
 +  // Every driver the cascade can ask for needs a direct `_require("<literal>")` so
@@ -163,21 +541,22 @@ index 000000000..81e1ff82f
 +    );
 +  }
 +});
-+
-+test("sql.js wasm lookup resolves through a property so webpack keeps the call", () => {
-+  const sqljsAdapter = stripComments(readSource("src/lib/db/adapters/sqljsAdapter.ts"));
-+
-+  // Positive anchor.
-+  assert.match(sqljsAdapter, /^function resolveSqlJsWasmPath\(\): string \{$/m);
-+
-+  // The entrypoint candidate must survive bundling. `_require.resolve("sql.js")` is
-+  // folded to a module id, and aliasing it (`const r = _require.resolve`) is replaced
-+  // with `(void 0)` — worse still, since that throws on call.
-+  assert.doesNotMatch(sqljsAdapter, /_require\.resolve\(/);
-+  assert.doesNotMatch(sqljsAdapter, /=\s*_require\.resolve\s*;/);
-+  assert.match(sqljsAdapter, /\.resolver\.resolve\("sql\.js"\)/);
-+
-+  // The candidate list must still keep the cwd-relative paths ahead of it: those are
-+  // the ones that work for a plain `next start` from the project root.
-+  assert.match(sqljsAdapter, /path\.join\(process\.cwd\(\), "node_modules", "sql\.js"/);
-+});
+diff --git a/tests/unit/sqljs-build-warning-8135.test.ts b/tests/unit/sqljs-build-warning-8135.test.ts
+index 5e2400760..95c875240 100644
+--- a/tests/unit/sqljs-build-warning-8135.test.ts
++++ b/tests/unit/sqljs-build-warning-8135.test.ts
+@@ -36,9 +36,9 @@ test("#8135: sqljsAdapter must not statically resolve sql.js at build time", ()
+     "sqljsAdapter dynamic import should include /* webpackIgnore: true */ magic comment"
+   );
+ 
+-  // sql.js does not export ./package.json. Resolving its public entrypoint is
+-  // sufficient to locate the adjacent WASM asset and avoids repeated bundler
+-  // diagnostics for the private package metadata subpath.
+-  assert.match(source, /_require\.resolve\(["']sql\.js["']\)/);
+-  assert.doesNotMatch(source, /sql\.js\/package\.json/);
++  // The standalone assembler ships sql.js as a real runtime package, so the
++  // adapter must not depend on a build-time createRequire/require.resolve lookup.
++  assert.doesNotMatch(source, /createRequire/);
++  assert.doesNotMatch(source, /\.resolve\(["']sql\.js["']\)/);
++  assert.match(source, /process\.cwd\(\)[\s\S]*"node_modules"[\s\S]*"sql\.js"/);
+ });

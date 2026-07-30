@@ -1,1 +1,0 @@
-- **fix(docker):** Podman deployment guidance now distinguishes local Linux rootless engines from macOS/Windows Podman Machine, corrects Quadlet and local-build instructions, and avoids unsupported remote-client `podman unshare` hints ([#8497](https://github.com/diegosouzapw/OmniRoute/issues/8497)).

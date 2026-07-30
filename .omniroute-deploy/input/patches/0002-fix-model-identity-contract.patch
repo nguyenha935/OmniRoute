@@ -362,6 +362,33 @@ index d06a16f19..d30042734 100644
      requestedCapability
    );
  
+diff --git a/open-sse/services/model.ts b/open-sse/services/model.ts
+index c9077bf1d..fe90a7f39 100644
+--- a/open-sse/services/model.ts
++++ b/open-sse/services/model.ts
+@@ -41,6 +41,11 @@ ALIAS_TO_PROVIDER_ID["xiaomi"] = "xiaomi-mimo";
+ // prefix is "llamacpp". Register it so parseModel("llamacpp/<model>") resolves
+ // provider = "llama-cpp" instead of the identity fallback ("llamacpp").
+ ALIAS_TO_PROVIDER_ID["llamacpp"] = "llama-cpp";
++// Legacy public prefixes remain accepted inbound even though current catalogs publish
++// canonical provider IDs. They are compatibility aliases, not display aliases.
++ALIAS_TO_PROVIDER_ID["mdl"] = "modal";
++ALIAS_TO_PROVIDER_ID["copilot"] = "copilot-web";
++ALIAS_TO_PROVIDER_ID["horde"] = "aihorde";
+ // agy/ is the short alias for antigravity provider.
+ ALIAS_TO_PROVIDER_ID["agy"] = "antigravity";
+ 
+@@ -600,7 +605,9 @@ async function resolveModelByProviderInference(modelId: string, extendedContext:
+ 
+   // Canonicalize candidates (deduplicate alias providers pointing to the same provider ID)
+   const canonicalCandidates = Array.from(
+-    new Set(candidatesToUse.map((p) => resolveProviderAlias(p)).filter((p): p is string => p !== null))
++    new Set(
++      candidatesToUse.map((p) => resolveProviderAlias(p)).filter((p): p is string => p !== null)
++    )
+   );
+ 
+   // Filter candidates by active connections configured in the database
 diff --git a/open-sse/utils/claudeEffortVariants.ts b/open-sse/utils/claudeEffortVariants.ts
 index a5c549fe5..b3c4d8f44 100644
 --- a/open-sse/utils/claudeEffortVariants.ts
@@ -437,7 +464,7 @@ index f83cefc69..ec7449879 100644
        variant.name = `${model.name} (no thinking)`;
      }
 diff --git a/package.json b/package.json
-index ad5477137..1b4989f27 100644
+index 100bb0519..415c89b60 100644
 --- a/package.json
 +++ b/package.json
 @@ -12,6 +12,7 @@
@@ -521,19 +548,18 @@ index 6e4cea303..03ec03069 100644
                      <span className={provider.isExhausted ? "text-red-300" : "text-text-muted"}>
                        {fmtPercent(provider.remainingPct)} · {provider.trend}
 diff --git a/src/app/(dashboard)/dashboard/combos/page.tsx b/src/app/(dashboard)/dashboard/combos/page.tsx
-index 9433fb4ab..2486a887b 100644
+index 9433fb4ab..6e721e5c1 100644
 --- a/src/app/(dashboard)/dashboard/combos/page.tsx
 +++ b/src/app/(dashboard)/dashboard/combos/page.tsx
-@@ -645,8 +645,16 @@ function formatComboEntryDisplay(
+@@ -645,8 +645,15 @@ function formatComboEntryDisplay(
    const modelLabel =
      builderProvider?.models?.find((model) => model.id === parsed.modelId)?.name || parsed.modelId;
  
 +  // Both halves are human labels — the provider's display name and the model's display
-+  // name — so they must NOT be joined with "/". These strings render inside <code>
-+  // elements, and "Eric Ding/claude-opus-4-5" reads as a qualified model id an operator
-+  // can paste into a client config, which it is not (the real one is
-+  // "<prefix>/<model-id>"). A separator that cannot appear in a model path keeps the
-+  // caption readable without impersonating an identity.
++  // name — so they must NOT be joined with "/". "Eric Ding/claude-opus-4-5" reads as a
++  // qualified model id an operator can paste into a client config, which it is not (the
++  // real one is "<prefix>/<model-id>"). A separator that cannot appear in a model path
++  // keeps the ordinary-text caption readable without impersonating an identity.
 +  const stepLabel = `${providerLabel} › ${modelLabel}`;
 +
    if (!includeConnection) {
@@ -542,7 +568,7 @@ index 9433fb4ab..2486a887b 100644
    }
  
    const connectionId = normalizedEntry.connectionId || null;
-@@ -660,14 +668,14 @@ function formatComboEntryDisplay(
+@@ -660,14 +667,14 @@ function formatComboEntryDisplay(
      : null;
  
    if (connectionId) {
@@ -560,6 +586,27 @@ index 9433fb4ab..2486a887b 100644
  }
  
  export default function CombosPage() {
+@@ -1675,9 +1682,9 @@ function ComboCardInner({
+                 models.slice(0, 3).map((entry, index) => {
+                   const { weight } = normalizeModelEntry(entry);
+                   return (
+-                    <code
++                    <span
+                       key={index}
+-                      className="text-[10px] font-mono bg-black/5 dark:bg-white/5 px-1.5 py-0.5 rounded text-text-muted"
++                      className="text-[10px] bg-black/5 dark:bg-white/5 px-1.5 py-0.5 rounded text-text-muted"
+                     >
+                       {formatComboEntryDisplay(entry, {
+                         providerNodes,
+@@ -1685,7 +1692,7 @@ function ComboCardInner({
+                         showFullEmails: emailsVisible,
+                       })}
+                       {strategy === "weighted" && weight > 0 ? ` (${weight}%)` : ""}
+-                    </code>
++                    </span>
+                   );
+                 })
+               )}
 diff --git a/src/app/(dashboard)/dashboard/health/ProviderHealthMatrixCard.tsx b/src/app/(dashboard)/dashboard/health/ProviderHealthMatrixCard.tsx
 index 4b6ce8337..2797e83a3 100644
 --- a/src/app/(dashboard)/dashboard/health/ProviderHealthMatrixCard.tsx
@@ -1208,7 +1255,7 @@ index 91a4a4fb3..bd9db26be 100644
        .map((c) => projectCombo(c as Record<string, unknown>, { includeCapabilities: true }))
        .filter((c): c is PublicCombo => c !== null);
 diff --git a/src/app/api/v1/models/catalog.ts b/src/app/api/v1/models/catalog.ts
-index 34ccbdfba..5ac370c98 100644
+index 34ccbdfba..b53556932 100644
 --- a/src/app/api/v1/models/catalog.ts
 +++ b/src/app/api/v1/models/catalog.ts
 @@ -35,7 +35,7 @@ import {
@@ -1220,7 +1267,24 @@ index 34ccbdfba..5ac370c98 100644
  import { providerUsesCuratedModelsOnly } from "@/lib/providers/modelListingCapability";
  import { getOpenRouterCatalog } from "@/lib/catalog/openrouterCatalog";
  import { hasEligibleConnectionForModel } from "@/domain/connectionModelRules";
-@@ -355,10 +355,28 @@ async function buildUnifiedModelsResponseCore(
+@@ -68,6 +68,8 @@ import {
+   maybeOmitCatalogModelName,
+   getThinkingCapabilityFields,
+   mergeComboCapabilities,
++  stripKnownProviderPrefix,
++  stripRawOrCanonicalProviderPrefix,
+ } from "./catalogHelpers";
+ import {
+   qualifyOpenRouterModelId,
+@@ -90,6 +92,7 @@ import {
+   isCcDiscoveryModelCatalogClient,
+ } from "./catalogRequest";
+ import { incrementCcDiscoveryHitCount } from "@/lib/db/ccDiscoveryMetrics";
++import { isComboListable, type ComboResolutionContext } from "@/lib/models/comboVisibility";
+ import { isFreeModel, providerHasFreeModels } from "@/shared/utils/freeModels";
+ import { isCodexDiscoveryModelExcluded } from "@/shared/services/codexDiscoveryPolicy";
+ import { buildErrorBody } from "@omniroute/open-sse/utils/error";
+@@ -355,10 +358,26 @@ async function buildUnifiedModelsResponseCore(
      // map dependency — pure parseModel() probe), used both here and at the two
      // includeCanonical prefix-collision checks below.
      const getProviderPrefixes = (providerId: string, rawProvider: string) =>
@@ -1240,9 +1304,7 @@ index 34ccbdfba..5ac370c98 100644
 +    // leaves it glued to the model id.
 +    const getComboTargetModelId = (target: ComboCatalogTarget) => {
 +      const rawProvider = typeof target.provider === "string" ? target.provider.trim() : "";
-+      const canonical = rawProvider
-+        ? resolveCanonicalProviderId(rawProvider)
-+        : rawProvider;
++      const canonical = rawProvider ? resolveCanonicalProviderId(rawProvider) : rawProvider;
 +      return getComboTargetModelIdFromMaps(
 +        aliasMaps,
 +        target,
@@ -1252,7 +1314,41 @@ index 34ccbdfba..5ac370c98 100644
  
      const getComboTargetCatalogMetadata = (
        target: ComboCatalogTarget
-@@ -925,6 +943,14 @@ async function buildUnifiedModelsResponseCore(
+@@ -613,26 +632,17 @@ async function buildUnifiedModelsResponseCore(
+       }
+     }
+ 
+-    // Add combos first (they appear at the top) — only active ones
++    const comboResolutionContext: ComboResolutionContext = {
++      aliasMaps,
++      providerIdToPrefix,
++    };
++
++    // Add combos first (they appear at the top) — only listable ones.
+     for (const combo of combos) {
+-      if (combo.isActive === false || combo.isHidden === true) continue;
++      if (!isComboListable(combo, combos, comboResolutionContext)) continue;
+       if (typeof combo.name !== "string" || combo.name.length === 0) continue;
+       if (listedIds.has(combo.name)) continue; // #4164: don't shadow a built-in auto/* id
+ 
+-      // Skip combos whose any underlying target model is hidden
+-      const comboTargets = resolveNestedComboTargets(
+-        combo as Parameters<typeof resolveNestedComboTargets>[0],
+-        combos as Parameters<typeof resolveNestedComboTargets>[1]
+-      ) as ComboCatalogTarget[];
+-      if (
+-        comboTargets.some((target) => {
+-          const resolved = getComboTargetModelId(target);
+-          return resolved ? getModelIsHidden(resolved.providerId, resolved.modelId) : false;
+-        })
+-      ) {
+-        continue;
+-      }
+-
+       const comboMetadata = buildComboCatalogMetadata(combo, combos);
+ 
+       listedIds.add(combo.name);
+@@ -925,6 +935,14 @@ async function buildUnifiedModelsResponseCore(
            if (!openRouterModel?.id || typeof openRouterModel.id !== "string") continue;
            const qualifiedId = qualifyOpenRouterModelId(openRouterModel.id);
            if (models.some((existingModel: any) => existingModel?.id === qualifiedId)) continue;
@@ -1267,7 +1363,81 @@ index 34ccbdfba..5ac370c98 100644
  
            const inputModalities = normalizeOpenRouterModalities(
              openRouterModel.architecture?.input_modalities
-@@ -1295,7 +1321,13 @@ async function buildUnifiedModelsResponseCore(
+@@ -1012,7 +1030,7 @@ async function buildUnifiedModelsResponseCore(
+           typeof model?.root === "string"
+             ? model.root
+             : typeof model?.id === "string"
+-              ? model.id.split("/").pop()
++              ? stripKnownProviderPrefix(model.id, providerId)
+               : null;
+         return existingRoot === rawModelId;
+       });
+@@ -1020,9 +1038,7 @@ async function buildUnifiedModelsResponseCore(
+     // Add embedding models (filtered by active providers)
+     for (const embModel of getAllEmbeddingModels()) {
+       if (!isProviderActive(embModel.provider)) continue;
+-      const rawModelId = embModel.id.startsWith(`${embModel.provider}/`)
+-        ? embModel.id.slice(embModel.provider.length + 1)
+-        : embModel.id;
++      const rawModelId = stripKnownProviderPrefix(embModel.id, embModel.provider);
+       if (!providerSupportsModel(embModel.provider, rawModelId)) continue;
+       if (getModelIsHidden(embModel.provider, rawModelId)) continue;
+       if (hasEquivalentSpecialtyModel(embModel.provider, rawModelId, "embedding", embModel.id)) {
+@@ -1042,7 +1058,7 @@ async function buildUnifiedModelsResponseCore(
+     // Add image models (filtered by active providers)
+     for (const imgModel of getAllImageModels()) {
+       if (!isProviderActive(imgModel.provider)) continue;
+-      const rawModelId = imgModel.id.split("/").pop() || imgModel.id;
++      const rawModelId = stripKnownProviderPrefix(imgModel.id, imgModel.provider);
+       if (!providerSupportsModel(imgModel.provider, rawModelId)) continue;
+       if (getModelIsHidden(imgModel.provider, rawModelId)) continue;
+       models.push({
+@@ -1061,7 +1077,7 @@ async function buildUnifiedModelsResponseCore(
+     // Add rerank models (filtered by active providers)
+     for (const rerankModel of getAllRerankModels()) {
+       if (!isProviderActive(rerankModel.provider)) continue;
+-      const rawModelId = rerankModel.id.split("/").pop() || rerankModel.id;
++      const rawModelId = stripKnownProviderPrefix(rerankModel.id, rerankModel.provider);
+       if (!providerSupportsModel(rerankModel.provider, rawModelId)) continue;
+       if (getModelIsHidden(rerankModel.provider, rawModelId)) continue;
+       if (hasEquivalentSpecialtyModel(rerankModel.provider, rawModelId, "rerank", rerankModel.id)) {
+@@ -1080,7 +1096,7 @@ async function buildUnifiedModelsResponseCore(
+     // Add audio models (filtered by active providers)
+     for (const audioModel of getAllAudioModels()) {
+       if (!isProviderActive(audioModel.provider)) continue;
+-      const rawModelId = audioModel.id.split("/").pop() || audioModel.id;
++      const rawModelId = stripKnownProviderPrefix(audioModel.id, audioModel.provider);
+       if (!providerSupportsModel(audioModel.provider, rawModelId)) continue;
+       if (getModelIsHidden(audioModel.provider, rawModelId)) continue;
+       models.push({
+@@ -1096,7 +1112,7 @@ async function buildUnifiedModelsResponseCore(
+     // Add moderation models (filtered by active providers)
+     for (const modModel of getAllModerationModels()) {
+       if (!isProviderActive(modModel.provider)) continue;
+-      const rawModelId = modModel.id.split("/").pop() || modModel.id;
++      const rawModelId = stripKnownProviderPrefix(modModel.id, modModel.provider);
+       if (!providerSupportsModel(modModel.provider, rawModelId)) continue;
+       if (getModelIsHidden(modModel.provider, rawModelId)) continue;
+       models.push({
+@@ -1111,7 +1127,7 @@ async function buildUnifiedModelsResponseCore(
+     // Add video models (filtered by active providers)
+     for (const videoModel of getAllVideoModels()) {
+       if (!isProviderActive(videoModel.provider)) continue;
+-      const rawModelId = videoModel.id.split("/").pop() || videoModel.id;
++      const rawModelId = stripKnownProviderPrefix(videoModel.id, videoModel.provider);
+       if (!providerSupportsModel(videoModel.provider, rawModelId)) continue;
+       if (getModelIsHidden(videoModel.provider, rawModelId)) continue;
+       models.push({
+@@ -1126,7 +1142,7 @@ async function buildUnifiedModelsResponseCore(
+     // Add music models (filtered by active providers)
+     for (const musicModel of getAllMusicModels()) {
+       if (!isProviderActive(musicModel.provider)) continue;
+-      const rawModelId = musicModel.id.split("/").pop() || musicModel.id;
++      const rawModelId = stripKnownProviderPrefix(musicModel.id, musicModel.provider);
+       if (!providerSupportsModel(musicModel.provider, rawModelId)) continue;
+       if (getModelIsHidden(musicModel.provider, rawModelId)) continue;
+       models.push({
+@@ -1295,7 +1311,14 @@ async function buildUnifiedModelsResponseCore(
            continue;
          }
  
@@ -1277,12 +1447,13 @@ index 34ccbdfba..5ac370c98 100644
 +        // static registry alias, then the raw key. Without the prefix step an
 +        // alias-backed row on a compatible node published `<node-uuid>/<model>` —
 +        // the storage id, which is exactly what must never reach a client.
-+        const nodePrefix = providerIdToPrefix[canonicalProviderId] || providerIdToPrefix[providerKey];
++        const nodePrefix =
++          providerIdToPrefix[canonicalProviderId] || providerIdToPrefix[providerKey];
 +        const alias = nodePrefix || providerIdToAlias[canonicalProviderId] || providerKey;
          if (
            !activeAliases.has(alias) &&
            !activeAliases.has(canonicalProviderId) &&
-@@ -1337,6 +1369,10 @@ async function buildUnifiedModelsResponseCore(
+@@ -1337,6 +1360,10 @@ async function buildUnifiedModelsResponseCore(
          if (
            includeCanonical &&
            canonicalProviderId !== alias &&
@@ -1293,7 +1464,7 @@ index 34ccbdfba..5ac370c98 100644
            !isNoAuthProviderKey(canonicalProviderId) &&
            prefixRoutesToProvider(canonicalProviderId, canonicalProviderId)
          ) {
-@@ -1433,8 +1469,30 @@ async function buildUnifiedModelsResponseCore(
+@@ -1433,8 +1460,30 @@ async function buildUnifiedModelsResponseCore(
          // Without this branch, isModelAllowedForKey returns false for every model
          // (metadata missing → deny), collapsing /v1/models to 0 entries.
        } else {
@@ -1324,53 +1495,135 @@ index 34ccbdfba..5ac370c98 100644
            // m.id is the full identifier (e.g. openai/gpt-4o), m.root is the raw model string
            // check either one as the config could use either patterns
            if (
-@@ -1447,7 +1505,10 @@ async function buildUnifiedModelsResponseCore(
+@@ -1447,7 +1496,10 @@ async function buildUnifiedModelsResponseCore(
          finalModels = filtered;
        }
      }
 -    // ?configuredOnly — hide models that have no eligible DB connection.
 +    // ?configuredOnly — hide models that have no eligible DB connection. The canonical-
-+    // identity collapse (the same model published under two prefixes) runs at the end of
-+    // applyCatalogPostFilters, so BOTH this path and the quota-exclusive early return
-+    // above get it — see catalogResponse.ts.
++    // identity collapse (the same model published under two prefixes) runs inside
++    // applyCatalogPostFilters before synthetic variants are derived, so BOTH this path and
++    // the quota-exclusive early return above get it — see catalogResponse.ts.
      finalModels = applyCatalogPostFilters(request, finalModels, {
        connections,
        prefixMode,
+@@ -1467,7 +1519,10 @@ async function buildUnifiedModelsResponseCore(
+       if (registryFallback) return registryFallback;
+ 
+       const modelId =
+-        model.root || (typeof model.id === "string" ? model.id.split("/").pop() : undefined);
++        model.root ||
++        (typeof model.id === "string"
++          ? stripRawOrCanonicalProviderPrefix(model.id, provider, canonicalId)
++          : undefined);
+       return modelId ? getTokenLimit(canonicalId, modelId) : getTokenLimit(canonicalId);
+     };
+ 
 diff --git a/src/app/api/v1/models/catalogDedupe.ts b/src/app/api/v1/models/catalogDedupe.ts
-index 29f48ac35df0565fa108c315ddf97d63ac2e9328..da501bc05fb44d6615c76225199ec22dc0f0722a 100644
-GIT binary patch
-delta 2437
-zcmZuz!EPKy5X~WymE{5l5(E-dtVGyhybj`o<3vi#qO1}-D7%r#iRta>ooPHXz3T4q
-zdXz-NKP(b|z!@nYz!mWmNL)GQ2YA&pv$h2*OP=nnsjhnO)$9G^`n%}2uQr+kljmaL
-z6j`%$<TK$(ScL~glZS^RDomnsT2!-KyG$iim5H+CmxdBOpDU|MPYbK&`b@dufbQUr
-zjvv3I>ErQ)M&FMo(+O|wT>kJ@eE95}(dzfB*PECUH5XOxQGlU1sYD(}<P51(Wox82
-zr<zY)W(I|dTnpEo?l{rhnu0W5mZCJJmLeyekaicUo*s`6M)dbjKa(jXQaFnDL!Jk_
-z`$fYoK8Q(_N&j`IZ-1R{oN!zlHl!(og!Es2efNuXagKBuP_ru4&f7Yo(f~`!kak|>
-zWai`+N@|gFaw(j0dlWPJO(Aw<ZmJ~S4eLU*tB7Kmiz-prmlBA?5+$7R>MX1(>x|`P
-z6-S}sL@7|IPOz6a4oS7osu`AP#!FFpomz3KeT_Yl#(?BkY91M%wfswA0r;By*epwx
-z{4lFyPQS(bYfRRi1MKa9-T7<Q7$3LsGgeb8B93b*$ZLvq0@{Ow25aHOtG_lrgdC))
-z@`OsJp9*EupvPhlB-4qi9asuA=GrR@wnHvpuFEvyN&*%l-93w$CZ>T)YXdHUfQTVY
-z3|Lxdd4j_ra^E0LctHv;a+8wF%o561LS|r*llvgV&=n-R)KWzk2BQ>(auF?oJr0L1
-z5@^!vw&<Fc7#eiYp>jSm<AcZa{Mj)z$K#{_nHfHJiZ<rjI?rs;+*nke>QhyM0}LW)
-zjaY_#;fu<lVvEr^7cHc&XF$zk3ZQp@!-<8RX>WzC_eeF|XE*RPv!V=33_sh0qK8k%
-z4=3ULnL-7vRh+8=g#`{cHe?Rd3K{|hnX#a(%`Q9NAhY0ljCCZWuSAnW9==|vAw7Yf
-znT^fR^d{$k)!<Oh4A*hWo_1v^=SA;Pp?C>Qf{FNytw1<ORuzWh1)dTZ8O9+n&POm?
-zreZJ}d<zPBQ<OE{<_D6wW~(bi4Fj@DBsIc<|4DVu;Y*5J?H|6FOzF{xzI#5JjE<&U
-z?_~$PxZ-ce9f719nA282coC2`J_>lCn`*|uY(ur*g7)4}eBJSc-nMihQpgd$p-pfF
-zmMQRs{vu)@H4zn+({dX$Kp#iXx|&<sq-lzoS$iis&#FR{JA7_JF>4!68GN^Gbx7S6
-z!Z<<Wf(q>%7P~kWMdGCvl4Tg`cAQgHR=QLm`urAY$7w(f&lemv6N?3ujT^ybY$Bp0
-zM#TmX!Q}uJF$5iNSXB-JQ2l8g=Q!SH)>LW6AXlX~mE>y-fIv%pP)TW}oWq{*FauFE
-zxC@nVxJl3u&)C`p_h?fZptA`tU9uFr!#Fk06KKXQawvpR>c@)#;hSSUqBsW<%6ri~
-zVMF8oj$S<7`O)aIK`FUDL2`B@6oH6%4{6r-AZqGU20=<wdV#rzToI(P01#Z1QwtGB
-zD-41ufw!PpjoA+fV`|wPjg*yT-%ywVWk2FxoS27e5<S5%3O3r|>h;y#)t?)m+&Jj(
-z*+XuuQ?6F4cN@(ryLNZ=%eC7LYJyF*gx!Z=Cf;s^qKCb-x9<%IpEi&sLYL!s3o#*R
-zcbAS#&v5T`7;0@J7#x}kywFzr3ju;V<_qXQoNVu1yi~vdK6*}DH`_X2zowg^5Il61
-z-@o5;zD=(XzxwRG8>_d2+n>j`UWJf1S8l!HcliIsF2kI@xw86T<KxvogTwdnu2sIW
-R5OL-24c@%Hv+?QGe*p=qKgIw6
-
-delta 12
-TcmeyYb3$x`G5h8?AyF0pB2)w<
-
+index 29f48ac35..d475abadb 100644
+--- a/src/app/api/v1/models/catalogDedupe.ts
++++ b/src/app/api/v1/models/catalogDedupe.ts
+@@ -43,6 +43,51 @@ const isGenericChatLike = (model: CatalogModelEntry): boolean => {
+ const listingKey = (model: CatalogModelEntry): string =>
+   `${model.id as string}\u0000${asStr(model.type)}\u0000${asStr(model.subtype)}`;
+ 
++/**
++ * Collapse duplicate SOURCE rows before synthetic variants are derived.
++ *
++ * Identity here includes the public `id` as well as canonical owner/root metadata. This is
++ * deliberate: `MODELS_CATALOG_PREFIX_MODE=dual` promises that `<alias>/<model>` and
++ * `<canonicalId>/<model>` are both published, and native Codex additionally publishes a bare
++ * id. Those are distinct callable public addresses even when they resolve to the same storage
++ * identity, so this pass must never merge them.
++ *
++ * The remaining fields distinguish intentional same-id surfaces such as audio transcription
++ * and speech. Rows without a usable id/owner/root, plus combos whose root is a display name,
++ * pass through rather than having an identity guessed. The first exact source identity wins;
++ * `dedupeExactCatalogIds` remains the final guard after variants have been appended.
++ *
++ * Keys are NUL-joined like `listingKey`: a provider or model id may contain any printable
++ * separator, so only a byte that cannot occur in either is safe as a delimiter.
++ *
++ * Pure (no DB / no I/O). Order-preserving.
++ */
++export function dedupeCanonicalModelIdentities<T extends CatalogModelEntry>(models: T[]): T[] {
++  if (!Array.isArray(models) || models.length < 2) return models;
++
++  const seen = new Set<string>();
++  const out: T[] = [];
++
++  for (const model of models) {
++    const id = asStr(model.id);
++    const owner = asStr(model.owned_by);
++    const root = asStr(model.root);
++
++    // No usable source identity, or a combo (whose `root` is a display name): never merge.
++    if (!id || !owner || !root || owner === "combo") {
++      out.push(model);
++      continue;
++    }
++
++    const key = `${id}\u0000${owner}\u0000${root}\u0000${asStr(model.type)}\u0000${asStr(model.subtype)}`;
++    if (seen.has(key)) continue;
++    seen.add(key);
++    out.push(model);
++  }
++
++  return out;
++}
++
+ /**
+  * Drop exact duplicate listing identities, and suppress false generic chat siblings
+  * when a typed non-chat specialty row exists for the same public id.
+diff --git a/src/app/api/v1/models/catalogHelpers.ts b/src/app/api/v1/models/catalogHelpers.ts
+index 1dcd106c3..93acb37f7 100644
+--- a/src/app/api/v1/models/catalogHelpers.ts
++++ b/src/app/api/v1/models/catalogHelpers.ts
+@@ -42,6 +42,44 @@ export function isPositiveFiniteNumber(value: unknown): value is number {
+   return typeof value === "number" && Number.isFinite(value) && value > 0;
+ }
+ 
++/**
++ * Drop `${providerId}/` from the front of a public model id, and nothing else.
++ *
++ * The catalog used to recover a bare model id with `id.split("/").pop()`, which keeps only
++ * the LAST segment: `huggingface/zai-org/GLM-5.2` became `GLM-5.2` and
++ * `cloudflare-ai/@cf/zai-org/glm-5.2` became `glm-5.2`. Those truncated strings then missed
++ * every registry/spec/synced lookup keyed by the real upstream id (`zai-org/GLM-5.2`), and
++ * two different upstream models that share a last segment collapsed onto one identity.
++ * Only the provider segment is ever a prefix, so only that one may be removed.
++ */
++export function stripKnownProviderPrefix(modelId: string, providerId: string): string {
++  return modelId.startsWith(`${providerId}/`) ? modelId.slice(providerId.length + 1) : modelId;
++}
++
++/**
++ * Same single-segment strip, for the case where the row's `owned_by` may be either an alias
++ * or the canonical provider id.
++ *
++ * Exactly ONE prefix is removed, chosen on the original id: the raw provider if it matches,
++ * else the canonical id if it matches, else nothing. Stripping both in sequence would eat two
++ * segments whenever the raw provider is an alias AND the real upstream model id happens to
++ * start with the canonical provider's name — e.g. `cc/claude/opus` is claude's `claude/opus`,
++ * not `opus`.
++ */
++export function stripRawOrCanonicalProviderPrefix(
++  modelId: string,
++  rawProviderId: string,
++  canonicalProviderId: string
++): string {
++  if (modelId.startsWith(`${rawProviderId}/`)) {
++    return modelId.slice(rawProviderId.length + 1);
++  }
++  if (modelId.startsWith(`${canonicalProviderId}/`)) {
++    return modelId.slice(canonicalProviderId.length + 1);
++  }
++  return modelId;
++}
++
+ export function parseJsonStringArray(value: unknown): string[] {
+   if (typeof value !== "string" || value.trim().length === 0) return [];
+   try {
 diff --git a/src/app/api/v1/models/catalogProviderMaps.ts b/src/app/api/v1/models/catalogProviderMaps.ts
 index 6de91e645..7d3594f46 100644
 --- a/src/app/api/v1/models/catalogProviderMaps.ts
@@ -1606,7 +1859,7 @@ index 6de91e645..7d3594f46 100644
      if (modelStr.startsWith(prefixWithSlash)) {
        const modelId = modelStr.slice(prefixWithSlash.length).trim();
 diff --git a/src/app/api/v1/models/catalogResponse.ts b/src/app/api/v1/models/catalogResponse.ts
-index dee78d995..acfbc2092 100644
+index dee78d995..99b17be5a 100644
 --- a/src/app/api/v1/models/catalogResponse.ts
 +++ b/src/app/api/v1/models/catalogResponse.ts
 @@ -15,7 +15,7 @@ import { appendCcDiscoveryAliases } from "@omniroute/open-sse/utils/ccDiscoveryA
@@ -1618,31 +1871,33 @@ index dee78d995..acfbc2092 100644
  import {
    disambiguateCatalogModelNames,
    enrichCatalogModelEntry,
-@@ -99,6 +99,24 @@ export function applyCatalogPostFilters(
-   // pair survives. Independent of MODELS_CATALOG_PREFIX_MODE; runs as the final guard.
-   finalModels = dedupeExactCatalogIds(finalModels);
+@@ -51,6 +51,11 @@ export function applyCatalogPostFilters(
+     });
+   }
  
-+  // Then collapse the SAME model published under two different prefixes. `dual` prefix
-+  // mode (the default) emits `<alias>/<model>` AND `<canonicalId>/<model>` for every
-+  // provider whose alias differs from its id — 190+ providers, e.g. `ollama-cloud` +
-+  // `ollamacloud`, `codex` + `cx`, `antigravity` + `ag`. Those are different `id` strings,
-+  // so the exact-id pass above cannot see them as related and every such model appeared
-+  // twice in every picker.
-+  //
-+  // It belongs HERE rather than in the catalog host: both the full build and the
-+  // quota-exclusive short-circuit funnel through this function, so one placement covers
-+  // every response instead of leaving the early-return path un-deduped.
-+  //
-+  // Dropping the redundant listing does NOT break clients that already send the other
-+  // prefix: `buildAliasMaps` registers BOTH directions inbound (`aliasToProviderId[alias]`
-+  // and `aliasToProviderId[providerId]` both resolve to the same provider), so requests
-+  // keep resolving either way. This pass narrows what is ADVERTISED, not what is accepted
-+  // — which is the whole point: one model should be listed once.
++  // Collapse source rows that publish one storage identity under both alias and canonical
++  // prefixes. This must happen before synthetic public identities are derived: those rows
++  // deliberately inherit source metadata and a later canonical pass would delete them.
 +  finalModels = dedupeCanonicalModelIdentities(finalModels);
 +
-   return finalModels;
- }
+   // Advertise Claude reasoning-effort variants (claude/<model>-{low,medium,high[,xhigh]}).
+   // Derived from the already key-filtered list so a variant only appears when its real
+   // model is permitted. Runs before the no-thinking pass: the gateway already routes these
+@@ -93,10 +98,10 @@ export function applyCatalogPostFilters(
+   // Derived from the already key-filtered list; skips codex/kimi (own suffix mechanism).
+   finalModels = appendSyncedEffortVariants(finalModels);
  
+-  // #4424 follow-up — drop exact-duplicate ids that slip through the per-source push
+-  // guards (e.g. `codex/gpt-5.5`, `veo-free/seedance` listed twice). Keyed by listing
+-  // identity (id, type, subtype) so the intentional same-id audio transcription/speech
+-  // pair survives. Independent of MODELS_CATALOG_PREFIX_MODE; runs as the final guard.
++  // #4424 follow-up — final public-identity guard after every synthetic row exists. Drop
++  // exact ids that slip through per-source guards (e.g. `codex/gpt-5.5` listed twice),
++  // while keying by (id, type, subtype) so intentional audio transcription/speech pairs
++  // survive. Independent of MODELS_CATALOG_PREFIX_MODE.
+   finalModels = dedupeExactCatalogIds(finalModels);
+ 
+   return finalModels;
 diff --git a/src/app/api/v1/providers/[provider]/models/route.ts b/src/app/api/v1/providers/[provider]/models/route.ts
 index 9e5450be9..4af715526 100644
 --- a/src/app/api/v1/providers/[provider]/models/route.ts
@@ -2854,7 +3109,7 @@ index 2fd411462..af5b58f59 100644
      const groupAccess = checkKeyModelAccess(metadata.id, modelId || "");
      if (!groupAccess.allowed) {
 diff --git a/src/lib/db/models.ts b/src/lib/db/models.ts
-index 168a71d47..084416589 100644
+index 168a71d47..346ec5089 100644
 --- a/src/lib/db/models.ts
 +++ b/src/lib/db/models.ts
 @@ -6,6 +6,11 @@
@@ -3028,10 +3283,10 @@ index 168a71d47..084416589 100644
 +        const lower = modelId.toLowerCase();
 +        if (!bucket.has(row.key)) bucket.set(row.key, new Map());
 +        bucket.get(row.key)!.set(lower, Boolean((entry as { isHidden?: unknown }).isHidden));
-+        if (!spellings.has(`${row.key} ${lower}`)) {
-+          spellings.set(`${row.key} ${lower}`, new Set());
++        if (!spellings.has(`${row.key}\u0000${lower}`)) {
++          spellings.set(`${row.key}\u0000${lower}`, new Set());
          }
-+        spellings.get(`${row.key} ${lower}`)!.add(modelId);
++        spellings.get(`${row.key}\u0000${lower}`)!.add(modelId);
        }
      } catch {
        // Skip malformed entries
@@ -3046,7 +3301,7 @@ index 168a71d47..084416589 100644
 +      if (!result.has(providerId)) result.set(providerId, new Set());
 +      const set = result.get(providerId)!;
 +      set.add(lower);
-+      for (const spelling of spellings.get(`${providerId} ${lower}`) ?? []) {
++      for (const spelling of spellings.get(`${providerId}\u0000${lower}`) ?? []) {
 +        set.add(spelling);
 +      }
 +    }
@@ -3307,6 +3562,22 @@ index 522c72575..760968f32 100644
 +  }
 +  return getProviderDisplayName(providerId, providerNodes);
 +}
+diff --git a/src/lib/guardrails/visionBridgeHelpers.ts b/src/lib/guardrails/visionBridgeHelpers.ts
+index bce8acf62..bb5266703 100644
+--- a/src/lib/guardrails/visionBridgeHelpers.ts
++++ b/src/lib/guardrails/visionBridgeHelpers.ts
+@@ -263,8 +263,9 @@ async function callVisionModelSingle(
+   const isAnthropic = config.model.startsWith("anthropic/");
+ 
+   try {
+-    // Extract model name from provider/model format
+-    const modelName = config.model.includes("/") ? config.model.split("/")[1] : config.model;
++    // Remove only the provider segment; upstream model IDs may contain their own namespace.
++    const firstSlash = config.model.indexOf("/");
++    const modelName = firstSlash >= 0 ? config.model.slice(firstSlash + 1) : config.model;
+     const normalizedImageInput = await normalizeVisionImageInput(
+       imageDataUri,
+       isAnthropic,
 diff --git a/src/lib/localDb.ts b/src/lib/localDb.ts
 index 3e251050b..b3952e251 100755
 --- a/src/lib/localDb.ts
@@ -3321,7 +3592,7 @@ index 3e251050b..b3952e251 100755
    resetApiKeyState,
 diff --git a/src/lib/models/comboVisibility.ts b/src/lib/models/comboVisibility.ts
 new file mode 100644
-index 000000000..fe2a8dd26
+index 000000000..f03f7100b
 --- /dev/null
 +++ b/src/lib/models/comboVisibility.ts
 @@ -0,0 +1,134 @@
@@ -3357,7 +3628,7 @@ index 000000000..fe2a8dd26
 + */
 +
 +import { getModelIsHidden } from "@/lib/db/models";
-+import { getCachedProviderNodes } from "@/lib/localDb";
++import { getCachedProviderNodes } from "@/lib/db/readCache";
 +import {
 +  buildAliasMaps,
 +  getComboTargetModelId,
@@ -3369,7 +3640,7 @@ index 000000000..fe2a8dd26
 +type ComboLike = Record<string, unknown>;
 +
 +/** The resolution inputs `catalog.ts` builds inline; built once per listing call. */
-+type ComboResolutionContext = {
++export type ComboResolutionContext = {
 +  aliasMaps: AliasMaps;
 +  providerIdToPrefix: Record<string, string>;
 +};
@@ -3895,10 +4166,10 @@ index 80471f3d1..f82b77b26 100644
      color: "#F59E0B",
 diff --git a/src/shared/providers/identity.ts b/src/shared/providers/identity.ts
 new file mode 100644
-index 000000000..632762f50
+index 000000000..2f53c40a1
 --- /dev/null
 +++ b/src/shared/providers/identity.ts
-@@ -0,0 +1,275 @@
+@@ -0,0 +1,283 @@
 +/**
 + * Canonical provider-identity resolver — the single place that turns the first
 + * segment of a published model id into the provider it actually belongs to, and
@@ -4098,11 +4369,22 @@ index 000000000..632762f50
 +
 +  const identity = resolveProviderSegment(segment, options);
 +
-+  // A synthetic outer namespace wraps a real provider-qualified id; recurse so
-+  // `no-think/pix4k/claude-opus-5` resolves to the pix4k node, not "no-think".
-+  if (identity.kind === "synthetic" && rest.includes("/")) {
-+    const inner = resolveProviderIdentity(rest, options);
-+    if (inner.providerId) return inner;
++  // Synthetic namespaces have distinct shapes — they are not interchangeable wrappers.
++  // no-think has the provider immediately after it, while qtSd first carries a routing slug.
++  // auto/combo are complete routing identities and must not reinterpret their payload as a
++  // provider-qualified model.
++  if (identity.kind === "synthetic") {
++    if (segment === "no-think" && rest.includes("/")) {
++      const inner = resolveProviderIdentity(rest, options);
++      if (inner.providerId) return inner;
++    }
++    if (segment === "qtSd") {
++      const { rest: providerQualifiedId } = splitProviderSegment(rest);
++      if (providerQualifiedId.includes("/")) {
++        const inner = resolveProviderIdentity(providerQualifiedId, options);
++        if (inner.providerId) return inner;
++      }
++    }
 +  }
 +
 +  return { providerId: identity.providerId, modelId: rest, kind: identity.kind };
@@ -4118,10 +4400,7 @@ index 000000000..632762f50
 + * how the same model ended up published under a prefix on one surface and a raw
 + * UUID on another.
 + */
-+export function getPublicProviderPrefix(
-+  providerId: string,
-+  options: ResolveOptions = {}
-+): string {
++export function getPublicProviderPrefix(providerId: string, options: ResolveOptions = {}): string {
 +  const raw = (providerId || "").trim();
 +  if (!raw) return raw;
 +  const { nodes = [], providerIdToAlias = {} } = options;
@@ -5889,41 +6168,95 @@ index 000000000..37af79c2c
 +  assert.deepEqual(missing, [], `providers with no publishable prefix: ${missing.join(", ")}`);
 +});
 diff --git a/tests/unit/catalog-helpers-extraction.test.ts b/tests/unit/catalog-helpers-extraction.test.ts
-index 48ce36435..6817e9e3d 100644
+index 48ce36435..04102f6fe 100644
 --- a/tests/unit/catalog-helpers-extraction.test.ts
 +++ b/tests/unit/catalog-helpers-extraction.test.ts
-@@ -159,6 +159,38 @@ test("catalogProviderMaps: buildAliasMaps seeds the fallback aliases", () => {
+@@ -15,6 +15,8 @@ import {
+   intersectStringArrays,
+   minKnownNumber,
+   maybeOmitCatalogModelName,
++  stripKnownProviderPrefix,
++  stripRawOrCanonicalProviderPrefix,
+ } from "../../src/app/api/v1/models/catalogHelpers.ts";
+ import {
+   qualifyOpenRouterModelId,
+@@ -88,6 +90,52 @@ test("catalogHelpers: maybeOmitCatalogModelName drops name only when excluding",
+   assert.deepEqual(maybeOmitCatalogModelName({ id: "y" }, false), { id: "y" });
+ });
+ 
++test("catalogHelpers: stripKnownProviderPrefix removes the provider segment and nothing more", () => {
++  // The behavior this replaces was `id.split("/").pop()`, which kept only the LAST
++  // segment and so destroyed every slashful upstream model id.
++  assert.equal(stripKnownProviderPrefix("openai/gpt-4o", "openai"), "gpt-4o");
++  assert.equal(
++    stripKnownProviderPrefix("huggingface/zai-org/GLM-5.2", "huggingface"),
++    "zai-org/GLM-5.2"
++  );
++  assert.equal(
++    stripKnownProviderPrefix("cloudflare-ai/@cf/zai-org/glm-5.2", "cloudflare-ai"),
++    "@cf/zai-org/glm-5.2"
++  );
++  // Not this provider's prefix → untouched, rather than silently truncated.
++  assert.equal(stripKnownProviderPrefix("zai-org/GLM-5.2", "huggingface"), "zai-org/GLM-5.2");
++  assert.equal(stripKnownProviderPrefix("gpt-4o", "openai"), "gpt-4o");
++  // A provider id that is only a substring prefix of the first segment is not a match.
++  assert.equal(stripKnownProviderPrefix("openai-compat/gpt-4o", "openai"), "openai-compat/gpt-4o");
++});
++
++test("catalogHelpers: stripRawOrCanonicalProviderPrefix removes exactly one prefix", () => {
++  // 1. Raw alias prefix — the row is published under the alias, so the alias comes off.
++  assert.equal(
++    stripRawOrCanonicalProviderPrefix("cc/claude-sonnet-4-6", "cc", "claude"),
++    "claude-sonnet-4-6"
++  );
++  // 2. Canonical prefix — the row is published under the provider id itself.
++  assert.equal(
++    stripRawOrCanonicalProviderPrefix("claude/claude-sonnet-4-6", "claude", "claude"),
++    "claude-sonnet-4-6"
++  );
++  // 3. Raw alias prefix where the real upstream model id ALSO begins with the canonical
++  //    provider name. Only the alias may come off: `claude/opus` is the model id.
++  //    Chained strips would eat both segments and return "opus".
++  assert.equal(stripRawOrCanonicalProviderPrefix("cc/claude/opus", "cc", "claude"), "claude/opus");
++  // Slashful upstream ids survive under either prefix form.
++  assert.equal(
++    stripRawOrCanonicalProviderPrefix("huggingface/zai-org/GLM-5.2", "huggingface", "huggingface"),
++    "zai-org/GLM-5.2"
++  );
++  // Neither prefix matches → unchanged.
++  assert.equal(
++    stripRawOrCanonicalProviderPrefix("zai-org/GLM-5.2", "hf", "huggingface"),
++    "zai-org/GLM-5.2"
++  );
++});
++
+ test("catalogOpenrouter: qualify + modality normalization + type", () => {
+   assert.equal(qualifyOpenRouterModelId("foo/bar"), "openrouter/foo/bar");
+   assert.equal(qualifyOpenRouterModelId("openrouter/foo"), "openrouter/foo");
+@@ -159,6 +207,30 @@ test("catalogProviderMaps: buildAliasMaps seeds the fallback aliases", () => {
    assert.equal(aliasToProviderId["kr"], "kiro");
  });
  
-+test("catalogProviderMaps: the two maps are asymmetric on purpose — accept wide, publish narrow", () => {
-+  // This file only ever pinned the INBOUND direction, so it stayed green while
-+  // `providerIdToAlias` was handing out prefixes that resolved nowhere
-+  // (aihorde → "horde", modal → "mdl", copilot-web → "copilot", poe-web → "poe").
-+  // The publish side is now gated on the alias parsing back to its own provider;
-+  // the inbound side deliberately is NOT, so a client holding an old alias keeps
-+  // working. Pin both halves of that asymmetry here.
++test("catalogProviderMaps: publish aliases must resolve inbound without stealing real provider ids", () => {
 +  const { aliasToProviderId, providerIdToAlias } = buildAliasMaps();
 +
++  // These legacy public prefixes are compatibility aliases in parseModel now, so they
++  // round-trip to their declared provider and remain safe catalog prefixes.
 +  for (const [alias, providerId] of [
 +    ["horde", "aihorde"],
 +    ["mdl", "modal"],
 +    ["copilot", "copilot-web"],
 +  ] as const) {
-+    assert.equal(aliasToProviderId[alias], providerId, `"${alias}" must still be accepted inbound`);
-+    assert.notEqual(
-+      providerIdToAlias[providerId],
-+      alias,
-+      `"${providerId}" must not PUBLISH under "${alias}" — that id parses to no provider`
-+    );
-+    assert.equal(
-+      providerIdToAlias[providerId],
-+      providerId,
-+      `"${providerId}" falls back to publishing under its own id`
-+    );
++    assert.equal(aliasToProviderId[alias], providerId, `"${alias}" must be accepted inbound`);
++    assert.equal(providerIdToAlias[providerId], alias, `"${providerId}" may publish as "${alias}"`);
 +  }
 +
-+  // A provider whose alias DOES round-trip keeps publishing under the short form.
++  // `poe` is itself a real provider. poe-web's colliding alias must not take over either
++  // inbound resolution or outbound publication under that namespace.
++  assert.equal(aliasToProviderId["poe"], "poe");
++  assert.notEqual(providerIdToAlias["poe-web"], "poe");
++  assert.equal(providerIdToAlias["poe-web"], "poe-web");
++
 +  assert.equal(providerIdToAlias["codex"], "cx");
 +  assert.equal(providerIdToAlias["claude"], "cc");
 +});
@@ -6324,6 +6657,152 @@ index 000000000..76b4d1813
 +
 +  assert.deepEqual(resolved, { providerId: NODE_ID, modelId: MODEL });
 +});
+diff --git a/tests/unit/combo-visibility.test.ts b/tests/unit/combo-visibility.test.ts
+new file mode 100644
+index 000000000..7d9957b2e
+--- /dev/null
++++ b/tests/unit/combo-visibility.test.ts
+@@ -0,0 +1,102 @@
++import test from "node:test";
++import assert from "node:assert/strict";
++import fs from "node:fs";
++import os from "node:os";
++import path from "node:path";
++
++const TEST_DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "omniroute-combo-visibility-"));
++process.env.DATA_DIR = TEST_DATA_DIR;
++process.env.API_KEY_SECRET = process.env.API_KEY_SECRET || "combo-visibility-test-secret";
++
++const core = await import("../../src/lib/db/core.ts");
++const modelsDb = await import("../../src/lib/db/models.ts");
++const { buildAliasMaps } = await import("../../src/app/api/v1/models/catalogProviderMaps.ts");
++const { isComboListable } = await import("../../src/lib/models/comboVisibility.ts");
++
++type ComboLike = Record<string, unknown>;
++
++function context(providerIdToPrefix: Record<string, string> = {}) {
++  return { aliasMaps: buildAliasMaps(), providerIdToPrefix };
++}
++
++function combo(name: string, models: unknown[], overrides: ComboLike = {}): ComboLike {
++  return {
++    name,
++    strategy: "priority",
++    models,
++    isActive: true,
++    isHidden: false,
++    ...overrides,
++  };
++}
++
++async function resetStorage() {
++  core.resetDbInstance();
++  fs.rmSync(TEST_DATA_DIR, { recursive: true, force: true });
++  fs.mkdirSync(TEST_DATA_DIR, { recursive: true });
++}
++
++test.beforeEach(async () => {
++  await resetStorage();
++});
++
++test.after(() => {
++  core.resetDbInstance();
++  fs.rmSync(TEST_DATA_DIR, { recursive: true, force: true });
++});
++
++test("isComboListable rejects inactive and eye-hidden combos", () => {
++  const inactive = combo("inactive", ["openai/gpt-4o"], { isActive: false });
++  const hidden = combo("hidden", ["openai/gpt-4o"], { isHidden: true });
++  const combos = [inactive, hidden];
++
++  assert.equal(isComboListable(inactive, combos, context()), false);
++  assert.equal(isComboListable(hidden, combos, context()), false);
++});
++
++test("isComboListable rejects a combo whose direct model target is eye-hidden", () => {
++  modelsDb.setModelIsHidden("openai", "gpt-4o", true);
++  const direct = combo("direct-hidden", ["openai/gpt-4o"]);
++
++  assert.equal(isComboListable(direct, [direct], context()), false);
++});
++
++test("isComboListable resolves nested combos before checking hidden leaves", () => {
++  modelsDb.setModelIsHidden("openai", "gpt-4o", true);
++  const child = combo("hidden-child", ["openai/gpt-4o"], { isHidden: true });
++  const parent = combo("parent", ["hidden-child"]);
++  const combos = [child, parent];
++
++  assert.equal(isComboListable(parent, combos, context()), false);
++});
++
++test("isComboListable strips a compatible provider-node prefix for hidden lookup", () => {
++  const providerId = "anthropic-compatible-demo";
++  modelsDb.setModelIsHidden(providerId, "vendor/claude-opus", true);
++  const compatible = combo("compatible-hidden", [
++    {
++      kind: "model",
++      providerId,
++      model: "pix4k/vendor/claude-opus",
++    },
++  ]);
++
++  assert.equal(
++    isComboListable(compatible, [compatible], context({ [providerId]: "pix4k" })),
++    false
++  );
++});
++
++test("isComboListable keeps visible, malformed, and unresolved targets listed", () => {
++  const visible = combo("visible", ["openai/gpt-4o"]);
++  const malformed = combo("malformed", [{ notAModel: true }]);
++  const unresolved = combo("unresolved", [
++    { kind: "model", providerId: "unknown", model: "unknown/vendor/model" },
++  ]);
++  const combos = [visible, malformed, unresolved];
++  const resolutionContext = context();
++
++  assert.equal(isComboListable(visible, combos, resolutionContext), true);
++  assert.equal(isComboListable(malformed, combos, resolutionContext), true);
++  assert.equal(isComboListable(unresolved, combos, resolutionContext), true);
++});
+diff --git a/tests/unit/guardrails/visionBridgeHelpers.callVisionModel.test.ts b/tests/unit/guardrails/visionBridgeHelpers.callVisionModel.test.ts
+index 1465e927c..c3e5730f6 100644
+--- a/tests/unit/guardrails/visionBridgeHelpers.callVisionModel.test.ts
++++ b/tests/unit/guardrails/visionBridgeHelpers.callVisionModel.test.ts
+@@ -250,6 +250,33 @@ test("callVisionModel uses correct request body format", async () => {
+   }
+ });
+ 
++test("callVisionModel preserves a slashful upstream model id for a direct custom endpoint", async () => {
++  const originalBaseUrl = process.env.VISION_BRIDGE_BASE_URL;
++  let capturedBody: Record<string, unknown> = {};
++  globalThis.fetch = async (_url: URL | RequestInfo, init?: RequestInit) => {
++    capturedBody = JSON.parse(init?.body as string);
++    return new Response(JSON.stringify({ choices: [{ message: { content: "Description" } }] }), {
++      status: 200,
++      headers: { "Content-Type": "application/json" },
++    });
++  };
++  process.env.VISION_BRIDGE_BASE_URL = "https://vision.example.test/v1";
++
++  try {
++    await callVisionModel("data:image/png;base64,test123", {
++      model: "openrouter/vendor/model",
++      prompt: "Describe this image",
++      timeoutMs: 30000,
++      maxImages: 10,
++    });
++    assert.strictEqual(capturedBody.model, "vendor/model");
++  } finally {
++    globalThis.fetch = originalFetch;
++    if (originalBaseUrl === undefined) delete process.env.VISION_BRIDGE_BASE_URL;
++    else process.env.VISION_BRIDGE_BASE_URL = originalBaseUrl;
++  }
++});
++
+ test("callVisionModel fetches remote images before Anthropic requests", async () => {
+   const fetchCalls: Array<{ url: string; init?: RequestInit }> = [];
+ 
 diff --git a/tests/unit/managed-available-models.test.ts b/tests/unit/managed-available-models.test.ts
 index 263586756..0ff19b1c7 100644
 --- a/tests/unit/managed-available-models.test.ts
@@ -6508,6 +6987,35 @@ index 000000000..7238d682f
 +    "the warning must name what the caller asked for"
 +  );
 +});
+diff --git a/tests/unit/model-parse.test.ts b/tests/unit/model-parse.test.ts
+index 7f05dbf2d..de24dd6ab 100644
+--- a/tests/unit/model-parse.test.ts
++++ b/tests/unit/model-parse.test.ts
+@@ -36,6 +36,24 @@ test("parseModel treats exact slashful model ids as models, not provider prefixe
+   assert.strictEqual(result.model, "openai/gpt-oss-120b");
+ });
+ 
++test("parseModel accepts legacy public provider prefixes without truncating model tails", () => {
++  for (const [modelId, provider, tail] of [
++    ["mdl/vendor/model", "modal", "vendor/model"],
++    ["copilot/gpt-5.6", "copilot-web", "gpt-5.6"],
++    ["horde/aphrodite/model", "aihorde", "aphrodite/model"],
++  ] as const) {
++    const result = parseModel(modelId);
++    assert.strictEqual(result.provider, provider);
++    assert.strictEqual(result.model, tail);
++  }
++});
++
++test("a real provider id wins over another provider's colliding alias", () => {
++  const result = parseModel("poe/gpt-5.2");
++  assert.strictEqual(result.provider, "poe");
++  assert.strictEqual(result.model, "gpt-5.2");
++});
++
+ test("normalizeCrossProxyModelId maps supported external dialects to canonical ids", () => {
+   assert.deepEqual(normalizeCrossProxyModelId("gpt-oss:120b"), {
+     modelId: "gpt-oss-120b",
 diff --git a/tests/unit/model-select-modal-hidden-leak-7156.test.ts b/tests/unit/model-select-modal-hidden-leak-7156.test.ts
 new file mode 100644
 index 000000000..2aab3880e
@@ -6951,11 +7459,135 @@ index 000000000..89fffc4a2
 +  await listCatalogIds();
 +  assert.equal(catalog.__getCatalogBuilderRunsForTest(), 1);
 +});
+diff --git a/tests/unit/models-catalog-exact-dup-4424.test.ts b/tests/unit/models-catalog-exact-dup-4424.test.ts
+index 7dfd3cd8e..d9dedb225 100644
+--- a/tests/unit/models-catalog-exact-dup-4424.test.ts
++++ b/tests/unit/models-catalog-exact-dup-4424.test.ts
+@@ -1,6 +1,93 @@
+ import assert from "node:assert/strict";
+ import { describe, it } from "node:test";
+-import { dedupeExactCatalogIds } from "../../src/app/api/v1/models/catalogDedupe.ts";
++import {
++  dedupeCanonicalModelIdentities,
++  dedupeExactCatalogIds,
++} from "../../src/app/api/v1/models/catalogDedupe.ts";
++import { applyCatalogPostFilters } from "../../src/app/api/v1/models/catalogResponse.ts";
++
++describe("dedupeCanonicalModelIdentities (#8015)", () => {
++  it("preserves alias and canonical public surfaces while removing exact source duplicates", () => {
++    const alias = {
++      id: "cx/gpt-5.6",
++      owned_by: "codex",
++      root: "gpt-5.6",
++      context_length: 200000,
++    };
++    const canonical = {
++      id: "codex/gpt-5.6",
++      owned_by: "codex",
++      root: "gpt-5.6",
++      context_length: 100000,
++    };
++    const exactDuplicate = { ...alias, context_length: 50000 };
++
++    assert.deepEqual(dedupeCanonicalModelIdentities([alias, canonical, exactDuplicate]), [
++      alias,
++      canonical,
++    ]);
++  });
++
++  it("delimits every identity component so concatenation-equivalent rows stay distinct", () => {
++    const rows = [
++      { id: "ab", owned_by: "c", root: "model" },
++      { id: "a", owned_by: "bc", root: "model" },
++      { id: "same", owned_by: "owner", root: "ab", type: "c" },
++      { id: "same", owned_by: "owner", root: "a", type: "bc" },
++    ];
++
++    assert.deepEqual(dedupeCanonicalModelIdentities(rows), rows);
++  });
++
++  it("preserves type/subtype surfaces and never guesses combo or id-less identities", () => {
++    const rows = [
++      { id: "openai/voice", owned_by: "openai", root: "voice", type: "audio", subtype: "speech" },
++      {
++        id: "openai/voice",
++        owned_by: "openai",
++        root: "voice",
++        type: "audio",
++        subtype: "transcription",
++      },
++      { id: "primary", owned_by: "combo", root: "Primary" },
++      { id: "secondary", owned_by: "combo", root: "Primary" },
++      { name: "owner missing", root: "same" },
++      { name: "root missing", owned_by: "codex" },
++    ];
++    assert.deepEqual(dedupeCanonicalModelIdentities(rows), rows);
++  });
++});
++
++describe("applyCatalogPostFilters (#8015 ordering)", () => {
++  it("dedupes canonical source rows before deriving distinct synthetic public identities", () => {
++    const sourceRows = [
++      {
++        id: "cc/claude-opus-4-6",
++        owned_by: "claude",
++        root: "claude-opus-4-6",
++        name: "Claude Opus 4.6",
++      },
++      {
++        id: "claude/claude-opus-4-6",
++        owned_by: "claude",
++        root: "claude-opus-4-6",
++        name: "Claude Opus 4.6",
++      },
++    ];
++
++    const out = applyCatalogPostFilters(new Request("http://localhost/v1/models"), sourceRows, {
++      connections: [],
++      prefixMode: "dual",
++      aliasToProviderId: { cc: "claude" },
++    });
++    const ids = out.map((model) => model.id);
++
++    assert.equal(ids.filter((id) => id === "cc/claude-opus-4-6").length, 1);
++    assert.ok(ids.includes("no-think/cc/claude-opus-4-6"));
++    assert.ok(ids.includes("cc/claude-opus-4-6-low"));
++    assert.equal(new Set(ids).size, ids.length, "every final public id must be unique");
++  });
++});
+ 
+ describe("dedupeExactCatalogIds (#4424 / #8015)", () => {
+   it("drops exact same-surface duplicates and keeps the first row", () => {
 diff --git a/tests/unit/models-catalog-route.test.ts b/tests/unit/models-catalog-route.test.ts
-index 2db47dbf9..2840c38d1 100644
+index 2db47dbf9..a2b275fc7 100644
 --- a/tests/unit/models-catalog-route.test.ts
 +++ b/tests/unit/models-catalog-route.test.ts
-@@ -1040,10 +1040,17 @@ test("v1 models catalog does not duplicate imported Jina specialty models", asyn
+@@ -308,6 +308,12 @@ test("v1 models catalog keeps only visible combos when no providers are active",
+     models: ["openai/gpt-4o"],
+   });
+   await combosDb.updateCombo((inactive as any).id, { isActive: false });
++  const hiddenTarget = await combosDb.createCombo({
++    name: "hidden-target-combo",
++    strategy: "priority",
++    models: ["openai/gpt-4o-mini"],
++  });
++  modelsDb.setModelIsHidden("openai", "gpt-4o-mini", true);
+ 
+   const response = await v1ModelsCatalog.getUnifiedModelsResponse(
+     new Request("http://localhost/api/v1/models")
+@@ -330,6 +336,11 @@ test("v1 models catalog keeps only visible combos when no providers are active",
+     body.data.some((item) => item.id === inactive.name),
+     false
+   );
++  assert.equal(
++    body.data.some((item) => item.id === hiddenTarget.name),
++    false,
++    "a combo whose resolved model target is eye-hidden must stay out of the catalog"
++  );
+ });
+ 
+ test("v1 models catalog derives combo metadata from known targets conservatively", async () => {
+@@ -1040,10 +1051,17 @@ test("v1 models catalog does not duplicate imported Jina specialty models", asyn
    );
  
    assert.equal(response.status, 200);
@@ -7382,10 +8014,10 @@ index fd2437eb0..988581896 100644
  });
 diff --git a/tests/unit/provider-identity-resolver.test.ts b/tests/unit/provider-identity-resolver.test.ts
 new file mode 100644
-index 000000000..c992d0241
+index 000000000..27619b66a
 --- /dev/null
 +++ b/tests/unit/provider-identity-resolver.test.ts
-@@ -0,0 +1,145 @@
+@@ -0,0 +1,165 @@
 +import test from "node:test";
 +import assert from "node:assert/strict";
 +
@@ -7484,17 +8116,37 @@ index 000000000..c992d0241
 +  assert.equal(resolved.modelId, "gpt-5.6");
 +});
 +
-+test("synthetic namespaces are recognized and see through to the real provider", () => {
++test("synthetic namespaces follow only their documented identity shapes", () => {
 +  assert.ok(isSyntheticModelNamespace("no-think"));
 +  assert.ok(isSyntheticModelNamespace("qtSd"));
 +  assert.ok(!isSyntheticModelNamespace("pix4k"));
 +
 +  // `no-think/pix4k/<model>` must resolve to the pix4k node, NOT to "no-think".
-+  const seen = resolveProviderIdentity("no-think/pix4k/claude-opus-5", OPTS);
-+  assert.equal(seen.providerId, NODE_ID);
-+  assert.equal(seen.modelId, "claude-opus-5");
++  assert.deepEqual(resolveProviderIdentity("no-think/pix4k/claude-opus-5", OPTS), {
++    providerId: NODE_ID,
++    modelId: "claude-opus-5",
++    kind: "nodePrefix",
++  });
 +
-+  // A synthetic segment with nothing provider-shaped behind it stays synthetic.
++  // qtSd has one non-provider slug between the namespace and the real provider.
++  assert.deepEqual(resolveProviderIdentity("qtSd/group/cx/gpt-5.6", OPTS), {
++    providerId: "codex",
++    modelId: "gpt-5.6",
++    kind: "alias",
++  });
++
++  // auto/combo payloads are routing identities, not an implicit provider wrapper.
++  assert.deepEqual(resolveProviderIdentity("auto/cx/gpt-5.6", OPTS), {
++    providerId: "auto",
++    modelId: "cx/gpt-5.6",
++    kind: "synthetic",
++  });
++  assert.deepEqual(resolveProviderIdentity("combo/cx/gpt-5.6", OPTS), {
++    providerId: "combo",
++    modelId: "cx/gpt-5.6",
++    kind: "synthetic",
++  });
++
 +  const bare = resolveProviderSegment("auto", OPTS);
 +  assert.equal(bare.kind, "synthetic");
 +});
@@ -8199,6 +8851,46 @@ index a73e19a77..ceb0a979c 100644
  
  // ── OAUTH_TEST_CONFIG Validation ────────────────────────────────────────────
  
+diff --git a/tests/unit/specialty-model-catalog-routes.test.ts b/tests/unit/specialty-model-catalog-routes.test.ts
+index 73c95336e..34f12403d 100644
+--- a/tests/unit/specialty-model-catalog-routes.test.ts
++++ b/tests/unit/specialty-model-catalog-routes.test.ts
+@@ -126,6 +126,35 @@ test("provider-scoped GitHub Models catalog preserves nested embedding IDs", asy
+   );
+ });
+ 
++test("unified catalog preserves slashful upstream IDs across specialty registries", async () => {
++  await seedConnection("fireworks");
++  await seedConnection("coqui");
++
++  const response = await v1ModelsCatalog.getUnifiedModelsResponse(
++    new Request("http://localhost/v1/models")
++  );
++  const body = (await response.json()) as {
++    data?: Array<{ id: string; root?: string; type?: string; subtype?: string }>;
++  };
++  const byId = new Map((body.data || []).map((model) => [model.id, model]));
++
++  assert.equal(response.status, 200);
++  assert.equal(
++    byId.get("fireworks/accounts/fireworks/models/qwen3-embedding-8b")?.root,
++    "accounts/fireworks/models/qwen3-embedding-8b"
++  );
++  assert.equal(
++    byId.get("fireworks/accounts/fireworks/models/qwen3-embedding-8b")?.type,
++    "embedding"
++  );
++  assert.equal(
++    byId.get("fireworks/accounts/fireworks/models/nomic-rerank-v1")?.root,
++    "accounts/fireworks/models/nomic-rerank-v1"
++  );
++  assert.equal(byId.get("fireworks/accounts/fireworks/flux-kontext-max")?.type, "image");
++  assert.equal(byId.get("coqui/tts_models/en/ljspeech/tacotron2-DDC")?.type, "audio");
++});
++
+ test("video catalog GET hides credential-backed providers without credentials", async () => {
+   await seedConnection("kie");
+ 
 diff --git a/tests/unit/usage-analytics-provider-display-name-7534.test.ts b/tests/unit/usage-analytics-provider-display-name-7534.test.ts
 index e060f7eb5..e9fa1c379 100644
 --- a/tests/unit/usage-analytics-provider-display-name-7534.test.ts
@@ -8722,7 +9414,7 @@ index a3089d436..007f7133c 100644
  
  function captureWarn<T>(fn: () => T): { result: T; warnings: string[] } {
 diff --git a/tests/unit/vscode-token-routes.test.ts b/tests/unit/vscode-token-routes.test.ts
-index 59d9ad044..8cc0a968e 100644
+index 2c05c9707..86dcdb888 100644
 --- a/tests/unit/vscode-token-routes.test.ts
 +++ b/tests/unit/vscode-token-routes.test.ts
 @@ -33,7 +33,7 @@ const vscodeChatCompletionsRoute =
