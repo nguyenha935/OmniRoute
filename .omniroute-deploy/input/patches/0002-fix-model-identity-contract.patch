@@ -464,7 +464,7 @@ index f83cefc69..ec7449879 100644
        variant.name = `${model.name} (no thinking)`;
      }
 diff --git a/package.json b/package.json
-index 100bb0519..415c89b60 100644
+index 5b995b365..8acaccae9 100644
 --- a/package.json
 +++ b/package.json
 @@ -12,6 +12,7 @@
@@ -1262,6 +1262,58 @@ index 91a4a4fb3..3077f2197 100644
        // #3979: advertise resolved capabilities so importing clients enable them
        .map((c) => projectCombo(c as Record<string, unknown>, { includeCapabilities: true }))
        .filter((c): c is PublicCombo => c !== null);
+diff --git a/src/app/api/v1/messages/count_tokens/route.ts b/src/app/api/v1/messages/count_tokens/route.ts
+index af1884079..b94000deb 100644
+--- a/src/app/api/v1/messages/count_tokens/route.ts
++++ b/src/app/api/v1/messages/count_tokens/route.ts
+@@ -1,6 +1,10 @@
+ import { CORS_HEADERS } from "@/shared/utils/cors";
++import { HTTP_STATUS } from "@omniroute/open-sse/config/constants.ts";
++import { errorResponse } from "@omniroute/open-sse/utils/error.ts";
+ import { v1CountTokensSchema } from "@/shared/validation/schemas";
+ import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
++import { enforceApiKeyPolicy } from "@/shared/utils/apiKeyPolicy";
++import { isRequireApiKeyEnabled } from "@/shared/utils/featureFlags";
+ import { countTextTokens, type TokenizerContext } from "@/shared/utils/tiktokenCounter";
+ import { getExecutor } from "@omniroute/open-sse/executors/index.ts";
+ import { runWithProxyContext } from "@omniroute/open-sse/utils/proxyFetch.ts";
+@@ -39,12 +43,35 @@ export async function POST(request) {
+     });
+   }
+   const body = validation.data;
++  const requestedModel = typeof body.model === "string" ? body.model : "";
++
++  // API-key policy — enforced UP FRONT and fail-closed, before any estimate or
++  // upstream work. A restricted key must be denied here: the broad try/catch
++  // around the provider-side count below returns the LOCAL estimate on any
++  // throw, so a policy error raised inside that block would be laundered into a
++  // 200 (fail-open). Every sibling /v1 modality route (embeddings, moderations,
++  // images, …) enforces up front; this route is the one that did not.
++  //
++  // Caller auth is model-independent, so the 401 checks always run; the model
++  // allow/deny gate only applies when a model was actually requested. Anonymous
++  // access stays intact when REQUIRE_API_KEY=false (#7785), and an env-var
++  // master key passes unscoped via enforceApiKeyPolicy, exactly as elsewhere.
++  const apiKeyRaw = extractApiKey(request);
++  if (isRequireApiKeyEnabled() && !apiKeyRaw) {
++    return errorResponse(HTTP_STATUS.UNAUTHORIZED, "Authentication required");
++  }
++  if (isRequireApiKeyEnabled() && apiKeyRaw && !(await isValidApiKey(apiKeyRaw))) {
++    return errorResponse(HTTP_STATUS.UNAUTHORIZED, "Invalid API key");
++  }
++  if (requestedModel) {
++    const policy = await enforceApiKeyPolicy(request, requestedModel);
++    if (policy.rejection) return policy.rejection;
++  }
+ 
+   const tokenizerContext: TokenizerContext = {
+     model: typeof body.model === "string" ? body.model : undefined,
+   };
+   const estimated = buildEstimatedCountResponse(body, tokenizerContext);
+-  const requestedModel = typeof body.model === "string" ? body.model : "";
+   if (!requestedModel) {
+     return estimated;
+   }
 diff --git a/src/app/api/v1/models/catalog.ts b/src/app/api/v1/models/catalog.ts
 index 34ccbdfba..b53556932 100644
 --- a/src/app/api/v1/models/catalog.ts
@@ -7329,6 +7381,235 @@ index 000000000..7d9957b2e
 +  assert.equal(isComboListable(visible, combos, resolutionContext), true);
 +  assert.equal(isComboListable(malformed, combos, resolutionContext), true);
 +  assert.equal(isComboListable(unresolved, combos, resolutionContext), true);
++});
+diff --git a/tests/unit/count-tokens-apikey-policy.test.ts b/tests/unit/count-tokens-apikey-policy.test.ts
+new file mode 100644
+index 000000000..5cc1bb7ee
+--- /dev/null
++++ b/tests/unit/count-tokens-apikey-policy.test.ts
+@@ -0,0 +1,223 @@
++/**
++ * tests/unit/count-tokens-apikey-policy.test.ts
++ *
++ * `/v1/messages/count_tokens` was the one /v1 modality route that did NOT enforce
++ * API-key policy: it imported `extractApiKey`/`isValidApiKey` but never called
++ * them, ran no `enforceApiKeyPolicy`, and there is no global middleware on /v1.
++ * A key whose `blocked_models` / `allowed_models` excluded a model was still
++ * served a token count for it — both the local estimate AND the real upstream
++ * `countTokens` call (an upstream resource use + routability/credential probe).
++ *
++ * The fix enforces UP FRONT and fail-closed, before any estimate or upstream
++ * work. This matters because the provider-side branch wraps everything in a
++ * broad try/catch that returns the LOCAL estimate on any throw; a policy error
++ * raised inside that block would be laundered into a 200 (fail-open). These
++ * tests pin the gate and prove the up-front placement.
++ */
++import test from "node:test";
++import assert from "node:assert/strict";
++import fs from "node:fs";
++import os from "node:os";
++import path from "node:path";
++
++const TEST_DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "omniroute-count-tokens-policy-"));
++process.env.DATA_DIR = TEST_DATA_DIR;
++process.env.API_KEY_SECRET = process.env.API_KEY_SECRET || "count-tokens-policy-secret";
++
++const coreDb = await import("../../src/lib/db/core.ts");
++const apiKeysDb = await import("../../src/lib/db/apiKeys.ts");
++const providersDb = await import("../../src/lib/db/providers.ts");
++const rateLimiter = await import("../../src/shared/utils/rateLimiter.ts");
++const { POST } = await import("../../src/app/api/v1/messages/count_tokens/route.ts");
++const embeddingsRoute = await import("../../src/app/api/v1/embeddings/route.ts");
++
++rateLimiter.setRateLimiterTestMode(true);
++
++type CountBody = { input_tokens?: number; source?: string; error?: unknown };
++
++async function resetStorage() {
++  apiKeysDb.resetApiKeyState();
++  coreDb.resetDbInstance();
++  for (let attempt = 0; attempt < 10; attempt++) {
++    try {
++      if (fs.existsSync(TEST_DATA_DIR)) fs.rmSync(TEST_DATA_DIR, { recursive: true, force: true });
++      break;
++    } catch (error: unknown) {
++      const err = error as NodeJS.ErrnoException;
++      if ((err?.code === "EBUSY" || err?.code === "EPERM") && attempt < 9) {
++        await new Promise((resolve) => setTimeout(resolve, 50 * (attempt + 1)));
++      } else {
++        throw error;
++      }
++    }
++  }
++  fs.mkdirSync(TEST_DATA_DIR, { recursive: true });
++}
++
++async function makeKey(name: string, permissions: Record<string, unknown> = {}) {
++  const created = await apiKeysDb.createApiKey(name, `machine-${name}`);
++  if (Object.keys(permissions).length > 0) {
++    await apiKeysDb.updateApiKeyPermissions(created.id, permissions as never);
++  }
++  apiKeysDb.clearApiKeyCaches();
++  return created;
++}
++
++function countRequest(model: string | undefined, apiKey?: string): Request {
++  const body: Record<string, unknown> = {
++    messages: [{ role: "user", content: "count these tokens please" }],
++  };
++  if (model !== undefined) body.model = model;
++  return new Request("http://localhost/v1/messages/count_tokens", {
++    method: "POST",
++    headers: {
++      "Content-Type": "application/json",
++      ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
++    },
++    body: JSON.stringify(body),
++  });
++}
++
++test.beforeEach(async () => {
++  // Anonymous-by-default, exactly like the production default (#7785). Tests that
++  // need REQUIRE_API_KEY set it themselves and restore it.
++  delete process.env.REQUIRE_API_KEY;
++  delete process.env.OMNIROUTE_API_KEY;
++  await resetStorage();
++});
++
++test.after(async () => {
++  apiKeysDb.resetApiKeyState();
++  coreDb.resetDbInstance();
++  delete process.env.REQUIRE_API_KEY;
++  delete process.env.OMNIROUTE_API_KEY;
++  fs.rmSync(TEST_DATA_DIR, { recursive: true, force: true });
++});
++
++// ── the gate ────────────────────────────────────────────────────────────────
++
++test("a deny-listed model is refused, not estimated", async () => {
++  const key = await makeKey("ct-blocked", { blockedModels: ["openai/gpt-4o"] });
++
++  const res = await POST(countRequest("openai/gpt-4o", key.key));
++  const body = (await res.json()) as CountBody;
++
++  assert.equal(res.status, 403, "the deny-list must reject the model");
++  // Fail-closed: the response is a policy rejection, NOT the estimate that the
++  // route's catch-all would otherwise return. An estimate carries input_tokens.
++  assert.equal(body.input_tokens, undefined, "a blocked model must not leak an estimate");
++});
++
++test("an allow-list that omits the model is refused", async () => {
++  const key = await makeKey("ct-allow", { allowedModels: ["openai/gpt-4.1"] });
++
++  const denied = await POST(countRequest("openai/gpt-4o", key.key));
++  assert.equal(denied.status, 403, "a model outside the allow-list must be refused");
++
++  // The allow-listed model still counts (estimate path — no connection seeded).
++  const allowed = await POST(countRequest("openai/gpt-4.1", key.key));
++  assert.equal(allowed.status, 200, "a model inside the allow-list must still count");
++  const allowedBody = (await allowed.json()) as CountBody;
++  assert.equal(allowedBody.source, "local");
++});
++
++test("an unrestricted key still counts (fix must not over-tighten)", async () => {
++  const key = await makeKey("ct-open", {});
++
++  const res = await POST(countRequest("openai/gpt-4o", key.key));
++  assert.equal(res.status, 200, "a key with no restrictions stays unrestricted");
++  const body = (await res.json()) as CountBody;
++  assert.equal(body.source, "local");
++});
++
++test("anonymous count is allowed and unscoped when REQUIRE_API_KEY=false (#7785)", async () => {
++  // REQUIRE_API_KEY is unset → the real default is "false".
++  const res = await POST(countRequest("openai/gpt-4o"));
++  assert.equal(res.status, 200, "no key + REQUIRE_API_KEY=false stays anonymous");
++  const body = (await res.json()) as CountBody;
++  assert.equal(body.source, "local");
++});
++
++test("an env-var master key passes unscoped", async () => {
++  // A master key is valid with NO DB metadata row (isValidApiKey short-circuits
++  // on the env key; enforceApiKeyPolicy returns no rejection when metadata is
++  // null). It must count a model that a normal restricted key could not.
++  process.env.OMNIROUTE_API_KEY = "env-master-key";
++
++  const res = await POST(countRequest("openai/gpt-4o", "env-master-key"));
++  assert.equal(res.status, 200, "a master key must not be scoped by model policy");
++  const body = (await res.json()) as CountBody;
++  assert.equal(body.source, "local");
++});
++
++test("REQUIRE_API_KEY=true 401s when no key is presented", async () => {
++  process.env.REQUIRE_API_KEY = "true";
++  try {
++    const res = await POST(countRequest("openai/gpt-4o"));
++    assert.equal(res.status, 401, "a missing key must 401 when REQUIRE_API_KEY=true");
++  } finally {
++    delete process.env.REQUIRE_API_KEY;
++  }
++});
++
++// ── fail-closed placement: enforcement precedes the provider branch ─────────
++
++test("a blocked model is refused BEFORE the upstream count runs (fail-closed)", async () => {
++  await providersDb.createProviderConnection({
++    provider: "anthropic",
++    authType: "apikey",
++    name: "ct-upstream",
++    apiKey: "sk-ant-ct-upstream",
++    isActive: true,
++    testStatus: "active",
++  });
++
++  const key = await makeKey("ct-blocked-upstream", {
++    blockedModels: ["anthropic/claude-opus-4.6"],
++  });
++
++  // If enforcement were misplaced inside the provider try/catch, this stub would
++  // run and the route would return the provider count. Up-front enforcement must
++  // reject first — so fetch must never be called.
++  const originalFetch = globalThis.fetch;
++  let fetchCalled = false;
++  globalThis.fetch = async () => {
++    fetchCalled = true;
++    return new Response(JSON.stringify({ input_tokens: 999 }), {
++      status: 200,
++      headers: { "Content-Type": "application/json" },
++    });
++  };
++
++  try {
++    const res = await POST(countRequest("anthropic/claude-opus-4.6", key.key));
++    const body = (await res.json()) as CountBody;
++    assert.equal(res.status, 403, "the deny-list must reject before any upstream work");
++    assert.equal(fetchCalled, false, "enforcement must precede the provider count call");
++    assert.notEqual(body.input_tokens, 999, "the upstream count must not be served");
++  } finally {
++    globalThis.fetch = originalFetch;
++  }
++});
++
++// ── cross-surface parity: the gate is the shared one ────────────────────────
++
++test("the same denied model is refused on /v1/embeddings and count_tokens alike", async () => {
++  const key = await makeKey("ct-parity", { blockedModels: ["openai/gpt-4o"] });
++
++  const countRes = await POST(countRequest("openai/gpt-4o", key.key));
++  assert.equal(countRes.status, 403, "count_tokens rejects the blocked model");
++
++  // The sibling modality route enforces through the same enforceApiKeyPolicy.
++  const embedRes = await embeddingsRoute.POST(
++    new Request("http://localhost/v1/embeddings", {
++      method: "POST",
++      headers: {
++        "Content-Type": "application/json",
++        Authorization: `Bearer ${key.key}`,
++      },
++      body: JSON.stringify({ model: "openai/gpt-4o", input: "test" }),
++    })
++  );
++  assert.equal(embedRes.status, 403, "embeddings rejects the same blocked model");
 +});
 diff --git a/tests/unit/guardrails/visionBridgeHelpers.callVisionModel.test.ts b/tests/unit/guardrails/visionBridgeHelpers.callVisionModel.test.ts
 index 1465e927c..c3e5730f6 100644

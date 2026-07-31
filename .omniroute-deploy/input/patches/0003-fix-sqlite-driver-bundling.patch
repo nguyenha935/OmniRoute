@@ -798,7 +798,7 @@ index b22ca557b..ea592db21 100644
 +  );
 +});
 diff --git a/tests/unit/db-adapters/driverFactory.test.ts b/tests/unit/db-adapters/driverFactory.test.ts
-index 351da141d..1705af339 100644
+index 8870ab6e3..1750ba52f 100644
 --- a/tests/unit/db-adapters/driverFactory.test.ts
 +++ b/tests/unit/db-adapters/driverFactory.test.ts
 @@ -5,8 +5,14 @@ import os from "node:os";
@@ -818,7 +818,7 @@ index 351da141d..1705af339 100644
  
  const require = createRequire(import.meta.url);
  const isBun = Boolean(process.versions.bun);
-@@ -162,6 +168,19 @@ describe("driverFactory", () => {
+@@ -171,6 +177,19 @@ describe("driverFactory", () => {
      assert.equal(openWithoutNativeDrivers(":memory:"), null);
    });
  

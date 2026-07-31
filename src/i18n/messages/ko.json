@@ -6748,7 +6748,7 @@
     "howPricingWorks": "가격 책정 방식",
     "cacheWrite": "캐시 쓰기",
     "unsaved": "저장되지 않은",
-    "resetDefaults": "기본값 재설정",
+    "resetDefaults": "__MISSING__:Reset defaults",
     "saveProvider": "공급자 저장",
     "model": "모델",
     "models": "모델",
