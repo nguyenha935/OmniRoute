@@ -6,7 +6,7 @@ index 000000000..7efbbaa1e
 @@ -0,0 +1 @@
 +- **feat(home):** the home Provider Topology now shows a logo-only router core with an electric "kame beam" on active links, a live **Recent Requests** panel (polls `/api/usage/call-logs` every ~3s, gated by the topology appearance toggle + page visibility), a ring that grows with the provider count so many providers no longer overlap, and only surfaces providers with an enabled connection — untested/failing connections no longer clutter the map. The router core is a landscape tile whose in-flight counter sits beside the logo (and holds its slot when idle, so the core cannot drift off the ring's centre as calls start and stop). Nodes are ordered by connection `global_priority` and then by creation time, so adding a provider appends it instead of pushing the existing map around, and a compatible node without a custom `icon_url` now renders the same bundled logo the providers page shows instead of a generic glyph. The error counter and the red edges reflect **every** currently-failing provider (`/api/provider-metrics` gained `topology.errorProviders`); previously only the most recent failure was reported, so a second failure silently cleared the first. A failure also now **expires on its own** after 10s instead of leaving a provider red forever once it stopped being called. All topology animations honour `prefers-reduced-motion` ([#8450](https://github.com/diegosouzapw/OmniRoute/pull/8450)) — thanks @nguyenha935
 diff --git a/src/app/(dashboard)/dashboard/HomePageClient.tsx b/src/app/(dashboard)/dashboard/HomePageClient.tsx
-index 24cec3140..6ba5ec747 100644
+index 3b1e2a91d..3bf35a15c 100644
 --- a/src/app/(dashboard)/dashboard/HomePageClient.tsx
 +++ b/src/app/(dashboard)/dashboard/HomePageClient.tsx
 @@ -16,7 +16,9 @@ import {
@@ -19,7 +19,7 @@ index 24cec3140..6ba5ec747 100644
  import { useIsElectron, useOpenExternal } from "@/shared/hooks/useElectron";
  import { HomeProviderTopologySection } from "./HomeProviderTopologySection";
  import { shouldShowProviderTopologyOnHome } from "./homeAppearance";
-@@ -116,9 +118,30 @@ export default function HomePageClient({ machineId }: HomePageClientProps) {
+@@ -122,9 +124,30 @@ export default function HomePageClient({ machineId }: HomePageClientProps) {
    const [baseUrl, setBaseUrl] = useState("/v1");
    const [selectedProvider, setSelectedProvider] = useState(null);
    const [providerMetrics, setProviderMetrics] = useState<Record<string, ProviderMetricSummary>>({});
@@ -52,7 +52,7 @@ index 24cec3140..6ba5ec747 100644
    >([]);
  
    // The live in-flight request feed for the Provider Topology pulse animation is owned by
-@@ -309,9 +332,20 @@ export default function HomePageClient({ machineId }: HomePageClientProps) {
+@@ -315,9 +338,20 @@ export default function HomePageClient({ machineId }: HomePageClientProps) {
            const data = await metricsRes.json();
            if (!cancelled) {
              setProviderMetrics(data.metrics || {});
@@ -74,7 +74,7 @@ index 24cec3140..6ba5ec747 100644
              });
            }
          }
-@@ -425,7 +459,19 @@ export default function HomePageClient({ machineId }: HomePageClientProps) {
+@@ -431,7 +465,19 @@ export default function HomePageClient({ machineId }: HomePageClientProps) {
    }, [providerConnections, t, tp, router]);
  
    const providerStats = useMemo(() => {
@@ -95,7 +95,7 @@ index 24cec3140..6ba5ec747 100644
        const connections = providerConnections.filter((conn) => conn.provider === providerId);
        const connected = connections.filter((connection) =>
          isProviderConnectionConnected(connection)
-@@ -434,7 +480,9 @@ export default function HomePageClient({ machineId }: HomePageClientProps) {
+@@ -440,7 +486,9 @@ export default function HomePageClient({ machineId }: HomePageClientProps) {
          isProviderConnectionErrored(connection)
        ).length;
  
@@ -106,7 +106,7 @@ index 24cec3140..6ba5ec747 100644
        const providerModels = models.filter((m) => providerKeys.has(m.provider));
  
        const authType = NOAUTH_PROVIDERS[providerId]
-@@ -443,6 +491,28 @@ export default function HomePageClient({ machineId }: HomePageClientProps) {
+@@ -449,6 +497,28 @@ export default function HomePageClient({ machineId }: HomePageClientProps) {
            ? "oauth"
            : "apikey";
  
@@ -135,7 +135,7 @@ index 24cec3140..6ba5ec747 100644
        return {
          id: providerId,
          provider: providerInfo,
-@@ -451,9 +521,62 @@ export default function HomePageClient({ machineId }: HomePageClientProps) {
+@@ -457,9 +527,62 @@ export default function HomePageClient({ machineId }: HomePageClientProps) {
          errors,
          modelCount: providerModels.length,
          authType,
@@ -200,7 +200,7 @@ index 24cec3140..6ba5ec747 100644
  
    const selectedProviderModels = useMemo(() => {
      if (!selectedProvider) return [];
-@@ -467,54 +590,66 @@ export default function HomePageClient({ machineId }: HomePageClientProps) {
+@@ -473,54 +596,66 @@ export default function HomePageClient({ machineId }: HomePageClientProps) {
      type ProviderHealth = "active" | "error" | "idle";
      const byProvider = new Map<
        string,
@@ -303,7 +303,7 @@ index 24cec3140..6ba5ec747 100644
  
    const pollBackgroundUpdate = useCallback(
      async ({
-@@ -1177,7 +1312,7 @@ export default function HomePageClient({ machineId }: HomePageClientProps) {
+@@ -1181,7 +1316,7 @@ export default function HomePageClient({ machineId }: HomePageClientProps) {
          <HomeProviderTopologySection
            providers={topologyProviders}
            lastProvider={lastProvider}
@@ -441,7 +441,7 @@ index 034088e7b..57b801183 100644
    );
  }
 diff --git a/src/app/(dashboard)/dashboard/providers/components/ProviderCard.tsx b/src/app/(dashboard)/dashboard/providers/components/ProviderCard.tsx
-index c1382ccf5..80654ff14 100644
+index a1efc70ec..705bb0245 100644
 --- a/src/app/(dashboard)/dashboard/providers/components/ProviderCard.tsx
 +++ b/src/app/(dashboard)/dashboard/providers/components/ProviderCard.tsx
 @@ -14,6 +14,7 @@ import {
@@ -451,8 +451,8 @@ index c1382ccf5..80654ff14 100644
 +import { resolveCompatibleStaticIcon } from "@/shared/utils/compatibleProviderId";
  
  import { CategoryDot } from "./CategoryDot";
- import { isKimiPartnerProviderId } from "../featuredProviders";
-@@ -281,13 +282,12 @@ const ProviderCard = forwardRef<ProviderCardHandle, ProviderCardProps>(function
+ import { isCheaperInferenceProviderId, isKimiPartnerProviderId } from "../featuredProviders";
+@@ -301,13 +302,12 @@ const ProviderCard = forwardRef<ProviderCardHandle, ProviderCardProps>(function
      "cloud-agent": t("cloudAgentProviders"),
    };
  
@@ -1804,7 +1804,7 @@ index 2130bda65..0e2bd7a05 100644
  .bg-vibrancy {
    backdrop-filter: blur(20px);
 diff --git a/src/i18n/messages/ar.json b/src/i18n/messages/ar.json
-index 662ef34f9..011af33db 100644
+index 3f0b33767..1e445cbb9 100644
 --- a/src/i18n/messages/ar.json
 +++ b/src/i18n/messages/ar.json
 @@ -1730,7 +1730,12 @@
@@ -1822,7 +1822,7 @@ index 662ef34f9..011af33db 100644
    "analytics": {
      "title": "التحليلات",
 diff --git a/src/i18n/messages/az.json b/src/i18n/messages/az.json
-index fe43d5855..438c77d0a 100644
+index 6975c959e..dcac1c40a 100644
 --- a/src/i18n/messages/az.json
 +++ b/src/i18n/messages/az.json
 @@ -1730,7 +1730,12 @@
@@ -1840,7 +1840,7 @@ index fe43d5855..438c77d0a 100644
    "analytics": {
      "title": "Analytics",
 diff --git a/src/i18n/messages/bg.json b/src/i18n/messages/bg.json
-index 09fbd55fa..5286536e3 100644
+index fa7b84738..4c5e74640 100644
 --- a/src/i18n/messages/bg.json
 +++ b/src/i18n/messages/bg.json
 @@ -1730,7 +1730,12 @@
@@ -1858,7 +1858,7 @@ index 09fbd55fa..5286536e3 100644
    "analytics": {
      "title": "Анализ",
 diff --git a/src/i18n/messages/bn.json b/src/i18n/messages/bn.json
-index 295b6d945..2229844f2 100644
+index 6be7b82b1..ddc614c9c 100644
 --- a/src/i18n/messages/bn.json
 +++ b/src/i18n/messages/bn.json
 @@ -1730,7 +1730,12 @@
@@ -1876,7 +1876,7 @@ index 295b6d945..2229844f2 100644
    "analytics": {
      "title": "Analytics",
 diff --git a/src/i18n/messages/cs.json b/src/i18n/messages/cs.json
-index 83f3310e7..e036f7236 100644
+index 5707bcf2e..84a21898d 100644
 --- a/src/i18n/messages/cs.json
 +++ b/src/i18n/messages/cs.json
 @@ -1730,7 +1730,12 @@
@@ -1894,7 +1894,7 @@ index 83f3310e7..e036f7236 100644
    "analytics": {
      "title": "Analytika",
 diff --git a/src/i18n/messages/da.json b/src/i18n/messages/da.json
-index 1f824bdde..4c159c8c7 100644
+index 45b6f3133..6cf844c82 100644
 --- a/src/i18n/messages/da.json
 +++ b/src/i18n/messages/da.json
 @@ -1730,7 +1730,12 @@
@@ -1912,7 +1912,7 @@ index 1f824bdde..4c159c8c7 100644
    "analytics": {
      "title": "Analytics",
 diff --git a/src/i18n/messages/de.json b/src/i18n/messages/de.json
-index fafcb0d1a..b020f706f 100644
+index 6acb03e5d..e1d2d622d 100644
 --- a/src/i18n/messages/de.json
 +++ b/src/i18n/messages/de.json
 @@ -1730,7 +1730,12 @@
@@ -1930,7 +1930,7 @@ index fafcb0d1a..b020f706f 100644
    "analytics": {
      "title": "Analytik",
 diff --git a/src/i18n/messages/en.json b/src/i18n/messages/en.json
-index 3d9bb9bc8..86226b5c5 100644
+index ee50e4e21..e06048d55 100644
 --- a/src/i18n/messages/en.json
 +++ b/src/i18n/messages/en.json
 @@ -1730,7 +1730,12 @@
@@ -1948,7 +1948,7 @@ index 3d9bb9bc8..86226b5c5 100644
    "analytics": {
      "title": "Analytics",
 diff --git a/src/i18n/messages/es.json b/src/i18n/messages/es.json
-index c80d2a625..57a593d5e 100644
+index c26df5081..05d4670be 100644
 --- a/src/i18n/messages/es.json
 +++ b/src/i18n/messages/es.json
 @@ -1730,7 +1730,12 @@
@@ -1966,7 +1966,7 @@ index c80d2a625..57a593d5e 100644
    "analytics": {
      "title": "Analítica",
 diff --git a/src/i18n/messages/fa.json b/src/i18n/messages/fa.json
-index eaa78af1c..fb58da855 100644
+index bcb708b0e..000f5e7fb 100644
 --- a/src/i18n/messages/fa.json
 +++ b/src/i18n/messages/fa.json
 @@ -1730,7 +1730,12 @@
@@ -1984,7 +1984,7 @@ index eaa78af1c..fb58da855 100644
    "analytics": {
      "title": "Analytics",
 diff --git a/src/i18n/messages/fi.json b/src/i18n/messages/fi.json
-index 184c31500..d74d339c7 100644
+index aec971da1..56b1b672e 100644
 --- a/src/i18n/messages/fi.json
 +++ b/src/i18n/messages/fi.json
 @@ -1730,7 +1730,12 @@
@@ -2002,7 +2002,7 @@ index 184c31500..d74d339c7 100644
    "analytics": {
      "title": "Analytics",
 diff --git a/src/i18n/messages/fr.json b/src/i18n/messages/fr.json
-index f68757aee..cb89b66c4 100644
+index f37a9e4f0..d1b1ec2a4 100644
 --- a/src/i18n/messages/fr.json
 +++ b/src/i18n/messages/fr.json
 @@ -1730,7 +1730,12 @@
@@ -2020,7 +2020,7 @@ index f68757aee..cb89b66c4 100644
    "analytics": {
      "title": "Analyse",
 diff --git a/src/i18n/messages/gu.json b/src/i18n/messages/gu.json
-index 6c87077ac..cfdb0d2ce 100644
+index 97b516ba3..bac9d620c 100644
 --- a/src/i18n/messages/gu.json
 +++ b/src/i18n/messages/gu.json
 @@ -1730,7 +1730,12 @@
@@ -2038,7 +2038,7 @@ index 6c87077ac..cfdb0d2ce 100644
    "analytics": {
      "title": "Analytics",
 diff --git a/src/i18n/messages/he.json b/src/i18n/messages/he.json
-index 50a84aa9e..90859e01a 100644
+index f161156a8..8a7d747fb 100644
 --- a/src/i18n/messages/he.json
 +++ b/src/i18n/messages/he.json
 @@ -1730,7 +1730,12 @@
@@ -2056,7 +2056,7 @@ index 50a84aa9e..90859e01a 100644
    "analytics": {
      "title": "אנליטיקס",
 diff --git a/src/i18n/messages/hi.json b/src/i18n/messages/hi.json
-index 2c9191bfb..dd3060bea 100644
+index 7c8159ef9..05a75eba6 100644
 --- a/src/i18n/messages/hi.json
 +++ b/src/i18n/messages/hi.json
 @@ -1730,7 +1730,12 @@
@@ -2074,7 +2074,7 @@ index 2c9191bfb..dd3060bea 100644
    "analytics": {
      "title": "विश्लेषिकी",
 diff --git a/src/i18n/messages/hu.json b/src/i18n/messages/hu.json
-index e11a33074..5b335c790 100644
+index f698b6f59..102b5e92f 100644
 --- a/src/i18n/messages/hu.json
 +++ b/src/i18n/messages/hu.json
 @@ -1730,7 +1730,12 @@
@@ -2092,7 +2092,7 @@ index e11a33074..5b335c790 100644
    "analytics": {
      "title": "Analytics",
 diff --git a/src/i18n/messages/id.json b/src/i18n/messages/id.json
-index 0fd5440b5..3d2a20b51 100644
+index 36d3eec7e..d1ed74929 100644
 --- a/src/i18n/messages/id.json
 +++ b/src/i18n/messages/id.json
 @@ -1730,7 +1730,12 @@
@@ -2110,7 +2110,7 @@ index 0fd5440b5..3d2a20b51 100644
    "analytics": {
      "title": "Analisis",
 diff --git a/src/i18n/messages/in.json b/src/i18n/messages/in.json
-index 332464070..6fc2b2568 100644
+index fc5120d9c..bb421d13e 100644
 --- a/src/i18n/messages/in.json
 +++ b/src/i18n/messages/in.json
 @@ -1730,7 +1730,12 @@
@@ -2128,7 +2128,7 @@ index 332464070..6fc2b2568 100644
    "analytics": {
      "title": "Analytics",
 diff --git a/src/i18n/messages/it.json b/src/i18n/messages/it.json
-index 757291d68..6c56ced00 100644
+index ca9178ccf..a66b0430f 100644
 --- a/src/i18n/messages/it.json
 +++ b/src/i18n/messages/it.json
 @@ -1730,7 +1730,12 @@
@@ -2146,7 +2146,7 @@ index 757291d68..6c56ced00 100644
    "analytics": {
      "title": "Analitica",
 diff --git a/src/i18n/messages/ja.json b/src/i18n/messages/ja.json
-index 846587a2a..88fda3a0b 100644
+index f9559c187..3131b7843 100644
 --- a/src/i18n/messages/ja.json
 +++ b/src/i18n/messages/ja.json
 @@ -1730,7 +1730,12 @@
@@ -2164,7 +2164,7 @@ index 846587a2a..88fda3a0b 100644
    "analytics": {
      "title": "分析",
 diff --git a/src/i18n/messages/ko.json b/src/i18n/messages/ko.json
-index a178aa775..1bf9b91a1 100644
+index 01d5c7edf..49dd76dc8 100644
 --- a/src/i18n/messages/ko.json
 +++ b/src/i18n/messages/ko.json
 @@ -1730,7 +1730,12 @@
@@ -2182,7 +2182,7 @@ index a178aa775..1bf9b91a1 100644
    "analytics": {
      "title": "분석",
 diff --git a/src/i18n/messages/mr.json b/src/i18n/messages/mr.json
-index 4ed7c9fbe..99d1aa4ab 100644
+index 060f2feff..97b2fabaf 100644
 --- a/src/i18n/messages/mr.json
 +++ b/src/i18n/messages/mr.json
 @@ -1730,7 +1730,12 @@
@@ -2200,7 +2200,7 @@ index 4ed7c9fbe..99d1aa4ab 100644
    "analytics": {
      "title": "Analytics",
 diff --git a/src/i18n/messages/ms.json b/src/i18n/messages/ms.json
-index 2eafb97d9..10bb8f089 100644
+index 2fe34426d..bfcdf4eda 100644
 --- a/src/i18n/messages/ms.json
 +++ b/src/i18n/messages/ms.json
 @@ -1730,7 +1730,12 @@
@@ -2218,7 +2218,7 @@ index 2eafb97d9..10bb8f089 100644
    "analytics": {
      "title": "Analitis",
 diff --git a/src/i18n/messages/nl.json b/src/i18n/messages/nl.json
-index 75d8bcbf9..f21b3f5e6 100644
+index 86043ad9a..2157ce6b0 100644
 --- a/src/i18n/messages/nl.json
 +++ b/src/i18n/messages/nl.json
 @@ -1730,7 +1730,12 @@
@@ -2236,7 +2236,7 @@ index 75d8bcbf9..f21b3f5e6 100644
    "analytics": {
      "title": "Analyses",
 diff --git a/src/i18n/messages/no.json b/src/i18n/messages/no.json
-index 13bbbc03e..9057f5328 100644
+index 894692a4a..1f0ce161c 100644
 --- a/src/i18n/messages/no.json
 +++ b/src/i18n/messages/no.json
 @@ -1730,7 +1730,12 @@
@@ -2254,7 +2254,7 @@ index 13bbbc03e..9057f5328 100644
    "analytics": {
      "title": "Analytics",
 diff --git a/src/i18n/messages/phi.json b/src/i18n/messages/phi.json
-index 31a7bce3a..a8ff2ad37 100644
+index c2849454a..e3594866f 100644
 --- a/src/i18n/messages/phi.json
 +++ b/src/i18n/messages/phi.json
 @@ -1730,7 +1730,12 @@
@@ -2272,7 +2272,7 @@ index 31a7bce3a..a8ff2ad37 100644
    "analytics": {
      "title": "Analytics",
 diff --git a/src/i18n/messages/pl.json b/src/i18n/messages/pl.json
-index 378b493ab..36097f6fe 100644
+index 1461f73a3..c816ce13b 100644
 --- a/src/i18n/messages/pl.json
 +++ b/src/i18n/messages/pl.json
 @@ -1730,7 +1730,12 @@
@@ -2290,7 +2290,7 @@ index 378b493ab..36097f6fe 100644
    "analytics": {
      "title": "Analityka",
 diff --git a/src/i18n/messages/pt-BR.json b/src/i18n/messages/pt-BR.json
-index a43eb374c..52dab075a 100644
+index 3c2b09f6b..e85243877 100644
 --- a/src/i18n/messages/pt-BR.json
 +++ b/src/i18n/messages/pt-BR.json
 @@ -1730,7 +1730,12 @@
@@ -2308,7 +2308,7 @@ index a43eb374c..52dab075a 100644
    "analytics": {
      "title": "Análises",
 diff --git a/src/i18n/messages/pt.json b/src/i18n/messages/pt.json
-index 4e7f8127b..96a5e6588 100644
+index e19674282..be4053d61 100644
 --- a/src/i18n/messages/pt.json
 +++ b/src/i18n/messages/pt.json
 @@ -1730,7 +1730,12 @@
@@ -2326,7 +2326,7 @@ index 4e7f8127b..96a5e6588 100644
    "analytics": {
      "title": "Análise",
 diff --git a/src/i18n/messages/ro.json b/src/i18n/messages/ro.json
-index cbf800b52..d5245a4b3 100644
+index e90fb8ed5..d6e6510a4 100644
 --- a/src/i18n/messages/ro.json
 +++ b/src/i18n/messages/ro.json
 @@ -1730,7 +1730,12 @@
@@ -2344,7 +2344,7 @@ index cbf800b52..d5245a4b3 100644
    "analytics": {
      "title": "Analytics",
 diff --git a/src/i18n/messages/ru.json b/src/i18n/messages/ru.json
-index 6ab25ef0c..694367adc 100644
+index 363498218..17717bd14 100644
 --- a/src/i18n/messages/ru.json
 +++ b/src/i18n/messages/ru.json
 @@ -1730,7 +1730,12 @@
@@ -2362,7 +2362,7 @@ index 6ab25ef0c..694367adc 100644
    "analytics": {
      "title": "Аналитика",
 diff --git a/src/i18n/messages/sk.json b/src/i18n/messages/sk.json
-index f89c26f81..5ec373071 100644
+index 2aa552dee..3c1a12a2f 100644
 --- a/src/i18n/messages/sk.json
 +++ b/src/i18n/messages/sk.json
 @@ -1730,7 +1730,12 @@
@@ -2380,7 +2380,7 @@ index f89c26f81..5ec373071 100644
    "analytics": {
      "title": "Analytics",
 diff --git a/src/i18n/messages/sv.json b/src/i18n/messages/sv.json
-index 1572555fb..9b4099e34 100644
+index 46220430c..487be143d 100644
 --- a/src/i18n/messages/sv.json
 +++ b/src/i18n/messages/sv.json
 @@ -1730,7 +1730,12 @@
@@ -2398,7 +2398,7 @@ index 1572555fb..9b4099e34 100644
    "analytics": {
      "title": "Analytics",
 diff --git a/src/i18n/messages/sw.json b/src/i18n/messages/sw.json
-index d25e1b557..c8a4d49b6 100644
+index 031b62968..df9c0279f 100644
 --- a/src/i18n/messages/sw.json
 +++ b/src/i18n/messages/sw.json
 @@ -1730,7 +1730,12 @@
@@ -2416,7 +2416,7 @@ index d25e1b557..c8a4d49b6 100644
    "analytics": {
      "title": "Analytics",
 diff --git a/src/i18n/messages/ta.json b/src/i18n/messages/ta.json
-index caad2f34a..99129363b 100644
+index 31f1c945e..e80aa12c7 100644
 --- a/src/i18n/messages/ta.json
 +++ b/src/i18n/messages/ta.json
 @@ -1730,7 +1730,12 @@
@@ -2434,7 +2434,7 @@ index caad2f34a..99129363b 100644
    "analytics": {
      "title": "Analytics",
 diff --git a/src/i18n/messages/te.json b/src/i18n/messages/te.json
-index 4d95f6d2c..8f73b5ce9 100644
+index 60ae0fbdf..23fba4465 100644
 --- a/src/i18n/messages/te.json
 +++ b/src/i18n/messages/te.json
 @@ -1730,7 +1730,12 @@
@@ -2452,7 +2452,7 @@ index 4d95f6d2c..8f73b5ce9 100644
    "analytics": {
      "title": "Analytics",
 diff --git a/src/i18n/messages/th.json b/src/i18n/messages/th.json
-index 46d620498..a207b9412 100644
+index 13cd3a536..c9bd7a9fe 100644
 --- a/src/i18n/messages/th.json
 +++ b/src/i18n/messages/th.json
 @@ -1730,7 +1730,12 @@
@@ -2470,7 +2470,7 @@ index 46d620498..a207b9412 100644
    "analytics": {
      "title": "การวิเคราะห์",
 diff --git a/src/i18n/messages/tr.json b/src/i18n/messages/tr.json
-index c417f3109..a8f1b3509 100644
+index dedf6e35f..a23a05d33 100644
 --- a/src/i18n/messages/tr.json
 +++ b/src/i18n/messages/tr.json
 @@ -1730,7 +1730,12 @@
@@ -2488,7 +2488,7 @@ index c417f3109..a8f1b3509 100644
    "analytics": {
      "title": "Analitik",
 diff --git a/src/i18n/messages/uk-UA.json b/src/i18n/messages/uk-UA.json
-index 4ce5299bb..03ed7cdca 100644
+index abcc651e7..df949b42d 100644
 --- a/src/i18n/messages/uk-UA.json
 +++ b/src/i18n/messages/uk-UA.json
 @@ -1730,7 +1730,12 @@
@@ -2506,7 +2506,7 @@ index 4ce5299bb..03ed7cdca 100644
    "analytics": {
      "title": "Аналітика",
 diff --git a/src/i18n/messages/ur.json b/src/i18n/messages/ur.json
-index fb1cde82c..4ba71e343 100644
+index 33b248d77..8a10009d6 100644
 --- a/src/i18n/messages/ur.json
 +++ b/src/i18n/messages/ur.json
 @@ -1730,7 +1730,12 @@
@@ -2524,7 +2524,7 @@ index fb1cde82c..4ba71e343 100644
    "analytics": {
      "title": "Analytics",
 diff --git a/src/i18n/messages/vi.json b/src/i18n/messages/vi.json
-index 600cc770e..6a02418d0 100644
+index 091e603d2..ea7f75b38 100644
 --- a/src/i18n/messages/vi.json
 +++ b/src/i18n/messages/vi.json
 @@ -1730,7 +1730,12 @@
@@ -2542,7 +2542,7 @@ index 600cc770e..6a02418d0 100644
    "analytics": {
      "title": "Phân tích",
 diff --git a/src/i18n/messages/zh-CN.json b/src/i18n/messages/zh-CN.json
-index 548f345c6..9fa805390 100644
+index 550c72703..6c8943bb7 100644
 --- a/src/i18n/messages/zh-CN.json
 +++ b/src/i18n/messages/zh-CN.json
 @@ -1730,7 +1730,12 @@
@@ -2560,7 +2560,7 @@ index 548f345c6..9fa805390 100644
    "analytics": {
      "title": "分析",
 diff --git a/src/i18n/messages/zh-TW.json b/src/i18n/messages/zh-TW.json
-index e83bb4308..959d65bf4 100644
+index 8f64e8bef..c916f6296 100644
 --- a/src/i18n/messages/zh-TW.json
 +++ b/src/i18n/messages/zh-TW.json
 @@ -1730,7 +1730,12 @@
@@ -2705,7 +2705,7 @@ index b2713c64f..d6c4306e9 100644
      conditions.push("cl.timestamp >= @since");
      params.since = filter.since instanceof Date ? filter.since.toISOString() : String(filter.since);
 diff --git a/src/shared/components/ProviderIcon.tsx b/src/shared/components/ProviderIcon.tsx
-index 07df45255..835f48f41 100644
+index 099912f74..515fbdfe4 100644
 --- a/src/shared/components/ProviderIcon.tsx
 +++ b/src/shared/components/ProviderIcon.tsx
 @@ -26,6 +26,8 @@ import Image from "next/image";
@@ -2730,7 +2730,7 @@ index 07df45255..835f48f41 100644
  }
  
  function GenericProviderIcon({ size }: { size: number }) {
-@@ -323,6 +331,7 @@ const ProviderIcon = memo(function ProviderIcon({
+@@ -324,6 +332,7 @@ const ProviderIcon = memo(function ProviderIcon({
    alt,
    fallbackText,
    fallbackColor,
@@ -2738,7 +2738,7 @@ index 07df45255..835f48f41 100644
  }: ProviderIconProps) {
    const { isDark } = useTheme();
    const normalizedId = PROVIDER_ICON_ALIASES[providerId.toLowerCase()] || providerId.toLowerCase();
-@@ -340,6 +349,9 @@ const ProviderIcon = memo(function ProviderIcon({
+@@ -341,6 +350,9 @@ const ProviderIcon = memo(function ProviderIcon({
    const theSvgKey = `${normalizedId}:thesvg`;
  
    const trimmedSrc = typeof src === "string" ? src.trim() : "";
@@ -2748,7 +2748,7 @@ index 07df45255..835f48f41 100644
    const themedFailed = failedAssets[themedKey];
    const svgFailed = failedAssets[svgKey];
    const theSvgFailed = failedAssets[theSvgKey];
-@@ -389,6 +401,34 @@ const ProviderIcon = memo(function ProviderIcon({
+@@ -390,6 +402,34 @@ const ProviderIcon = memo(function ProviderIcon({
      );
    }
  
@@ -2783,7 +2783,7 @@ index 07df45255..835f48f41 100644
    // Tier 1: Theme-aware local SVGs (e.g. Arena light/dark)
    if (themedSvg && !themedFailed) {
      const themedSrc = isDark ? themedSvg.dark : themedSvg.light;
-@@ -486,6 +526,34 @@ const ProviderIcon = memo(function ProviderIcon({
+@@ -487,6 +527,34 @@ const ProviderIcon = memo(function ProviderIcon({
      );
    }
  
@@ -4346,6 +4346,87 @@ index 000000000..45f960f1d
 +    "the beam's static stroke layers must not be removed, only the motion"
 +  );
 +});
+diff --git a/tests/unit/ui/ProviderIcon-icon-url.test.tsx b/tests/unit/ui/ProviderIcon-icon-url.test.tsx
+index 9a140f804..105453475 100644
+--- a/tests/unit/ui/ProviderIcon-icon-url.test.tsx
++++ b/tests/unit/ui/ProviderIcon-icon-url.test.tsx
+@@ -22,9 +22,12 @@ const { default: ProviderIcon } = await import("@/shared/components/ProviderIcon
+ 
+ // ── Helpers ───────────────────────────────────────────────────────────────────
+ 
+-// Deliberately not registered in @lobehub/icons aliases or the KNOWN_PNGS/KNOWN_SVGS
+-// static-asset sets, so tests exercise only the `src` override + fallback chain
+-// (thesvg.org → generic icon). Never reaches the local SVG or @lobehub tiers.
++// A generated compatible-node id: not registered in @lobehub/icons aliases or the
++// KNOWN_PNGS/KNOWN_SVGS static-asset sets, so it never reaches the local SVG/PNG or
++// @lobehub tiers. Under PR 8450 a compatible node with no operator icon_url resolves at
++// Tier 0b to its bundled logo (`resolveCompatibleStaticIcon` → /providers/oai-cc.png for a
++// chat-shaped id) BEFORE the thesvg.org CDN, so the src-less / failed-src / whitespace-src
++// paths now assert that bundled tier, with the CDN as the next fallback behind it.
+ const UNKNOWN_PROVIDER_ID = "openai-compatible-test-node-xyz";
+ 
+ const containers: HTMLElement[] = [];
+@@ -72,31 +75,36 @@ describe("ProviderIcon — custom remote icon URL (#2166)", () => {
+     expect(img?.getAttribute("src")).toBe("https://example.com/logo.png");
+   });
+ 
+-  it("falls back to thesvg.org CDN when `src` is unset (Tier 3 for unknown providers)", () => {
++  it("prefers the bundled compatible static icon over the CDN when `src` is unset (Tier 0b)", () => {
+     const container = renderIcon({});
+     const img = container.querySelector("img");
+     expect(img).not.toBeNull();
+-    expect(img?.getAttribute("src")).toBe(
+-      "https://thesvg.org/icons/openai-compatible-test-node-xyz/default.svg"
+-    );
++    expect(img?.getAttribute("src")).toBe("/providers/oai-cc.png");
+   });
+ 
+-  it("falls back through thesvg.org CDN then generic icon when `src` load fails and no fallbackText is given", () => {
++  it("falls back through the bundled icon then thesvg.org CDN then generic icon when `src` load fails and no fallbackText is given", () => {
+     const container = renderIcon({ src: "https://example.com/broken.png" });
+     expect(container.querySelector("img")).not.toBeNull();
+ 
++    // External src fails → bundled compatible static icon (Tier 0b)
+     fireImgError(container);
+ 
+-    // Falls back to thesvg.org
+-    const img = container.querySelector("img");
++    let img = container.querySelector("img");
++    expect(img).not.toBeNull();
++    expect(img?.getAttribute("src")).toBe("/providers/oai-cc.png");
++
++    // Bundled icon fails → thesvg.org CDN
++    fireImgError(container);
++
++    img = container.querySelector("img");
+     expect(img).not.toBeNull();
+     expect(img?.getAttribute("src")).toBe(
+       "https://thesvg.org/icons/openai-compatible-test-node-xyz/default.svg"
+     );
+ 
++    // thesvg.org fails → generic SVG icon
+     fireImgError(container);
+ 
+-    // thesvg.org fails → generic SVG icon
+     expect(container.querySelector("img")).toBeNull();
+     expect(container.querySelector("svg")).not.toBeNull();
+   });
+@@ -116,13 +124,11 @@ describe("ProviderIcon — custom remote icon URL (#2166)", () => {
+     expect(container.textContent).toBe("OC");
+   });
+ 
+-  it("ignores a whitespace-only src and falls back to thesvg.org CDN", () => {
++  it("ignores a whitespace-only src and falls back to the bundled compatible icon", () => {
+     const container = renderIcon({ src: "   " });
+     const img = container.querySelector("img");
+     expect(img).not.toBeNull();
+-    expect(img?.getAttribute("src")).toBe(
+-      "https://thesvg.org/icons/openai-compatible-test-node-xyz/default.svg"
+-    );
++    expect(img?.getAttribute("src")).toBe("/providers/oai-cc.png");
+   });
+ });
+ 
 diff --git a/tests/unit/ui/edgeStyles.test.ts b/tests/unit/ui/edgeStyles.test.ts
 index a9305273a..7aad96ebb 100644
 --- a/tests/unit/ui/edgeStyles.test.ts
@@ -4832,3 +4913,128 @@ index 000000000..96e6d2d38
 +  expect(ids).toContain("openai");
 +  expect(ids).toContain(NODE_ID);
 +});
+diff --git a/tests/unit/ui/home-topology-last-used-node-color.test.tsx b/tests/unit/ui/home-topology-last-used-node-color.test.tsx
+index 7f835c0f1..0d5b996b7 100644
+--- a/tests/unit/ui/home-topology-last-used-node-color.test.tsx
++++ b/tests/unit/ui/home-topology-last-used-node-color.test.tsx
+@@ -2,15 +2,20 @@
+ //
+ // The home topology painted the most recently routed provider as an idle grey node with
+ // no status dot, while its edge was amber — so the provider you had just used looked
+-// *less* connected than an untouched one. `last` was ANDed into `healthy`, and the node
+-// component had no `last` state to fall back on. Health now owns the border and recency
+-// owns the dot; this renders the real ProviderNode and reads the computed styles rather
+-// than pattern-matching the source.
++// *less* connected than an untouched one. Recency now owns the dot and the edge; this
++// renders the real ProviderNode and reads the computed styles rather than pattern-matching
++// the source.
++//
++// Under PR 8450 a node's BORDER reflects only live traffic (active set) or a live error —
++// never idle connection-health status — matching 9Router's calm-at-rest map. A healthy-but-
++// quiet connection (status "active", no in-flight request) therefore keeps the neutral
++// border; recency is conveyed by the amber dot and the amber edge stroke instead.
+ import React from "react";
+ import { act } from "react";
+ import { createRoot } from "react-dom/client";
+ import { afterEach, beforeEach, expect, it, vi } from "vitest";
+ import { FLOW_EDGE_COLORS } from "../../../src/shared/components/flow/edgeStyles";
++import { AI_PROVIDERS } from "../../../src/shared/constants/providers";
+ 
+ vi.mock("next-intl", () => ({
+   useTranslations: () => (key: string) => key,
+@@ -78,14 +83,19 @@ afterEach(() => {
+ 
+ type Entry = { id: string; provider: string; name?: string; status?: string };
+ 
+-function render(providers: Entry[], lastProvider = "") {
++function render(
++  providers: Entry[],
++  lastProvider = "",
++  activeRequests: Array<{ provider?: string; model?: string }> = [],
++  errorProviders: readonly string[] = []
++) {
+   act(() => {
+     root.render(
+       <ProviderTopology
+         providers={providers as never}
+-        activeRequests={[]}
++        activeRequests={activeRequests}
+         lastProvider={lastProvider}
+-        errorProvider=""
++        errorProviders={errorProviders}
+       />
+     );
+   });
+@@ -97,7 +107,7 @@ const box = (provider: string) => node(provider).querySelector("div.border-2") a
+ const dot = (provider: string) =>
+   node(provider).querySelector("span.rounded-full:not(.animate-ping)") as HTMLElement | null;
+ 
+-it("keeps the connected border on the last-routed provider and marks recency on the dot", () => {
++it("keeps a neutral border at rest on the last-routed provider and marks recency on the edge", () => {
+   render(
+     [
+       { id: "a", provider: "devin-cli", name: "Devin CLI", status: "active" },
+@@ -106,16 +116,42 @@ it("keeps the connected border on the last-routed provider and marks recency on
+     "devin-cli"
+   );
+ 
+-  // The just-used provider: still green (connected), amber dot (most recent).
+-  expect(box("devin-cli").style.borderColor).toBe(GREEN);
+-  expect(dot("devin-cli")).not.toBeNull();
+-  expect(dot("devin-cli")!.style.backgroundColor).toBe(AMBER);
++  // The just-used provider: neutral border at rest (idle connection-health does not paint
++  // borders) and no status dot — at rest a node carries no dot at all; recency lives on the
++  // edge, not the node.
++  expect(box("devin-cli").style.borderColor).toBe("var(--color-border)");
++  expect(dot("devin-cli")).toBeNull();
+   // Its edge keeps the amber last-used stroke (raw attribute, not a normalised style).
+   expect(node("devin-cli").dataset.edgeStroke).toBe(FLOW_EDGE_COLORS.last);
+ 
+-  // An untouched but connected peer is unchanged: green border, green dot.
+-  expect(box("claude").style.borderColor).toBe(GREEN);
+-  expect(dot("claude")!.style.backgroundColor).toBe(GREEN);
++  // An untouched but connected peer is likewise at rest: neutral border, no dot.
++  expect(box("claude").style.borderColor).toBe("var(--color-border)");
++  expect(dot("claude")).toBeNull();
++});
++
++it("paints a live active request with the provider color on border and dot", () => {
++  const devinColor = (AI_PROVIDERS as Record<string, { color?: string }>)["devin-cli"]?.color;
++  expect(devinColor).toBeTruthy();
++  render(
++    [
++      { id: "a", provider: "devin-cli", name: "Devin CLI", status: "active" },
++      { id: "b", provider: "claude", name: "Claude Code", status: "active" },
++    ],
++    "claude",
++    [{ provider: "devin-cli", model: "devin-1" }]
++  );
++
++  // The in-flight provider: provider-colored border and a live dot (PR 8450 paints borders
++  // from the active set, not idle status).
++  expect(box("devin-cli").style.borderColor).toBe(rgb(devinColor as string));
++  expect(dot("devin-cli")).not.toBeNull();
++  expect(dot("devin-cli")!.style.backgroundColor).toBe(rgb(devinColor as string));
++  // Its edge carries the active stroke, which outranks the amber last-used afterglow.
++  expect(node("devin-cli").dataset.edgeStroke).toBe(FLOW_EDGE_COLORS.active);
++
++  // A connected peer with no live traffic stays at rest: neutral border, no dot.
++  expect(box("claude").style.borderColor).toBe("var(--color-border)");
++  expect(dot("claude")).toBeNull();
+ });
+ 
+ it("still greys out a provider that is genuinely idle", () => {
+@@ -125,7 +161,12 @@ it("still greys out a provider that is genuinely idle", () => {
+ });
+ 
+ it("shows an errored connection as red even when it was the last one routed", () => {
+-  render([{ id: "a", provider: "agy", name: "Antigravity", status: "error" }], "agy");
++  render(
++    [{ id: "a", provider: "agy", name: "Antigravity", status: "error" }],
++    "agy",
++    [],
++    ["agy"]
++  );
+   expect(box("agy").style.borderColor).toBe(RED);
+   expect(node("agy").dataset.edgeStroke).toBe(FLOW_EDGE_COLORS.error);
+ });

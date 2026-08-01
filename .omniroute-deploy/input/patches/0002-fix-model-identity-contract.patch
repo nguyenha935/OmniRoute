@@ -390,7 +390,7 @@ index c9077bf1d..fe90a7f39 100644
  
    // Filter candidates by active connections configured in the database
 diff --git a/open-sse/utils/claudeEffortVariants.ts b/open-sse/utils/claudeEffortVariants.ts
-index a5c549fe5..b3c4d8f44 100644
+index a5c549fe5..f4e4013ac 100644
 --- a/open-sse/utils/claudeEffortVariants.ts
 +++ b/open-sse/utils/claudeEffortVariants.ts
 @@ -29,7 +29,11 @@
@@ -421,7 +421,22 @@ index a5c549fe5..b3c4d8f44 100644
  const CLAUDE_NAME_RE = /claude/i;
  const NO_THINKING_PREFIX = "no-think/";
  
-@@ -142,7 +150,14 @@ export function appendClaudeEffortVariants<T extends CatalogModelEntry>(
+@@ -125,9 +133,11 @@ export function claudeEffortLevelsFor(providerId: string, modelId: string): stri
+  * original array reference unchanged when nothing is eligible (no allocation in the
+  * common case).
+  *
+- * @param aliasToCanonical - When provided, the provider prefix of each variant id is
+- *   normalized to its canonical form (e.g. "cc" → "claude"), matching the catalog's
+- *   canonical prefix mode. Pass the same map used for `appendNoThinkingVariants`.
++ * @param aliasToCanonical - Optional. When provided, the provider prefix of each variant id
++ *   is normalized to its canonical form (e.g. "cc" → "claude"). The catalog does NOT pass a
++ *   map: its base rows are already projected to a single routable public prefix, and effort
++ *   variants must inherit that published prefix verbatim (so `oc/...` stays `oc/...` rather
++ *   than being rewritten). Omit this argument to preserve the base's public prefix.
+  */
+ export function appendClaudeEffortVariants<T extends CatalogModelEntry>(
+   models: T[],
+@@ -142,7 +152,14 @@ export function appendClaudeEffortVariants<T extends CatalogModelEntry>(
      const slash = qualifiedId.indexOf("/");
      const providerId = slash >= 0 ? qualifiedId.slice(0, slash) : "";
      const bareName = bareModelName(qualifiedId);
@@ -437,32 +452,116 @@ index a5c549fe5..b3c4d8f44 100644
        // root stays UNPREFIXED (base root, or the bare model name, plus the suffix):
        // the provider-scoped models route uses `root` verbatim as the unprefixed id.
 diff --git a/open-sse/utils/noThinkingAlias.ts b/open-sse/utils/noThinkingAlias.ts
-index f83cefc69..ec7449879 100644
+index f83cefc69..74626cb4e 100644
 --- a/open-sse/utils/noThinkingAlias.ts
 +++ b/open-sse/utils/noThinkingAlias.ts
-@@ -158,7 +158,21 @@ export function appendNoThinkingVariants<T extends CatalogModelEntry>(
-     const rawId = model.id as string;
-     const qualifiedId = aliasToCanonical ? normalizeProviderPrefix(rawId, aliasToCanonical) : rawId;
-     const aliasId = toNoThinkingAlias(qualifiedId);
+@@ -22,12 +22,12 @@
+  * `reasoning_effort` for lanes known to reject it, falling back to today's
+  * delete-only behavior for those.
+  *
+- * Catalog visibility is gated (see `shouldExposeNoThinkingAlias`): we only advertise
+- * the variant for Claude-family models that actually support thinking AND honor
+- * `disabled` — advertising it for a model that ignores suppression would be a lie.
+- * An explicit registry override (`ModelSpec.noThinkingAlias`) wins over the default.
++ * Discovery: `no-think/<provider>/<model>` is INBOUND-only. The universal catalog
++ * does not advertise these ids — clients that want a no-thinking mode must select
++ * the id directly (a documented, client-specific concern). The request-path rewrite
++ * below (`applyNoThinkingAlias`) is the whole surface: any request carrying a
++ * `no-think/` id is rewritten to the real model with reasoning suppressed.
+  */
+-import { getModelSpec } from "@/shared/constants/modelSpecs";
+ 
+ export const NO_THINKING_PREFIX = "no-think/";
+ 
+@@ -81,88 +81,3 @@ export function applyNoThinkingAlias(
+   delete body.reasoning;
+   return { applied: true, realModel };
+ }
+-
+-interface CatalogModelEntry {
+-  id?: unknown;
+-  owned_by?: unknown;
+-  name?: unknown;
+-  [key: string]: unknown;
+-}
+-
+-/** Strip a `<provider>/` prefix to get the bare model name for spec lookup. */
+-function bareModelName(id: string): string {
+-  const slash = id.lastIndexOf("/");
+-  return slash >= 0 ? id.slice(slash + 1) : id;
+-}
+-
+-/**
+- * Whether the catalog should advertise a no-thinking variant for this entry.
+- *
+- * Default rule: Claude-family model that supports thinking and does NOT reject
+- * `thinking:{type:"disabled"}`. An explicit `ModelSpec.noThinkingAlias` boolean
+- * overrides the default in either direction (operator opt-in / opt-out).
+- */
+-export function shouldExposeNoThinkingAlias(model: CatalogModelEntry): boolean {
+-  if (!model || typeof model !== "object") return false;
+-  const id = model.id;
+-  if (typeof id !== "string" || id.length === 0) return false;
+-  if (model.owned_by === "combo") return false; // combos are virtual
+-  if (isNoThinkingAlias(id)) return false; // never double-alias
+-
+-  const name = bareModelName(id);
+-  const spec = getModelSpec(name);
+-  if (!spec) return false;
+-
+-  if (spec.noThinkingAlias === true) return true;
+-  if (spec.noThinkingAlias === false) return false;
+-
+-  return (
+-    spec.supportsThinking === true && spec.rejectsThinkingDisabled !== true && /claude/i.test(name)
+-  );
+-}
+-
+-/**
+- * Normalize the provider prefix inside a qualified model id using an alias→canonical map.
+- * e.g. "cc/claude-opus-4-6" → "claude/claude-opus-4-6" when aliasToCanonical["cc"]="claude".
+- * Ids without a "/" or whose prefix is not in the map are returned unchanged.
+- */
+-function normalizeProviderPrefix(
+-  qualifiedId: string,
+-  aliasToCanonical: Record<string, string>
+-): string {
+-  const slash = qualifiedId.indexOf("/");
+-  if (slash < 0) return qualifiedId;
+-  const prefix = qualifiedId.slice(0, slash);
+-  const canonical = aliasToCanonical[prefix];
+-  return canonical && canonical !== prefix
+-    ? `${canonical}${qualifiedId.slice(slash)}`
+-    : qualifiedId;
+-}
+-
+-/**
+- * Append a no-thinking variant for every eligible model. Returns the original array
+- * reference unchanged when nothing is eligible (no allocation in the common case).
+- *
+- * @param aliasToCanonical - When provided, the inner provider prefix of each variant id is
+- *   normalized to its canonical form (e.g. "cc" → "claude"). Pass this when the catalog is
+- *   emitting canonical-prefixed ids so no-think variants stay consistent with the prefix mode.
+- */
+-export function appendNoThinkingVariants<T extends CatalogModelEntry>(
+-  models: T[],
+-  aliasToCanonical?: Record<string, string>
+-): T[] {
+-  if (!Array.isArray(models)) return models;
+-  const variants: T[] = [];
+-  for (const model of models) {
+-    if (!shouldExposeNoThinkingAlias(model)) continue;
+-    const rawId = model.id as string;
+-    const qualifiedId = aliasToCanonical ? normalizeProviderPrefix(rawId, aliasToCanonical) : rawId;
+-    const aliasId = toNoThinkingAlias(qualifiedId);
 -    const variant: T = { ...model, id: aliasId, root: aliasId };
-+    // `root` stays the UNPREFIXED base model id — same contract as the effort-variant
-+    // helper (claudeEffortVariants.ts) and every catalog push site. It is the id
-+    // consumers key metadata off: `enrichCatalogModelEntry()` reads `entry.root`
-+    // first, so setting it to the alias made the lookup miss and dropped
-+    // context_length / max_input_tokens / max_output_tokens from the variant. The
-+    // no-thinking alias changes only how the model is *addressed*, never which
-+    // model it is, so the root must not carry the gateway prefix.
-+    const baseRoot =
-+      typeof model.root === "string" && model.root
-+        ? model.root
-+        : (() => {
-+            const slash = qualifiedId.lastIndexOf("/");
-+            return slash >= 0 ? qualifiedId.slice(slash + 1) : qualifiedId;
-+          })();
-+    const variant: T = { ...model, id: aliasId, root: baseRoot };
-     if (typeof model.name === "string" && model.name) {
-       variant.name = `${model.name} (no thinking)`;
-     }
+-    if (typeof model.name === "string" && model.name) {
+-      variant.name = `${model.name} (no thinking)`;
+-    }
+-    variants.push(variant);
+-  }
+-  return variants.length > 0 ? [...models, ...variants] : models;
+-}
 diff --git a/package.json b/package.json
 index 5b995b365..8acaccae9 100644
 --- a/package.json
@@ -1315,7 +1414,7 @@ index af1884079..b94000deb 100644
      return estimated;
    }
 diff --git a/src/app/api/v1/models/catalog.ts b/src/app/api/v1/models/catalog.ts
-index 34ccbdfba..b53556932 100644
+index 34ccbdfba..964bf828d 100644
 --- a/src/app/api/v1/models/catalog.ts
 +++ b/src/app/api/v1/models/catalog.ts
 @@ -35,7 +35,7 @@ import {
@@ -1327,7 +1426,15 @@ index 34ccbdfba..b53556932 100644
  import { providerUsesCuratedModelsOnly } from "@/lib/providers/modelListingCapability";
  import { getOpenRouterCatalog } from "@/lib/catalog/openrouterCatalog";
  import { hasEligibleConnectionForModel } from "@/domain/connectionModelRules";
-@@ -68,6 +68,8 @@ import {
+@@ -46,7 +46,6 @@ import {
+ } from "@/lib/modelMetadataRegistry";
+ import { getSyncedCapability } from "@/lib/modelsDevSync";
+ import { getModelSpec } from "@/shared/constants/modelSpecs";
+-import { getModelsCatalogPrefixMode } from "@/shared/utils/featureFlags";
+ import { applyCatalogPostFilters, finalizeCatalogResponse } from "./catalogResponse";
+ import {
+   isNoAuthProviderBlocked,
+@@ -68,6 +67,8 @@ import {
    maybeOmitCatalogModelName,
    getThinkingCapabilityFields,
    mergeComboCapabilities,
@@ -1336,7 +1443,7 @@ index 34ccbdfba..b53556932 100644
  } from "./catalogHelpers";
  import {
    qualifyOpenRouterModelId,
-@@ -90,6 +92,7 @@ import {
+@@ -90,6 +91,7 @@ import {
    isCcDiscoveryModelCatalogClient,
  } from "./catalogRequest";
  import { incrementCcDiscoveryHitCount } from "@/lib/db/ccDiscoveryMetrics";
@@ -1344,9 +1451,73 @@ index 34ccbdfba..b53556932 100644
  import { isFreeModel, providerHasFreeModels } from "@/shared/utils/freeModels";
  import { isCodexDiscoveryModelExcluded } from "@/shared/services/codexDiscoveryPolicy";
  import { buildErrorBody } from "@omniroute/open-sse/utils/error";
-@@ -355,10 +358,26 @@ async function buildUnifiedModelsResponseCore(
-     // map dependency — pure parseModel() probe), used both here and at the two
-     // includeCanonical prefix-collision checks below.
+@@ -214,11 +216,6 @@ async function buildUnifiedModelsResponseCore(
+     });
+     if (authRejection) return authRejection;
+     const { aliasToProviderId, providerIdToAlias } = buildAliasMaps();
+-    const _qp = new URL(request.url).searchParams.get("prefix");
+-    const prefixMode =
+-      _qp === "alias" || _qp === "canonical" || _qp === "dual" ? _qp : getModelsCatalogPrefixMode();
+-    const includeAlias = prefixMode !== "canonical";
+-    const includeCanonical = prefixMode !== "alias";
+     const resolveCanonicalProviderId = (aliasOrProviderId: string, fallbackProviderId?: string) =>
+       resolveCanonicalProviderIdFromMaps(aliasToProviderId, aliasOrProviderId, fallbackProviderId);
+     const aliasMaps = { aliasToProviderId, providerIdToAlias };
+@@ -283,6 +280,46 @@ async function buildUnifiedModelsResponseCore(
+     const resolvePublicOwnerId = (providerId: string, canonicalProviderId: string): string =>
+       providerIdToPrefix[providerId] || canonicalProviderId;
+ 
++    // #8869 — exactly ONE public model-id prefix per effective provider/model.
++    //
++    // The catalog used to publish the SAME model under two ids (alias `<alias>/<m>`
++    // AND canonical `<canonicalId>/<m>`) under the default `prefixMode: "dual"`,
++    // which is what fragmented every selector/lookup that keys on `id`. The contract
++    // is: legacy aliases stay INBOUND-callable (`parseModel`/`resolveProviderSegment`
++    // still accept them) but never create a second catalog identity.
++    //
++    // Precedence, matching the outbound half of the identity contract (see
++    // catalogProviderMaps.ts `aliasRoundTripsTo`):
++    //   1. the operator's node prefix wins (compatible providers store a UUID node id
++    //      that must never be published; their configured prefix is the public id);
++    //   2. else the canonical registry id, but ONLY when `${canonicalId}/x` round-trips
++    //      through parseModel to that provider AND existing policy permits it. The
++    //      noauth guard is preserved verbatim: the free `opencode` provider's canonical
++    //      id is slug-hijacked to `opencode-zen` (open-sse/services/model.ts), so it
++    //      fails the round-trip and correctly publishes under its alias `oc/` only;
++    //   3. else the routable alias (the provider's own id is unreachable as a prefix).
++    //
++    // Returns the single prefix string (never both). Every publishing loop below uses
++    // this instead of the old includeAlias/includeCanonical pair.
++    const resolvePublicPrefix = (params: {
++      canonicalProviderId: string;
++      alias: string;
++      nodePrefix?: string | null;
++    }): string => {
++      const { canonicalProviderId, alias, nodePrefix } = params;
++      const trimmedNodePrefix =
++        typeof nodePrefix === "string" && nodePrefix.trim().length > 0 ? nodePrefix.trim() : null;
++      if (trimmedNodePrefix) return trimmedNodePrefix;
++      if (
++        canonicalProviderId !== alias &&
++        !isNoAuthProviderKey(canonicalProviderId) &&
++        prefixRoutesToProvider(canonicalProviderId, canonicalProviderId)
++      ) {
++        return canonicalProviderId;
++      }
++      return alias;
++    };
++
+     // Get combos
+     let combos = [];
+     try {
+@@ -352,13 +389,29 @@ async function buildUnifiedModelsResponseCore(
+     };
+ 
+     // prefixRoutesToProvider is imported directly from catalogProviderMaps.ts (no
+-    // map dependency — pure parseModel() probe), used both here and at the two
+-    // includeCanonical prefix-collision checks below.
++    // map dependency — pure parseModel() probe), used by resolvePublicPrefix above
++    // to decide whether a provider's canonical id is routable as its own prefix.
      const getProviderPrefixes = (providerId: string, rawProvider: string) =>
 -      getProviderPrefixesFromMaps(aliasMaps, providerId, rawProvider);
 +      getProviderPrefixesFromMaps(
@@ -1374,7 +1545,15 @@ index 34ccbdfba..b53556932 100644
  
      const getComboTargetCatalogMetadata = (
        target: ComboCatalogTarget
-@@ -613,26 +632,17 @@ async function buildUnifiedModelsResponseCore(
+@@ -550,7 +603,6 @@ async function buildUnifiedModelsResponseCore(
+         );
+         const quotaFinal = applyCatalogPostFilters(request, quotaModels, {
+           connections,
+-          prefixMode,
+           aliasToProviderId,
+         });
+         return finalizeCatalogResponse(request, quotaFinal, () => undefined, {
+@@ -613,26 +665,17 @@ async function buildUnifiedModelsResponseCore(
        }
      }
  
@@ -1408,7 +1587,206 @@ index 34ccbdfba..b53556932 100644
        const comboMetadata = buildComboCatalogMetadata(combo, combos);
  
        listedIds.add(combo.name);
-@@ -925,6 +935,14 @@ async function buildUnifiedModelsResponseCore(
+@@ -701,45 +744,37 @@ async function buildUnifiedModelsResponseCore(
+         )
+           continue;
+         if (!providerSupportsModel(canonicalProviderId, model.id)) continue;
+-        const aliasId = `${alias}/${model.id}`;
+         if (getModelIsHidden(canonicalProviderId, model.id)) continue;
+         if (shouldHidePaid(canonicalProviderId, model.id, (model as { pricing?: unknown }).pricing))
+           continue;
+ 
++        // #8869 — one public id per model: canonical registry prefix when it
++        // round-trips and policy permits, else the routable alias.
++        const publicId = `${resolvePublicPrefix({ canonicalProviderId, alias })}/${model.id}`;
+         const visionFields =
+-          getVisionCapabilityFields(aliasId) || getVisionCapabilityFields(model.id);
+-        if (includeAlias) {
+-          models.push({
+-            id: aliasId,
+-            object: "model",
+-            created: timestamp,
+-            owned_by: canonicalProviderId,
+-            permission: [],
+-            root: model.id,
+-            parent: null,
+-            ...(visionFields || {}),
+-          });
+-        }
+-        if (
+-          includeCanonical &&
+-          canonicalProviderId !== alias &&
+-          !isNoAuthProviderKey(canonicalProviderId) &&
+-          prefixRoutesToProvider(canonicalProviderId, canonicalProviderId)
+-        ) {
+-          const providerIdModel = `${canonicalProviderId}/${model.id}`;
+-          const providerVisionFields =
+-            getVisionCapabilityFields(providerIdModel) || getVisionCapabilityFields(model.id);
+-          models.push({
+-            id: providerIdModel,
+-            object: "model",
+-            created: timestamp,
+-            owned_by: canonicalProviderId,
+-            permission: [],
+-            root: model.id,
+-            parent: includeAlias ? aliasId : null,
+-            ...(providerVisionFields || {}),
+-          });
+-        }
++          getVisionCapabilityFields(publicId) || getVisionCapabilityFields(model.id);
++        // #8869 single-prefix + #6457 cross-surface: some models are genuinely dual
++        // chat+image (e.g. codex `gpt-5.6-sol`). Under one public id this chat row and
++        // the image-registry row (`type:"image"`, added later) share `publicId`. The
++        // chat row is a real Responses-API surface here, NOT the bogus defaulted-chat
++        // sibling that #6457 drops, so declare its endpoint explicitly: dedupe keeps a
++        // row whose `supported_endpoints` name a genuinely non-chat surface, while the
++        // image row keeps its own listing identity. Only the Responses-format providers
++        // can be dual this way, so scope the declaration to them + registered image ids.
++        const isDualResponsesSurface =
++          REGISTRY[canonicalProviderId]?.format === "openai-responses" &&
++          isRegisteredImageModel(canonicalProviderId, model.id);
++        models.push({
++          id: publicId,
++          object: "model",
++          created: timestamp,
++          owned_by: canonicalProviderId,
++          permission: [],
++          root: model.id,
++          parent: null,
++          ...(isDualResponsesSurface ? { supported_endpoints: ["responses"] } : {}),
++          ...(visionFields || {}),
++        });
+       }
+     }
+ 
+@@ -747,27 +782,21 @@ async function buildUnifiedModelsResponseCore(
+       if (!providerSupportsModel("codex", modelId)) continue;
+       if (getModelIsHidden("codex", modelId)) continue;
+ 
++      // #8869 — one public id for codex-native models too: the old trio
++      // (cx/<m>, codex/<m>, bare <m>) collapsed to the single routable prefix.
++      // The bare id and alias remain inbound-callable via parseModel.
+       const alias = providerIdToAlias.codex || "cx";
+-      const aliasId = `${alias}/${modelId}`;
+-      const providerIdModel = `codex/${modelId}`;
+-      const entries = [
+-        { id: aliasId, parent: null },
+-        { id: providerIdModel, parent: aliasId },
+-        { id: modelId, parent: providerIdModel },
+-      ];
+-
+-      for (const entry of entries) {
+-        if (models.some((existingModel) => existingModel.id === entry.id)) continue;
+-        models.push({
+-          id: entry.id,
+-          object: "model",
+-          created: timestamp,
+-          owned_by: "codex",
+-          permission: [],
+-          root: modelId,
+-          parent: entry.parent,
+-        });
+-      }
++      const publicId = `${resolvePublicPrefix({ canonicalProviderId: "codex", alias })}/${modelId}`;
++      if (models.some((existingModel) => existingModel.id === publicId)) continue;
++      models.push({
++        id: publicId,
++        object: "model",
++        created: timestamp,
++        owned_by: "codex",
++        permission: [],
++        root: modelId,
++        parent: null,
++      });
+     }
+ 
+     try {
+@@ -828,7 +857,6 @@ async function buildUnifiedModelsResponseCore(
+               ? sm.id.slice(registryEntry.modelIdPrefix.length)
+               : sm.id;
+ 
+-          const aliasId = `${alias}/${displayModelId}`;
+           const endpoints = Array.isArray(sm.supportedEndpoints) ? sm.supportedEndpoints : ["chat"];
+           const apiFormat = typeof sm.apiFormat === "string" ? sm.apiFormat : "chat-completions";
+           let modelType: string | undefined;
+@@ -852,29 +880,34 @@ async function buildUnifiedModelsResponseCore(
+             ...(buildSyncedCapabilities(sm) ? { capabilities: buildSyncedCapabilities(sm) } : {}),
+           };
+ 
+-          const existingAliasModel = models.find((model) => model.id === aliasId);
+-          if (existingAliasModel) {
+-            const mergedCapabilities = mergeSyncedCapabilities(existingAliasModel.capabilities, sm);
+-            Object.assign(existingAliasModel, syncedFields);
+-            if (mergedCapabilities) existingAliasModel.capabilities = mergedCapabilities;
++          // #8869 — one public id per synced model: operator node-prefix wins,
++          // else the canonical registry id when it round-trips + policy permits,
++          // else the routable alias. Replaces the old alias+canonical dual emission.
++          const publicId = `${resolvePublicPrefix({ canonicalProviderId, alias, nodePrefix: prefix })}/${displayModelId}`;
++
++          const existingModel = models.find((model) => model.id === publicId);
++          if (existingModel) {
++            const mergedCapabilities = mergeSyncedCapabilities(existingModel.capabilities, sm);
++            Object.assign(existingModel, syncedFields);
++            if (mergedCapabilities) existingModel.capabilities = mergedCapabilities;
+             continue;
+           }
+ 
+-          if (includeAlias) {
+-            models.push({
+-              id: aliasId,
+-              object: "model",
+-              created: timestamp,
+-              owned_by: resolvePublicOwnerId(providerId, canonicalProviderId),
+-              permission: [],
+-              root: sm.id,
+-              parent: null,
+-              ...syncedFields,
+-            });
+-          }
+-          if (includeAlias && modelType === "audio") {
++          models.push({
++            id: publicId,
++            object: "model",
++            created: timestamp,
++            owned_by: resolvePublicOwnerId(providerId, canonicalProviderId),
++            permission: [],
++            root: sm.id,
++            parent: null,
++            ...syncedFields,
++          });
++          // Audio transcription models also get a speech twin under the SAME public
++          // id (distinct subtype → distinct listing identity, preserved by dedupe).
++          if (modelType === "audio") {
+             models.push({
+-              id: aliasId,
++              id: publicId,
+               object: "model",
+               created: timestamp,
+               owned_by: resolvePublicOwnerId(providerId, canonicalProviderId),
+@@ -892,22 +925,6 @@ async function buildUnifiedModelsResponseCore(
+                 : {}),
+             });
+           }
+-
+-          if (includeCanonical && canonicalProviderId !== alias && !prefix) {
+-            const providerPrefixedId = `${canonicalProviderId}/${displayModelId}`;
+-            if (!models.some((model) => model.id === providerPrefixedId)) {
+-              models.push({
+-                id: providerPrefixedId,
+-                object: "model",
+-                created: timestamp,
+-                owned_by: resolvePublicOwnerId(providerId, canonicalProviderId),
+-                permission: [],
+-                root: sm.id,
+-                parent: includeAlias ? aliasId : null,
+-                ...syncedFields,
+-              });
+-            }
+-          }
+         }
+       }
+     } catch (err) {
+@@ -925,6 +942,14 @@ async function buildUnifiedModelsResponseCore(
            if (!openRouterModel?.id || typeof openRouterModel.id !== "string") continue;
            const qualifiedId = qualifyOpenRouterModelId(openRouterModel.id);
            if (models.some((existingModel: any) => existingModel?.id === qualifiedId)) continue;
@@ -1423,7 +1801,7 @@ index 34ccbdfba..b53556932 100644
  
            const inputModalities = normalizeOpenRouterModalities(
              openRouterModel.architecture?.input_modalities
-@@ -1012,7 +1030,7 @@ async function buildUnifiedModelsResponseCore(
+@@ -1012,7 +1037,7 @@ async function buildUnifiedModelsResponseCore(
            typeof model?.root === "string"
              ? model.root
              : typeof model?.id === "string"
@@ -1432,7 +1810,7 @@ index 34ccbdfba..b53556932 100644
                : null;
          return existingRoot === rawModelId;
        });
-@@ -1020,9 +1038,7 @@ async function buildUnifiedModelsResponseCore(
+@@ -1020,9 +1045,7 @@ async function buildUnifiedModelsResponseCore(
      // Add embedding models (filtered by active providers)
      for (const embModel of getAllEmbeddingModels()) {
        if (!isProviderActive(embModel.provider)) continue;
@@ -1443,7 +1821,7 @@ index 34ccbdfba..b53556932 100644
        if (!providerSupportsModel(embModel.provider, rawModelId)) continue;
        if (getModelIsHidden(embModel.provider, rawModelId)) continue;
        if (hasEquivalentSpecialtyModel(embModel.provider, rawModelId, "embedding", embModel.id)) {
-@@ -1042,7 +1058,7 @@ async function buildUnifiedModelsResponseCore(
+@@ -1042,7 +1065,7 @@ async function buildUnifiedModelsResponseCore(
      // Add image models (filtered by active providers)
      for (const imgModel of getAllImageModels()) {
        if (!isProviderActive(imgModel.provider)) continue;
@@ -1452,7 +1830,7 @@ index 34ccbdfba..b53556932 100644
        if (!providerSupportsModel(imgModel.provider, rawModelId)) continue;
        if (getModelIsHidden(imgModel.provider, rawModelId)) continue;
        models.push({
-@@ -1061,7 +1077,7 @@ async function buildUnifiedModelsResponseCore(
+@@ -1061,7 +1084,7 @@ async function buildUnifiedModelsResponseCore(
      // Add rerank models (filtered by active providers)
      for (const rerankModel of getAllRerankModels()) {
        if (!isProviderActive(rerankModel.provider)) continue;
@@ -1461,7 +1839,7 @@ index 34ccbdfba..b53556932 100644
        if (!providerSupportsModel(rerankModel.provider, rawModelId)) continue;
        if (getModelIsHidden(rerankModel.provider, rawModelId)) continue;
        if (hasEquivalentSpecialtyModel(rerankModel.provider, rawModelId, "rerank", rerankModel.id)) {
-@@ -1080,7 +1096,7 @@ async function buildUnifiedModelsResponseCore(
+@@ -1080,7 +1103,7 @@ async function buildUnifiedModelsResponseCore(
      // Add audio models (filtered by active providers)
      for (const audioModel of getAllAudioModels()) {
        if (!isProviderActive(audioModel.provider)) continue;
@@ -1470,7 +1848,7 @@ index 34ccbdfba..b53556932 100644
        if (!providerSupportsModel(audioModel.provider, rawModelId)) continue;
        if (getModelIsHidden(audioModel.provider, rawModelId)) continue;
        models.push({
-@@ -1096,7 +1112,7 @@ async function buildUnifiedModelsResponseCore(
+@@ -1096,7 +1119,7 @@ async function buildUnifiedModelsResponseCore(
      // Add moderation models (filtered by active providers)
      for (const modModel of getAllModerationModels()) {
        if (!isProviderActive(modModel.provider)) continue;
@@ -1479,7 +1857,7 @@ index 34ccbdfba..b53556932 100644
        if (!providerSupportsModel(modModel.provider, rawModelId)) continue;
        if (getModelIsHidden(modModel.provider, rawModelId)) continue;
        models.push({
-@@ -1111,7 +1127,7 @@ async function buildUnifiedModelsResponseCore(
+@@ -1111,7 +1134,7 @@ async function buildUnifiedModelsResponseCore(
      // Add video models (filtered by active providers)
      for (const videoModel of getAllVideoModels()) {
        if (!isProviderActive(videoModel.provider)) continue;
@@ -1488,7 +1866,7 @@ index 34ccbdfba..b53556932 100644
        if (!providerSupportsModel(videoModel.provider, rawModelId)) continue;
        if (getModelIsHidden(videoModel.provider, rawModelId)) continue;
        models.push({
-@@ -1126,7 +1142,7 @@ async function buildUnifiedModelsResponseCore(
+@@ -1126,7 +1149,7 @@ async function buildUnifiedModelsResponseCore(
      // Add music models (filtered by active providers)
      for (const musicModel of getAllMusicModels()) {
        if (!isProviderActive(musicModel.provider)) continue;
@@ -1497,7 +1875,110 @@ index 34ccbdfba..b53556932 100644
        if (!providerSupportsModel(musicModel.provider, rawModelId)) continue;
        if (getModelIsHidden(musicModel.provider, rawModelId)) continue;
        models.push({
-@@ -1295,7 +1311,14 @@ async function buildUnifiedModelsResponseCore(
+@@ -1194,8 +1217,11 @@ async function buildUnifiedModelsResponseCore(
+           }
+ 
+           // Skip if already added as built-in
+-          const aliasId = `${alias}/${modelId}`;
+-          if (models.some((m) => m.id === aliasId)) continue;
++          // #8869 — one public id per custom model: operator node-prefix wins,
++          // else canonical registry id when it round-trips + policy permits,
++          // else the routable alias. Replaces the old alias+canonical dual emission.
++          const publicId = `${resolvePublicPrefix({ canonicalProviderId, alias, nodePrefix: prefix })}/${modelId}`;
++          if (models.some((m) => m.id === publicId)) continue;
+ 
+           // Determine type from supportedEndpoints
+           const endpoints = Array.isArray(model.supportedEndpoints)
+@@ -1210,64 +1236,35 @@ async function buildUnifiedModelsResponseCore(
+           else if (endpoints.includes("audio")) modelType = "audio";
+           if (
+             modelType &&
+-            hasEquivalentSpecialtyModel(canonicalProviderId, modelId, modelType, aliasId)
++            hasEquivalentSpecialtyModel(canonicalProviderId, modelId, modelType, publicId)
+           ) {
+             continue;
+           }
+           const visionFields =
+-            modelType === "chat" ? getCustomVisionCapabilityFields(model, aliasId, modelId) : null;
+-
+-          if (includeAlias) {
+-            models.push({
+-              id: aliasId,
+-              object: "model",
+-              created: timestamp,
+-              owned_by: resolvePublicOwnerId(providerId, canonicalProviderId),
+-              permission: [],
+-              root: modelId,
+-              parent: null,
+-              custom: true,
+-              ...(modelType ? { type: modelType } : {}),
+-              ...(apiFormat !== "chat-completions" ? { api_format: apiFormat } : {}),
+-              ...(endpoints.length > 1 || !endpoints.includes("chat")
+-                ? { supported_endpoints: endpoints }
+-                : {}),
+-              ...(typeof model.inputTokenLimit === "number"
+-                ? { context_length: model.inputTokenLimit }
+-                : {}),
+-              ...(typeof (model as any).outputTokenLimit === "number"
+-                ? { max_output_tokens: (model as any).outputTokenLimit }
+-                : {}),
+-              ...(visionFields || {}),
+-            });
+-          }
++            modelType === "chat" ? getCustomVisionCapabilityFields(model, publicId, modelId) : null;
+ 
+-          if (includeCanonical && canonicalProviderId !== alias && !prefix && !isNoAuthProvider) {
+-            const providerPrefixedId = `${canonicalProviderId}/${modelId}`;
+-            if (models.some((m) => m.id === providerPrefixedId)) continue;
+-            const providerVisionFields =
+-              modelType === "chat"
+-                ? getCustomVisionCapabilityFields(model, providerPrefixedId, modelId)
+-                : null;
+-            models.push({
+-              id: providerPrefixedId,
+-              object: "model",
+-              created: timestamp,
+-              owned_by: resolvePublicOwnerId(providerId, canonicalProviderId),
+-              permission: [],
+-              root: modelId,
+-              parent: includeAlias ? aliasId : null,
+-              custom: true,
+-              ...(modelType ? { type: modelType } : {}),
+-              ...(typeof model.inputTokenLimit === "number"
+-                ? { context_length: model.inputTokenLimit }
+-                : {}),
+-              ...(typeof (model as any).outputTokenLimit === "number"
+-                ? { max_output_tokens: (model as any).outputTokenLimit }
+-                : {}),
+-              ...(providerVisionFields || {}),
+-            });
+-          }
++          models.push({
++            id: publicId,
++            object: "model",
++            created: timestamp,
++            owned_by: resolvePublicOwnerId(providerId, canonicalProviderId),
++            permission: [],
++            root: modelId,
++            parent: null,
++            custom: true,
++            ...(modelType ? { type: modelType } : {}),
++            ...(apiFormat !== "chat-completions" ? { api_format: apiFormat } : {}),
++            ...(endpoints.length > 1 || !endpoints.includes("chat")
++              ? { supported_endpoints: endpoints }
++              : {}),
++            ...(typeof model.inputTokenLimit === "number"
++              ? { context_length: model.inputTokenLimit }
++              : {}),
++            ...(typeof (model as any).outputTokenLimit === "number"
++              ? { max_output_tokens: (model as any).outputTokenLimit }
++              : {}),
++            ...(visionFields || {}),
++          });
+         }
+       }
+     } catch (e) {
+@@ -1295,7 +1292,14 @@ async function buildUnifiedModelsResponseCore(
            continue;
          }
  
@@ -1513,18 +1994,101 @@ index 34ccbdfba..b53556932 100644
          if (
            !activeAliases.has(alias) &&
            !activeAliases.has(canonicalProviderId) &&
-@@ -1337,6 +1360,10 @@ async function buildUnifiedModelsResponseCore(
+@@ -1310,51 +1314,33 @@ async function buildUnifiedModelsResponseCore(
+         // decides via the FREE_MODEL_IDS_BY_PROVIDER catalog tier.
+         if (shouldHidePaid(canonicalProviderId, modelId)) continue;
+ 
+-        const aliasId = `${alias}/${modelId}`;
++        // #8869 — one public id per alias-backed model: operator node-prefix wins,
++        // else canonical registry id when it round-trips + policy permits, else the
++        // routable alias. Replaces the old alias+canonical dual emission (the
++        // canonical branch here was already gated on the same !nodePrefix +
++        // round-trip contract the helper now centralizes).
++        const publicId = `${resolvePublicPrefix({ canonicalProviderId, alias, nodePrefix })}/${modelId}`;
+         const rawPrefixedId = `${providerKey}/${modelId}`;
          if (
-           includeCanonical &&
-           canonicalProviderId !== alias &&
-+          // `!nodePrefix` matches the synced/custom loops: when the operator gave the
-+          // node a prefix, the canonical id IS the internal uuid, so minting the
-+          // canonical branch would republish the storage id under `dual` mode.
-+          !nodePrefix &&
-           !isNoAuthProviderKey(canonicalProviderId) &&
-           prefixRoutesToProvider(canonicalProviderId, canonicalProviderId)
+-          models.some((m: any) => m?.id === aliasId) ||
++          models.some((m: any) => m?.id === publicId) ||
+           models.some((m: any) => m?.id === rawPrefixedId)
          ) {
-@@ -1433,8 +1460,30 @@ async function buildUnifiedModelsResponseCore(
+           continue;
+         }
+ 
+         const visionFields =
+-          getVisionCapabilityFields(aliasId) || getVisionCapabilityFields(modelId);
++          getVisionCapabilityFields(publicId) || getVisionCapabilityFields(modelId);
+ 
+-        if (includeAlias) {
+-          models.push({
+-            id: aliasId,
+-            object: "model",
+-            created: timestamp,
+-            owned_by: resolvePublicOwnerId(providerKey, canonicalProviderId),
+-            permission: [],
+-            root: modelId,
+-            parent: null,
+-            ...(visionFields || {}),
+-          });
+-        }
+-        if (
+-          includeCanonical &&
+-          canonicalProviderId !== alias &&
+-          !isNoAuthProviderKey(canonicalProviderId) &&
+-          prefixRoutesToProvider(canonicalProviderId, canonicalProviderId)
+-        ) {
+-          const providerPrefixedId = `${canonicalProviderId}/${modelId}`;
+-          if (models.some((m: any) => m?.id === providerPrefixedId)) continue;
+-          const providerVisionFields =
+-            getVisionCapabilityFields(providerPrefixedId) || getVisionCapabilityFields(modelId);
+-          models.push({
+-            id: providerPrefixedId,
+-            object: "model",
+-            created: timestamp,
+-            owned_by: resolvePublicOwnerId(providerKey, canonicalProviderId),
+-            permission: [],
+-            root: modelId,
+-            parent: includeAlias ? aliasId : null,
+-            ...(providerVisionFields || {}),
+-          });
+-        }
++        models.push({
++          id: publicId,
++          object: "model",
++          created: timestamp,
++          owned_by: resolvePublicOwnerId(providerKey, canonicalProviderId),
++          permission: [],
++          root: modelId,
++          parent: null,
++          ...(visionFields || {}),
++        });
+       }
+     } catch (e) {
+       console.log("Could not fetch model aliases");
+@@ -1384,16 +1370,19 @@ async function buildUnifiedModelsResponseCore(
+           continue;
+         if (!hasEligibleConnectionForModel([conn], modelId)) continue;
+ 
+-        const aliasId = `${alias}/${modelId}`;
+-        if (models.some((m) => m.id === aliasId)) continue;
++        // #8869 — one public id per managed-fallback model, via the shared
++        // routability contract (operator prefix wins, else canonical registry
++        // id when it round-trips + policy permits, else the routable alias).
++        const publicId = `${resolvePublicPrefix({ canonicalProviderId, alias, nodePrefix: prefix })}/${modelId}`;
++        if (models.some((m) => m.id === publicId)) continue;
+ 
+         const visionFields =
+-          getVisionCapabilityFields(aliasId) || getVisionCapabilityFields(modelId);
++          getVisionCapabilityFields(publicId) || getVisionCapabilityFields(modelId);
+         const contextLength =
+           typeof model.contextLength === "number" ? model.contextLength : undefined;
+ 
+         models.push({
+-          id: aliasId,
++          id: publicId,
+           object: "model",
+           created: timestamp,
+           owned_by: resolvePublicOwnerId(providerId, canonicalProviderId),
+@@ -1433,8 +1422,30 @@ async function buildUnifiedModelsResponseCore(
          // Without this branch, isModelAllowedForKey returns false for every model
          // (metadata missing → deny), collapsing /v1/models to 0 entries.
        } else {
@@ -1555,7 +2119,7 @@ index 34ccbdfba..b53556932 100644
            // m.id is the full identifier (e.g. openai/gpt-4o), m.root is the raw model string
            // check either one as the config could use either patterns
            if (
-@@ -1447,7 +1496,10 @@ async function buildUnifiedModelsResponseCore(
+@@ -1447,10 +1458,12 @@ async function buildUnifiedModelsResponseCore(
          finalModels = filtered;
        }
      }
@@ -1566,8 +2130,11 @@ index 34ccbdfba..b53556932 100644
 +    // the quota-exclusive early return above get it — see catalogResponse.ts.
      finalModels = applyCatalogPostFilters(request, finalModels, {
        connections,
-       prefixMode,
-@@ -1467,7 +1519,10 @@ async function buildUnifiedModelsResponseCore(
+-      prefixMode,
+       aliasToProviderId,
+     });
+ 
+@@ -1467,7 +1480,10 @@ async function buildUnifiedModelsResponseCore(
        if (registryFallback) return registryFallback;
  
        const modelId =
@@ -1579,22 +2146,63 @@ index 34ccbdfba..b53556932 100644
        return modelId ? getTokenLimit(canonicalId, modelId) : getTokenLimit(canonicalId);
      };
  
+diff --git a/src/app/api/v1/models/catalogCache.ts b/src/app/api/v1/models/catalogCache.ts
+index 316120293..57f0e06f9 100644
+--- a/src/app/api/v1/models/catalogCache.ts
++++ b/src/app/api/v1/models/catalogCache.ts
+@@ -72,11 +72,10 @@ let _catalogBuilderRuns = 0;
+ 
+ function buildCatalogCacheKey(request: Request): string {
+   const url = new URL(request.url);
+-  const prefix = url.searchParams.get("prefix") || "";
+   const apiKey = extractApiKey(request) || "";
+   const isCodex = isCodexModelCatalogClient(request) ? "1" : "0";
+   const configuredOnly = url.searchParams.get("configuredOnly") === "true" ? "1" : "0";
+-  return `${prefix}|${isCodex}|${apiKey}|${configuredOnly}`;
++  return `${isCodex}|${apiKey}|${configuredOnly}`;
+ }
+ 
+ // Tracks the model-catalog cache version (src/lib/db/readCache.ts) as of the last
 diff --git a/src/app/api/v1/models/catalogDedupe.ts b/src/app/api/v1/models/catalogDedupe.ts
-index 29f48ac35..d475abadb 100644
+index 29f48ac35..1372e660b 100644
 --- a/src/app/api/v1/models/catalogDedupe.ts
 +++ b/src/app/api/v1/models/catalogDedupe.ts
-@@ -43,6 +43,51 @@ const isGenericChatLike = (model: CatalogModelEntry): boolean => {
+@@ -18,7 +18,7 @@
+  * - preserve intentional multi-surface pairs (audio transcription vs speech)
+  * - never mutate account/connection/credential fields (this pass only drops whole rows)
+  *
+- * Pure (no DB / no I/O). Order-preserving. Independent of MODELS_CATALOG_PREFIX_MODE.
++ * Pure (no DB / no I/O). Order-preserving. Independent of public-prefix selection.
+  */
+ 
+ interface CatalogModelEntry {
+@@ -37,12 +37,65 @@ const isNonChatSpecialtyType = (type: string): boolean => {
+ 
+ const isGenericChatLike = (model: CatalogModelEntry): boolean => {
+   const type = asStr(model.type);
+-  return !type || type === "chat";
++  if (type && type !== "chat") return false;
++  // A row that explicitly declares a genuinely non-chat endpoint (e.g. `responses`)
++  // is a real second surface, not a false generic sibling — never drop it as noise.
++  // An explicit `[chat]` is still chat-shaped and stays droppable, as does a bare
++  // chat-shaped row with no `supported_endpoints` at all.
++  const endpoints = model.supported_endpoints;
++  if (Array.isArray(endpoints) && endpoints.some((e) => typeof e === "string" && e !== "chat"))
++    return false;
++  return true;
+ };
+ 
  const listingKey = (model: CatalogModelEntry): string =>
    `${model.id as string}\u0000${asStr(model.type)}\u0000${asStr(model.subtype)}`;
  
 +/**
 + * Collapse duplicate SOURCE rows before synthetic variants are derived.
 + *
-+ * Identity here includes the public `id` as well as canonical owner/root metadata. This is
-+ * deliberate: `MODELS_CATALOG_PREFIX_MODE=dual` promises that `<alias>/<model>` and
-+ * `<canonicalId>/<model>` are both published, and native Codex additionally publishes a bare
-+ * id. Those are distinct callable public addresses even when they resolve to the same storage
-+ * identity, so this pass must never merge them.
++ * Identity here includes the public `id` as well as canonical owner/root metadata. The
++ * single-public-prefix invariant is enforced upstream (each effective provider/model publishes
++ * exactly one routable public id), so this pass never relies on alias/canonical/bare/node
++ * siblings coexisting. The public `id` stays in the key defensively so unrelated public rows
++ * are never conflated merely because their owner/root happen to match.
 + *
 + * The remaining fields distinguish intentional same-id surfaces such as audio transcription
 + * and speech. Rows without a usable id/owner/root, plus combos whose root is a display name,
@@ -1919,10 +2527,17 @@ index 6de91e645..7d3594f46 100644
      if (modelStr.startsWith(prefixWithSlash)) {
        const modelId = modelStr.slice(prefixWithSlash.length).trim();
 diff --git a/src/app/api/v1/models/catalogResponse.ts b/src/app/api/v1/models/catalogResponse.ts
-index dee78d995..99b17be5a 100644
+index dee78d995..8217989d7 100644
 --- a/src/app/api/v1/models/catalogResponse.ts
 +++ b/src/app/api/v1/models/catalogResponse.ts
-@@ -15,7 +15,7 @@ import { appendCcDiscoveryAliases } from "@omniroute/open-sse/utils/ccDiscoveryA
+@@ -8,14 +8,13 @@
+  * mirrors the first time it was written as a duplicate.
+  */
+ 
+-import { appendNoThinkingVariants } from "@omniroute/open-sse/utils/noThinkingAlias";
+ import { appendClaudeEffortVariants } from "@omniroute/open-sse/utils/claudeEffortVariants";
+ import { appendSyncedEffortVariants } from "@omniroute/open-sse/utils/syncedEffortVariants";
+ import { appendCcDiscoveryAliases } from "@omniroute/open-sse/utils/ccDiscoveryAliases";
  import { isCcAliasGlobalEnabled, getCcAliasSettingsBulk } from "@/lib/db/ccDiscoveryAliases";
  import { buildCcAliasPredicate } from "./ccAliasPredicate";
  import { hasEligibleConnectionForModel } from "@/domain/connectionModelRules";
@@ -1931,19 +2546,52 @@ index dee78d995..99b17be5a 100644
  import {
    disambiguateCatalogModelNames,
    enrichCatalogModelEntry,
-@@ -51,6 +51,11 @@ export function applyCatalogPostFilters(
+@@ -37,7 +36,6 @@ export function applyCatalogPostFilters(
+   models: Array<Record<string, any>>,
+   ctx: {
+     connections: any;
+-    prefixMode: string;
+     aliasToProviderId: Record<string, string>;
+   }
+ ): Array<Record<string, any>> {
+@@ -51,22 +49,21 @@ export function applyCatalogPostFilters(
      });
    }
  
-+  // Collapse source rows that publish one storage identity under both alias and canonical
-+  // prefixes. This must happen before synthetic public identities are derived: those rows
-+  // deliberately inherit source metadata and a later canonical pass would delete them.
+-  // Advertise Claude reasoning-effort variants (claude/<model>-{low,medium,high[,xhigh]}).
+-  // Derived from the already key-filtered list so a variant only appears when its real
+-  // model is permitted. Runs before the no-thinking pass: the gateway already routes these
+-  // suffixed ids (claudeEffortVariant.ts), this just makes them selectable in catalog-only
+-  // clients (OpenCode) that can't set a reasoning_effort config the way VS Code does.
+-  finalModels = appendClaudeEffortVariants(
+-    finalModels,
+-    ctx.prefixMode === "canonical" ? ctx.aliasToProviderId : undefined
+-  );
++  // Collapse source rows that carry the same storage identity under more than one
++  // public prefix. The catalog now publishes exactly one routable public identity per
++  // model, so this is a defensive guard against any source that still pushes two. It must
++  // run before synthetic variants are derived so those rows inherit a single base.
 +  finalModels = dedupeCanonicalModelIdentities(finalModels);
-+
-   // Advertise Claude reasoning-effort variants (claude/<model>-{low,medium,high[,xhigh]}).
-   // Derived from the already key-filtered list so a variant only appears when its real
-   // model is permitted. Runs before the no-thinking pass: the gateway already routes these
-@@ -93,10 +98,10 @@ export function applyCatalogPostFilters(
+ 
+-  // Advertise no-thinking gateway variants (Fase 8.1). Derived from the already
+-  // key-filtered list, so a variant only appears when its real model is permitted.
+-  finalModels = appendNoThinkingVariants(
+-    finalModels,
+-    ctx.prefixMode === "canonical" ? ctx.aliasToProviderId : undefined
+-  );
++  // Advertise Claude reasoning-effort variants (<published>/<model>-{low,medium,high[,xhigh]}).
++  // Derived from the already key-filtered list so a variant only appears when its real
++  // model is permitted. The variant inherits the base model's single routable public
++  // prefix verbatim — we must NOT rewrite the prefix through aliasToProviderId, because the
++  // published prefix is not always the registry id: the free `oc` provider publishes
++  // `oc/<model>`, and its registry id `opencode` is slug-hijacked to opencode-zen. The
++  // gateway already routes these suffixed ids (claudeEffortVariant.ts); this just makes
++  // them selectable in catalog-only clients that can't set reasoning_effort like VS Code.
++  finalModels = appendClaudeEffortVariants(finalModels);
+ 
+   // Advertise `claude/<id>` discovery-mirror aliases so Claude Code's gateway
+   // model discovery (which only lists `claude`/`anthropic`-prefixed ids) can see
+@@ -93,10 +90,10 @@ export function applyCatalogPostFilters(
    // Derived from the already key-filtered list; skips codex/kimi (own suffix mechanism).
    finalModels = appendSyncedEffortVariants(finalModels);
  
@@ -1954,12 +2602,12 @@ index dee78d995..99b17be5a 100644
 +  // #4424 follow-up — final public-identity guard after every synthetic row exists. Drop
 +  // exact ids that slip through per-source guards (e.g. `codex/gpt-5.5` listed twice),
 +  // while keying by (id, type, subtype) so intentional audio transcription/speech pairs
-+  // survive. Independent of MODELS_CATALOG_PREFIX_MODE.
++  // survive. Independent of public-prefix selection.
    finalModels = dedupeExactCatalogIds(finalModels);
  
    return finalModels;
 diff --git a/src/app/api/v1/providers/[provider]/models/route.ts b/src/app/api/v1/providers/[provider]/models/route.ts
-index 9e5450be9..4af715526 100644
+index 9e5450be9..f42762146 100644
 --- a/src/app/api/v1/providers/[provider]/models/route.ts
 +++ b/src/app/api/v1/providers/[provider]/models/route.ts
 @@ -4,6 +4,13 @@ import { isServiceBackendPluginId } from "@/lib/services/serviceBackends";
@@ -2028,7 +2676,7 @@ index 9e5450be9..4af715526 100644
    const response = await getUnifiedModelsResponse(request);
    const payload = (await response
      .clone()
-@@ -78,18 +107,43 @@ export async function GET(request: Request, { params }: { params: Promise<{ prov
+@@ -78,18 +107,42 @@ export async function GET(request: Request, { params }: { params: Promise<{ prov
      return response;
    }
  
@@ -2036,11 +2684,10 @@ index 9e5450be9..4af715526 100644
 +   * Reduce a published entry to the bare upstream model id this endpoint promises.
 +   *
 +   * `root` is preferred when it is genuinely a bare id, but it cannot be trusted
-+   * blindly: `appendNoThinkingVariants` (open-sse/utils/noThinkingAlias.ts) sets
-+   * `root` to the FULL alias id, so a no-thinking variant carries
-+   * `root: "no-think/<prefix>/<model>"`. Returning that verbatim made this
-+   * endpoint emit prefixed ids despite documenting the opposite. Strip both
-+   * candidates through the same loop so either shape lands on the bare id.
++   * blindly: a synthetic or legacy source row can carry `root` as a FULL prefixed
++   * id (for example `root: "<prefix>/<model>"`). Returning that verbatim violates
++   * this provider-scoped endpoint's bare-id contract. Strip both candidates
++   * through the same loop so either shape lands on the bare id.
 +   */
    const toUnprefixedModelId = (model: Record<string, any>) => {
 -    const root = typeof model.root === "string" && model.root.trim().length > 0 ? model.root : null;
@@ -2894,6 +3541,608 @@ index 9daf5450f..445289348 100644
      }
  
      return Response.json({ models });
+diff --git a/src/i18n/messages/ar.json b/src/i18n/messages/ar.json
+index b3a61c40d..24ea8d41a 100644
+--- a/src/i18n/messages/ar.json
++++ b/src/i18n/messages/ar.json
+@@ -11802,9 +11802,6 @@
+       "MODEL_CATALOG_INCLUDE_NAMES": {
+         "description": "تضمين حقول الأسماء المناسبة للعرض في استجابات /v1/models. عطل هذا للعملاء الذين يقبلون معرفات النماذج فقط."
+       },
+-      "MODELS_CATALOG_PREFIX_MODE": {
+-        "description": "التحكم في بادئات معرف النموذج في /v1/models: يصدر dual بادئات الأسماء المستعارة والبادئات الأساسية، ويصدر alias بادئات قصيرة فقط، ويصدر canonical معرفات المزود الكاملة فقط."
+-      },
+       "ARENA_ELO_SYNC_ENABLED": {
+         "description": "مزامنة بيانات ELO للوحة صدارة Arena AI دورياً لتصنيفات ذكاء النماذج."
+       },
+diff --git a/src/i18n/messages/az.json b/src/i18n/messages/az.json
+index 418c3bc0e..2da00c7b7 100644
+--- a/src/i18n/messages/az.json
++++ b/src/i18n/messages/az.json
+@@ -11802,9 +11802,6 @@
+       "MODEL_CATALOG_INCLUDE_NAMES": {
+         "description": "/v1/models cavablarına göstərilməsi asan olan ad sahələrini daxil edin. Bunu yalnız model ID-lərini qəbul edən müştərilər üçün sıradan çıxarın."
+       },
+-      "MODELS_CATALOG_PREFIX_MODE": {
+-        "description": "/v1/models daxilində model-ID prefikslərinə nəzarət edin: dual həm alias, həm də canonical prefikslərini göndərir, alias yalnız qısa prefiksləri göndərir, canonical isə yalnız tam provayder ID-lərini göndərir."
+-      },
+       "ARENA_ELO_SYNC_ENABLED": {
+         "description": "Model zəkası reytinqləri üçün Arena AI liderlər cədvəlinin ELO məlumatlarını vaxtaşırı sinxronlaşdırın."
+       },
+diff --git a/src/i18n/messages/bg.json b/src/i18n/messages/bg.json
+index 82295b902..af0ff018b 100644
+--- a/src/i18n/messages/bg.json
++++ b/src/i18n/messages/bg.json
+@@ -11802,9 +11802,6 @@
+       "MODEL_CATALOG_INCLUDE_NAMES": {
+         "description": "Включване на лесни за четене полета за имена в отговорите на /v1/models. Деактивирайте това за клиенти, които приемат само идентификатори на модели."
+       },
+-      "MODELS_CATALOG_PREFIX_MODE": {
+-        "description": "Контролиране на префиксите на идентификаторите на модели в /v1/models: dual излъчва alias и canonical префикси, alias излъчва само кратки префикси, а canonical излъчва само пълни идентификатори на доставчици."
+-      },
+       "ARENA_ELO_SYNC_ENABLED": {
+         "description": "Периодично синхронизиране на ELO данните от класацията на Arena AI за класиране на интелигентността на моделите."
+       },
+diff --git a/src/i18n/messages/bn.json b/src/i18n/messages/bn.json
+index 87bddc248..1d842115e 100644
+--- a/src/i18n/messages/bn.json
++++ b/src/i18n/messages/bn.json
+@@ -11802,9 +11802,6 @@
+       "MODEL_CATALOG_INCLUDE_NAMES": {
+         "description": "/v1/models প্রতিক্রিয়াগুলিতে প্রদর্শন-বান্ধব নামের ক্ষেত্রগুলি অন্তর্ভুক্ত করুন। শুধুমাত্র মডেল ID গ্রহণ করে এমন ক্লায়েন্টদের জন্য এটি নিষ্ক্রিয় করুন।"
+       },
+-      "MODELS_CATALOG_PREFIX_MODE": {
+-        "description": "/v1/models-এ মডেল-ID প্রিফিক্স নিয়ন্ত্রণ করুন: dual অ্যালিয়াস এবং ক্যানোনিকাল প্রিফিক্স নির্গত করে, alias শুধুমাত্র সংক্ষিপ্ত প্রিফিক্স নির্গত করে এবং canonical শুধুমাত্র সম্পূর্ণ প্রোভাইডার ID নির্গত করে।"
+-      },
+       "ARENA_ELO_SYNC_ENABLED": {
+         "description": "মডেল-বুদ্ধিমত্তা র‍্যাঙ্কিংয়ের জন্য পর্যায়ক্রমে Arena AI লিডারবোর্ড ELO ডেটা সিঙ্ক্রোনাইজ করুন।"
+       },
+diff --git a/src/i18n/messages/cs.json b/src/i18n/messages/cs.json
+index e3bb0fb74..f99c08e55 100644
+--- a/src/i18n/messages/cs.json
++++ b/src/i18n/messages/cs.json
+@@ -11802,9 +11802,6 @@
+       "MODEL_CATALOG_INCLUDE_NAMES": {
+         "description": "Zahrnout uživatelsky přívětivá pole názvů v odpovědích /v1/models. Zakažte to pro klienty, kteří přijímají pouze ID modelů."
+       },
+-      "MODELS_CATALOG_PREFIX_MODE": {
+-        "description": "Řídit předpony ID modelů v /v1/models: dual generuje aliasy i kanonické předpony, alias generuje pouze krátké předpony a canonical generuje pouze úplná ID poskytovatelů."
+-      },
+       "ARENA_ELO_SYNC_ENABLED": {
+         "description": "Periodicky synchronizovat data ELO z žebříčku Arena AI pro hodnocení inteligence modelů."
+       },
+diff --git a/src/i18n/messages/da.json b/src/i18n/messages/da.json
+index ce03c456a..e7aafd581 100644
+--- a/src/i18n/messages/da.json
++++ b/src/i18n/messages/da.json
+@@ -11802,9 +11802,6 @@
+       "MODEL_CATALOG_INCLUDE_NAMES": {
+         "description": "Inkluder visningsvenlige navnefelter i /v1/models-svar. Deaktivér dette for klienter, der kun accepterer model-id'er."
+       },
+-      "MODELS_CATALOG_PREFIX_MODE": {
+-        "description": "Styr model-id-præfikser i /v1/models: dual udsender alias- og kanoniske præfikser, alias udsender kun korte præfikser, og canonical udsender kun fulde udbyder-id'er."
+-      },
+       "ARENA_ELO_SYNC_ENABLED": {
+         "description": "Synkroniser periodisk ELO-data fra Arena AI-førertavlen til rangering af modelintelligens."
+       },
+diff --git a/src/i18n/messages/de.json b/src/i18n/messages/de.json
+index abed70d55..40b65b5a6 100644
+--- a/src/i18n/messages/de.json
++++ b/src/i18n/messages/de.json
+@@ -11802,9 +11802,6 @@
+       "MODEL_CATALOG_INCLUDE_NAMES": {
+         "description": "Benutzerfreundliche Namensfelder in /v1/models-Antworten einschließen. Deaktivieren Sie dies für Clients, die nur Modell-IDs akzeptieren."
+       },
+-      "MODELS_CATALOG_PREFIX_MODE": {
+-        "description": "Modell-ID-Präfixe in /v1/models steuern: „dual“ gibt Alias- und kanonische Präfixe aus, „alias“ gibt nur kurze Präfixe aus und „canonical“ gibt nur vollständige Anbieter-IDs aus."
+-      },
+       "ARENA_ELO_SYNC_ENABLED": {
+         "description": "ELO-Daten der Arena AI-Bestenliste regelmäßig für Modell-Intelligenz-Rankings synchronisieren."
+       },
+diff --git a/src/i18n/messages/en.json b/src/i18n/messages/en.json
+index 3d9bb9bc8..0ba05568e 100644
+--- a/src/i18n/messages/en.json
++++ b/src/i18n/messages/en.json
+@@ -11828,9 +11828,6 @@
+       "MODEL_CATALOG_INCLUDE_NAMES": {
+         "description": "Include display-friendly name fields in /v1/models responses. Disable this for clients that accept model IDs only."
+       },
+-      "MODELS_CATALOG_PREFIX_MODE": {
+-        "description": "Control model-ID prefixes in /v1/models: dual emits alias and canonical prefixes, alias emits short prefixes only, and canonical emits full provider IDs only."
+-      },
+       "ARENA_ELO_SYNC_ENABLED": {
+         "description": "Periodically synchronize Arena AI leaderboard ELO data for model-intelligence rankings."
+       },
+diff --git a/src/i18n/messages/es.json b/src/i18n/messages/es.json
+index 7d7e8cc49..a11f9d0b4 100644
+--- a/src/i18n/messages/es.json
++++ b/src/i18n/messages/es.json
+@@ -11802,9 +11802,6 @@
+       "MODEL_CATALOG_INCLUDE_NAMES": {
+         "description": "Include display-friendly name fields in /v1/models responses. Disable this for clients that accept model IDs only."
+       },
+-      "MODELS_CATALOG_PREFIX_MODE": {
+-        "description": "Control model-ID prefixes in /v1/models: dual emits alias and canonical prefixes, alias emits short prefixes only, and canonical emits full provider IDs only."
+-      },
+       "ARENA_ELO_SYNC_ENABLED": {
+         "description": "Periodically synchronize Arena AI leaderboard ELO data for model-intelligence rankings."
+       },
+diff --git a/src/i18n/messages/fa.json b/src/i18n/messages/fa.json
+index a07a9fc9a..7393be2db 100644
+--- a/src/i18n/messages/fa.json
++++ b/src/i18n/messages/fa.json
+@@ -11802,9 +11802,6 @@
+       "MODEL_CATALOG_INCLUDE_NAMES": {
+         "description": "گنجاندن فیلدهای نام مناسب برای نمایش در پاسخ‌های /v1/models. این را برای کلاینت‌هایی که فقط شناسه مدل را می‌پذیرند غیرفعال کنید."
+       },
+-      "MODELS_CATALOG_PREFIX_MODE": {
+-        "description": "کنترل پیشوندهای model-ID در /v1/models: گزینه dual پیشوندهای alias و canonical را صادر می‌کند، alias فقط پیشوندهای کوتاه را صادر می‌کند، و canonical فقط شناسه‌های کامل ارائه‌دهنده را صادر می‌کند."
+-      },
+       "ARENA_ELO_SYNC_ENABLED": {
+         "description": "همگام‌سازی دوره‌ای داده‌های ELO جدول امتیازات Arena AI برای رتبه‌بندی هوش مدل‌ها."
+       },
+diff --git a/src/i18n/messages/fi.json b/src/i18n/messages/fi.json
+index a4f323989..e143b3248 100644
+--- a/src/i18n/messages/fi.json
++++ b/src/i18n/messages/fi.json
+@@ -11802,9 +11802,6 @@
+       "MODEL_CATALOG_INCLUDE_NAMES": {
+         "description": "Sisällytä näyttöystävälliset nimikentät /v1/models-vastauksiin. Poista tämä käytöstä asiakkaille, jotka hyväksyvät vain mallitunnuksia."
+       },
+-      "MODELS_CATALOG_PREFIX_MODE": {
+-        "description": "Hallitse mallitunnusten etuliitteitä /v1/models-rajapinnassa: dual tuottaa alias- ja canonical-etuliitteet, alias tuottaa vain lyhyet etuliitteet ja canonical tuottaa vain täydelliset tarjoajatunnukset."
+-      },
+       "ARENA_ELO_SYNC_ENABLED": {
+         "description": "Synkronoi säännöllisesti Arena AI -tulostaulukon ELO-tiedot mallien älykkyysluokituksia varten."
+       },
+diff --git a/src/i18n/messages/fr.json b/src/i18n/messages/fr.json
+index c963fa1fc..eddcc075a 100644
+--- a/src/i18n/messages/fr.json
++++ b/src/i18n/messages/fr.json
+@@ -11802,9 +11802,6 @@
+       "MODEL_CATALOG_INCLUDE_NAMES": {
+         "description": "Inclure des champs de nom conviviaux pour l'affichage dans les réponses /v1/models. Désactivez cette option pour les clients qui n'acceptent que les ID de modèle."
+       },
+-      "MODELS_CATALOG_PREFIX_MODE": {
+-        "description": "Contrôler les préfixes d'ID de modèle dans /v1/models : dual émet les préfixes d'alias et canoniques, alias émet uniquement les préfixes courts et canonical émet uniquement les ID complets de fournisseur."
+-      },
+       "ARENA_ELO_SYNC_ENABLED": {
+         "description": "Synchroniser périodiquement les données ELO du classement Arena AI pour les classements d'intelligence des modèles."
+       },
+diff --git a/src/i18n/messages/gu.json b/src/i18n/messages/gu.json
+index 89f696a61..c0f31cac3 100644
+--- a/src/i18n/messages/gu.json
++++ b/src/i18n/messages/gu.json
+@@ -11802,9 +11802,6 @@
+       "MODEL_CATALOG_INCLUDE_NAMES": {
+         "description": "/v1/models પ્રતિસાદોમાં પ્રદર્શન-અનુકૂળ નામ ફીલ્ડ્સ શામેલ કરો. ફક્ત મોડલ IDs સ્વીકારતા ક્લાયન્ટ્સ માટે આને નિષ્ક્રિય કરો."
+       },
+-      "MODELS_CATALOG_PREFIX_MODE": {
+-        "description": "/v1/models માં મોડલ-ID પ્રીફિક્સ નિયંત્રિત કરો: dual એ alias અને canonical પ્રીફિક્સ ઉત્સર્જિત કરે છે, alias ફક્ત ટૂંકા પ્રીફિક્સ ઉત્સર્જિત કરે છે, અને canonical ફક્ત સંપૂર્ણ પ્રદાતા IDs ઉત્સર્જિત કરે છે."
+-      },
+       "ARENA_ELO_SYNC_ENABLED": {
+         "description": "મોડલ-ઇન્ટેલિજન્સ રેન્કિંગ માટે સમયાંતરે Arena AI લીડરબોર્ડ ELO ડેટા સિંક્રનાઇઝ કરો."
+       },
+diff --git a/src/i18n/messages/he.json b/src/i18n/messages/he.json
+index ac2399743..c7b90ff94 100644
+--- a/src/i18n/messages/he.json
++++ b/src/i18n/messages/he.json
+@@ -11802,9 +11802,6 @@
+       "MODEL_CATALOG_INCLUDE_NAMES": {
+         "description": "הכללת שדות שם ידידותיים לתצוגה בתגובות של /v1/models. השבת זאת עבור לקוחות המקבלים מזהי מודל בלבד."
+       },
+-      "MODELS_CATALOG_PREFIX_MODE": {
+-        "description": "שליטה בקידומות מזהי מודל ב-/v1/models: ‏dual מפיק קידומות כינוי וקנוניות, ‏alias מפיק קידומות קצרות בלבד, ו-canonical מפיק מזהי ספק מלאים בלבד."
+-      },
+       "ARENA_ELO_SYNC_ENABLED": {
+         "description": "סנכרון תקופתי של נתוני ELO מלוח המובילים של Arena AI עבור דירוגי אינטליגנציית מודלים."
+       },
+diff --git a/src/i18n/messages/hi.json b/src/i18n/messages/hi.json
+index 56f409ab0..95c39e5ad 100644
+--- a/src/i18n/messages/hi.json
++++ b/src/i18n/messages/hi.json
+@@ -11802,9 +11802,6 @@
+       "MODEL_CATALOG_INCLUDE_NAMES": {
+         "description": "/v1/models प्रतिक्रियाओं में प्रदर्शन-अनुकूल नाम फ़ील्ड शामिल करें। उन क्लाइंट्स के लिए इसे अक्षम करें जो केवल मॉडल ID स्वीकार करते हैं।"
+       },
+-      "MODELS_CATALOG_PREFIX_MODE": {
+-        "description": "/v1/models में मॉडल-ID उपसर्गों को नियंत्रित करें: dual उपनाम और कैनोनिकल उपसर्ग उत्सर्जित करता है, alias केवल छोटे उपसर्ग उत्सर्जित करता है, और canonical केवल पूर्ण प्रदाता ID उत्सर्जित करता है।"
+-      },
+       "ARENA_ELO_SYNC_ENABLED": {
+         "description": "मॉडल-इंटेलिजेंस रैंकिंग के लिए समय-समय पर Arena AI लीडरबोर्ड ELO डेटा को सिंक्रनाइज़ करें।"
+       },
+diff --git a/src/i18n/messages/hu.json b/src/i18n/messages/hu.json
+index 21695842a..b7d0ed12e 100644
+--- a/src/i18n/messages/hu.json
++++ b/src/i18n/messages/hu.json
+@@ -11802,9 +11802,6 @@
+       "MODEL_CATALOG_INCLUDE_NAMES": {
+         "description": "Megjelenítésbarát névmezők szerepeltetése a /v1/models válaszokban. Tiltsa le ezt azon ügyfelek esetében, amelyek csak modell-azonosítókat fogadnak el."
+       },
+-      "MODELS_CATALOG_PREFIX_MODE": {
+-        "description": "Modell-azonosító előtagok szabályozása a /v1/models végponton: a dual az alias és a canonical előtagokat is kibocsátja, az alias csak a rövid előtagokat, a canonical pedig csak a teljes szolgáltató-azonosítókat."
+-      },
+       "ARENA_ELO_SYNC_ENABLED": {
+         "description": "Az Arena AI ranglista ELO adatainak időszakos szinkronizálása a modell-intelligencia rangsoroláshoz."
+       },
+diff --git a/src/i18n/messages/id.json b/src/i18n/messages/id.json
+index c65693c53..d57945a4a 100644
+--- a/src/i18n/messages/id.json
++++ b/src/i18n/messages/id.json
+@@ -11802,9 +11802,6 @@
+       "MODEL_CATALOG_INCLUDE_NAMES": {
+         "description": "Sertakan bidang nama yang mudah dibaca dalam respons /v1/models. Nonaktifkan ini untuk klien yang hanya menerima ID model."
+       },
+-      "MODELS_CATALOG_PREFIX_MODE": {
+-        "description": "Kontrol awalan ID model di /v1/models: dual menghasilkan awalan alias dan kanonikal, alias hanya menghasilkan awalan pendek, dan canonical hanya menghasilkan ID penyedia lengkap."
+-      },
+       "ARENA_ELO_SYNC_ENABLED": {
+         "description": "Sinkronkan data ELO papan peringkat Arena AI secara berkala untuk pemeringkatan kecerdasan model."
+       },
+diff --git a/src/i18n/messages/in.json b/src/i18n/messages/in.json
+index a69d33694..d7479626b 100644
+--- a/src/i18n/messages/in.json
++++ b/src/i18n/messages/in.json
+@@ -11802,9 +11802,6 @@
+       "MODEL_CATALOG_INCLUDE_NAMES": {
+         "description": "Sertakan bidang nama yang ramah tampilan dalam respons /v1/models. Nonaktifkan ini untuk klien yang hanya menerima ID model."
+       },
+-      "MODELS_CATALOG_PREFIX_MODE": {
+-        "description": "Kontrol prefiks ID model di /v1/models: dual memancarkan prefiks alias dan kanonis, alias memancarkan prefiks pendek saja, dan canonical memancarkan ID penyedia lengkap saja."
+-      },
+       "ARENA_ELO_SYNC_ENABLED": {
+         "description": "Sinkronkan data ELO papan peringkat Arena AI secara berkala untuk peringkat kecerdasan model."
+       },
+diff --git a/src/i18n/messages/it.json b/src/i18n/messages/it.json
+index 21329d2aa..69ae1005f 100644
+--- a/src/i18n/messages/it.json
++++ b/src/i18n/messages/it.json
+@@ -11802,9 +11802,6 @@
+       "MODEL_CATALOG_INCLUDE_NAMES": {
+         "description": "Includi campi con nomi descrittivi nelle risposte di /v1/models. Disabilita questa opzione per i client che accettano solo ID modello."
+       },
+-      "MODELS_CATALOG_PREFIX_MODE": {
+-        "description": "Controlla i prefissi degli ID modello in /v1/models: dual emette prefissi alias e canonici, alias emette solo prefissi brevi e canonical emette solo ID provider completi."
+-      },
+       "ARENA_ELO_SYNC_ENABLED": {
+         "description": "Sincronizza periodicamente i dati ELO della classifica di Arena AI per le graduatorie di intelligenza dei modelli."
+       },
+diff --git a/src/i18n/messages/ja.json b/src/i18n/messages/ja.json
+index aac71c81f..1d6e7795a 100644
+--- a/src/i18n/messages/ja.json
++++ b/src/i18n/messages/ja.json
+@@ -11802,9 +11802,6 @@
+       "MODEL_CATALOG_INCLUDE_NAMES": {
+         "description": "Include display-friendly name fields in /v1/models responses. Disable this for clients that accept model IDs only."
+       },
+-      "MODELS_CATALOG_PREFIX_MODE": {
+-        "description": "Control model-ID prefixes in /v1/models: dual emits alias and canonical prefixes, alias emits short prefixes only, and canonical emits full provider IDs only."
+-      },
+       "ARENA_ELO_SYNC_ENABLED": {
+         "description": "Periodically synchronize Arena AI leaderboard ELO data for model-intelligence rankings."
+       },
+diff --git a/src/i18n/messages/ko.json b/src/i18n/messages/ko.json
+index 11c649976..05e850486 100644
+--- a/src/i18n/messages/ko.json
++++ b/src/i18n/messages/ko.json
+@@ -11802,9 +11802,6 @@
+       "MODEL_CATALOG_INCLUDE_NAMES": {
+         "description": "/v1/models 응답에 표시용 이름 필드를 포함합니다. 모델 ID만 허용하는 클라이언트의 경우 이 설정을 비활성화하세요."
+       },
+-      "MODELS_CATALOG_PREFIX_MODE": {
+-        "description": "/v1/models의 모델 ID 접두사를 제어합니다. dual은 별칭 및 표준 접두사를 모두 출력하고, alias는 짧은 접두사만 출력하며, canonical은 전체 공급자 ID만 출력합니다."
+-      },
+       "ARENA_ELO_SYNC_ENABLED": {
+         "description": "모델 지능 순위를 위해 Arena AI 리더보드 ELO 데이터를 주기적으로 동기화합니다."
+       },
+diff --git a/src/i18n/messages/mr.json b/src/i18n/messages/mr.json
+index 545145467..dda1d33b4 100644
+--- a/src/i18n/messages/mr.json
++++ b/src/i18n/messages/mr.json
+@@ -11802,9 +11802,6 @@
+       "MODEL_CATALOG_INCLUDE_NAMES": {
+         "description": "/v1/models प्रतिसादांमध्ये प्रदर्शनासाठी अनुकूल नाव फील्ड समाविष्ट करा. केवळ मॉडेल आयडी स्वीकारणाऱ्या क्लायंटसाठी हे अक्षम करा."
+       },
+-      "MODELS_CATALOG_PREFIX_MODE": {
+-        "description": "/v1/models मधील मॉडेल-आयडी उपसर्ग नियंत्रित करा: dual हे टोपणनाव आणि कॅनोनिकल उपसर्ग उत्सर्जित करते, alias केवळ लहान उपसर्ग उत्सर्जित करते, आणि canonical केवळ पूर्ण प्रदाता आयडी उत्सर्जित करते."
+-      },
+       "ARENA_ELO_SYNC_ENABLED": {
+         "description": "मॉडेल-इंटेलिजन्स रँकिंगसाठी Arena AI लीडरबोर्ड ELO डेटा वेळोवेळी सिंक्रोनाइझ करा."
+       },
+diff --git a/src/i18n/messages/ms.json b/src/i18n/messages/ms.json
+index 592e2bd36..8aebbe3a1 100644
+--- a/src/i18n/messages/ms.json
++++ b/src/i18n/messages/ms.json
+@@ -11802,9 +11802,6 @@
+       "MODEL_CATALOG_INCLUDE_NAMES": {
+         "description": "Sertakan medan nama mesra paparan dalam respons /v1/models. Nyahdayakan ini untuk pelanggan yang hanya menerima ID model."
+       },
+-      "MODELS_CATALOG_PREFIX_MODE": {
+-        "description": "Kawal awalan ID model dalam /v1/models: dual mengeluarkan awalan alias dan kanonikal, alias mengeluarkan awalan pendek sahaja, dan canonical mengeluarkan ID penyedia penuh sahaja."
+-      },
+       "ARENA_ELO_SYNC_ENABLED": {
+         "description": "Segerakkan data ELO papan pendahulu Arena AI secara berkala untuk kedudukan kecerdasan model."
+       },
+diff --git a/src/i18n/messages/nl.json b/src/i18n/messages/nl.json
+index afe5aea54..9b7562ec0 100644
+--- a/src/i18n/messages/nl.json
++++ b/src/i18n/messages/nl.json
+@@ -11802,9 +11802,6 @@
+       "MODEL_CATALOG_INCLUDE_NAMES": {
+         "description": "Voeg weergavevriendelijke naamvelden toe aan /v1/models-responsen. Schakel dit uit voor clients die alleen model-ID's accepteren."
+       },
+-      "MODELS_CATALOG_PREFIX_MODE": {
+-        "description": "Beheer model-ID-voorvoegsels in /v1/models: dual verzendt alias- en canonieke voorvoegsels, alias verzendt alleen korte voorvoegsels en canonical verzendt alleen volledige provider-ID's."
+-      },
+       "ARENA_ELO_SYNC_ENABLED": {
+         "description": "Synchroniseer periodiek Arena AI-leaderboard ELO-gegevens voor modelintelligentieranglijsten."
+       },
+diff --git a/src/i18n/messages/no.json b/src/i18n/messages/no.json
+index 82dbeff23..bb61a7146 100644
+--- a/src/i18n/messages/no.json
++++ b/src/i18n/messages/no.json
+@@ -11802,9 +11802,6 @@
+       "MODEL_CATALOG_INCLUDE_NAMES": {
+         "description": "Inkluder visningsvennlige navnefelt i /v1/models-svar. Deaktiver dette for klienter som kun godtar modell-ID-er."
+       },
+-      "MODELS_CATALOG_PREFIX_MODE": {
+-        "description": "Kontroller modell-ID-prefikser i /v1/models: dual sender ut alias- og kanoniske prefikser, alias sender ut kun korte prefikser, og canonical sender ut kun fulle leverandør-ID-er."
+-      },
+       "ARENA_ELO_SYNC_ENABLED": {
+         "description": "Synkroniser Arena AI-ledertavlens ELO-data med jevne mellomrom for rangering av modellintelligens."
+       },
+diff --git a/src/i18n/messages/phi.json b/src/i18n/messages/phi.json
+index 23074a502..0601bf33f 100644
+--- a/src/i18n/messages/phi.json
++++ b/src/i18n/messages/phi.json
+@@ -11802,9 +11802,6 @@
+       "MODEL_CATALOG_INCLUDE_NAMES": {
+         "description": "Isama ang mga display-friendly na field ng pangalan sa mga tugon ng /v1/models. I-disable ito para sa mga client na tumatanggap lamang ng mga model ID."
+       },
+-      "MODELS_CATALOG_PREFIX_MODE": {
+-        "description": "Kontrolin ang mga prefix ng model-ID sa /v1/models: naglalabas ang dual ng mga alias at canonical na prefix, naglalabas ang alias ng maiikling prefix lamang, at naglalabas ang canonical ng buong mga provider ID lamang."
+-      },
+       "ARENA_ELO_SYNC_ENABLED": {
+         "description": "Pana-panahong i-synchronize ang data ng ELO sa leaderboard ng Arena AI para sa mga ranggo ng katalinuhan ng modelo."
+       },
+diff --git a/src/i18n/messages/pl.json b/src/i18n/messages/pl.json
+index 378b493ab..31a11763d 100644
+--- a/src/i18n/messages/pl.json
++++ b/src/i18n/messages/pl.json
+@@ -11824,9 +11824,6 @@
+       "MODEL_CATALOG_INCLUDE_NAMES": {
+         "description": "Dołączaj przyjazne do wyświetlania pola nazw w odpowiedziach /v1/models. Wyłącz tę opcję dla klientów, którzy akceptują tylko identyfikatory modeli."
+       },
+-      "MODELS_CATALOG_PREFIX_MODE": {
+-        "description": "Kontroluj prefiksy identyfikatorów modeli w /v1/models: dual emituje prefiksy aliasów i kanoniczne, alias emituje tylko krótkie prefiksy, a canonical emituje tylko pełne identyfikatory dostawców."
+-      },
+       "ARENA_ELO_SYNC_ENABLED": {
+         "description": "Okresowo synchronizuj dane ELO tabeli liderów Arena AI dla rankingów inteligencji modeli."
+       },
+diff --git a/src/i18n/messages/pt-BR.json b/src/i18n/messages/pt-BR.json
+index 8f836bb50..5a2b960c2 100644
+--- a/src/i18n/messages/pt-BR.json
++++ b/src/i18n/messages/pt-BR.json
+@@ -11827,9 +11827,6 @@
+       "MODEL_CATALOG_INCLUDE_NAMES": {
+         "description": "Incluir campos de nome amigáveis para exibição nas respostas de /v1/models. Desative isso para clientes que aceitam apenas IDs de modelo."
+       },
+-      "MODELS_CATALOG_PREFIX_MODE": {
+-        "description": "Controlar prefixos de ID de modelo em /v1/models: dual emite prefixos alias e canônicos, alias emite apenas prefixos curtos e canonical emite apenas IDs de provedor completos."
+-      },
+       "ARENA_ELO_SYNC_ENABLED": {
+         "description": "Sincronizar periodicamente os dados de ELO da tabela de classificação da Arena AI para classificações de inteligência de modelo."
+       },
+diff --git a/src/i18n/messages/pt.json b/src/i18n/messages/pt.json
+index 9891203fe..a36c99bf4 100644
+--- a/src/i18n/messages/pt.json
++++ b/src/i18n/messages/pt.json
+@@ -11802,9 +11802,6 @@
+       "MODEL_CATALOG_INCLUDE_NAMES": {
+         "description": "Incluir campos de nome fáceis de ler nas respostas de /v1/models. Desative isto para clientes que aceitam apenas IDs de modelo."
+       },
+-      "MODELS_CATALOG_PREFIX_MODE": {
+-        "description": "Controlar prefixos de ID de modelo em /v1/models: dual emite prefixos de alias e canónicos, alias emite apenas prefixos curtos e canonical emite apenas IDs de fornecedor completos."
+-      },
+       "ARENA_ELO_SYNC_ENABLED": {
+         "description": "Sincronizar periodicamente os dados de ELO da tabela de classificação da Arena AI para classificações de inteligência de modelos."
+       },
+diff --git a/src/i18n/messages/ro.json b/src/i18n/messages/ro.json
+index 68c9f9978..ba6bd0e53 100644
+--- a/src/i18n/messages/ro.json
++++ b/src/i18n/messages/ro.json
+@@ -11802,9 +11802,6 @@
+       "MODEL_CATALOG_INCLUDE_NAMES": {
+         "description": "Include câmpuri de nume ușor de afișat în răspunsurile /v1/models. Dezactivează această opțiune pentru clienții care acceptă doar ID-uri de model."
+       },
+-      "MODELS_CATALOG_PREFIX_MODE": {
+-        "description": "Controlează prefixele ID-urilor de model în /v1/models: dual emite prefixe alias și canonice, alias emite doar prefixe scurte, iar canonical emite doar ID-uri complete de furnizor."
+-      },
+       "ARENA_ELO_SYNC_ENABLED": {
+         "description": "Sincronizează periodic datele ELO din clasamentul Arena AI pentru ierarhiile de inteligență a modelelor."
+       },
+diff --git a/src/i18n/messages/ru.json b/src/i18n/messages/ru.json
+index 2a337ee4f..2eaaff501 100644
+--- a/src/i18n/messages/ru.json
++++ b/src/i18n/messages/ru.json
+@@ -11802,9 +11802,6 @@
+       "MODEL_CATALOG_INCLUDE_NAMES": {
+         "description": "Include display-friendly name fields in /v1/models responses. Disable this for clients that accept model IDs only."
+       },
+-      "MODELS_CATALOG_PREFIX_MODE": {
+-        "description": "Control model-ID prefixes in /v1/models: dual emits alias and canonical prefixes, alias emits short prefixes only, and canonical emits full provider IDs only."
+-      },
+       "ARENA_ELO_SYNC_ENABLED": {
+         "description": "Periodically synchronize Arena AI leaderboard ELO data for model-intelligence rankings."
+       },
+diff --git a/src/i18n/messages/sk.json b/src/i18n/messages/sk.json
+index a3ed834ac..1b000044b 100644
+--- a/src/i18n/messages/sk.json
++++ b/src/i18n/messages/sk.json
+@@ -11802,9 +11802,6 @@
+       "MODEL_CATALOG_INCLUDE_NAMES": {
+         "description": "Zahrnúť polia s používateľsky prívetivými názvami v odpovediach /v1/models. Zakážte túto možnosť pre klientov, ktorí prijímajú iba ID modelov."
+       },
+-      "MODELS_CATALOG_PREFIX_MODE": {
+-        "description": "Riadiť predpony ID modelov v /v1/models: dual vysiela aliasové aj kanonické predpony, alias vysiela iba krátke predpony a canonical vysiela iba úplné ID poskytovateľov."
+-      },
+       "ARENA_ELO_SYNC_ENABLED": {
+         "description": "Pravidelne synchronizovať ELO dáta z rebríčka Arena AI pre hodnotenie inteligencie modelov."
+       },
+diff --git a/src/i18n/messages/sv.json b/src/i18n/messages/sv.json
+index 4cbcc38ea..b306722fa 100644
+--- a/src/i18n/messages/sv.json
++++ b/src/i18n/messages/sv.json
+@@ -11802,9 +11802,6 @@
+       "MODEL_CATALOG_INCLUDE_NAMES": {
+         "description": "Inkludera visningsvänliga namnfält i svar från /v1/models. Inaktivera detta för klienter som endast accepterar modell-ID:n."
+       },
+-      "MODELS_CATALOG_PREFIX_MODE": {
+-        "description": "Styr modell-ID-prefix i /v1/models: dual skickar ut alias- och kanoniska prefix, alias skickar endast ut korta prefix, och canonical skickar endast ut fullständiga leverantörs-ID:n."
+-      },
+       "ARENA_ELO_SYNC_ENABLED": {
+         "description": "Synkronisera Arena AI-topplistans ELO-data regelbundet för modellintelligensrankningar."
+       },
+diff --git a/src/i18n/messages/sw.json b/src/i18n/messages/sw.json
+index e85b452be..8ba609571 100644
+--- a/src/i18n/messages/sw.json
++++ b/src/i18n/messages/sw.json
+@@ -11802,9 +11802,6 @@
+       "MODEL_CATALOG_INCLUDE_NAMES": {
+         "description": "Jumuisha sehemu za majina rahisi kuonyeshwa katika majibu ya /v1/models. Zima hii kwa wateja wanaokubali vitambulisho vya mfano pekee."
+       },
+-      "MODELS_CATALOG_PREFIX_MODE": {
+-        "description": "Dhibiti viambishi awali vya kitambulisho cha mfano katika /v1/models: dual hutoa viambishi awali vya alias na canonical, alias hutoa viambishi awali vifupi pekee, na canonical hutoa vitambulisho kamili vya mtoa huduma pekee."
+-      },
+       "ARENA_ELO_SYNC_ENABLED": {
+         "description": "Lanisha mara kwa mara data ya ELO ya ubao wa wanaoongoza wa Arena AI kwa viwango vya akili ya mfano."
+       },
+diff --git a/src/i18n/messages/ta.json b/src/i18n/messages/ta.json
+index b66212a38..44679a0c1 100644
+--- a/src/i18n/messages/ta.json
++++ b/src/i18n/messages/ta.json
+@@ -11802,9 +11802,6 @@
+       "MODEL_CATALOG_INCLUDE_NAMES": {
+         "description": "/v1/models பதில்களில் காட்சிக்கு ஏற்ற பெயர் புலங்களைச் சேர்க்கவும். மாடல் ஐடிகளை மட்டுமே ஏற்கும் கிளையண்டுகளுக்கு இதை முடக்கவும்."
+       },
+-      "MODELS_CATALOG_PREFIX_MODE": {
+-        "description": "/v1/models-ல் மாடல்-ID முன்னொட்டுகளைக் கட்டுப்படுத்தவும்: dual என்பது alias மற்றும் canonical முன்னொட்டுகளை வெளியிடுகிறது, alias என்பது குறுகிய முன்னொட்டுகளை மட்டுமே வெளியிடுகிறது, மற்றும் canonical என்பது முழு வழங்குநர் ஐடிகளை மட்டுமே வெளியிடுகிறது."
+-      },
+       "ARENA_ELO_SYNC_ENABLED": {
+         "description": "மாடல்-நுண்ணறிவு தரவரிசைகளுக்கான Arena AI லீடர்போர்டு ELO தரவை அவ்வப்போது ஒத்திசைக்கவும்."
+       },
+diff --git a/src/i18n/messages/te.json b/src/i18n/messages/te.json
+index ce813f0f9..2886ebf62 100644
+--- a/src/i18n/messages/te.json
++++ b/src/i18n/messages/te.json
+@@ -11802,9 +11802,6 @@
+       "MODEL_CATALOG_INCLUDE_NAMES": {
+         "description": "/v1/models ప్రతిస్పందనలలో ప్రదర్శనకు అనుకూలమైన పేరు ఫీల్డ్‌లను చేర్చండి. మోడల్ IDలను మాత్రమే ఆమోదించే క్లయింట్‌ల కోసం దీనిని నిలిపివేయండి."
+       },
+-      "MODELS_CATALOG_PREFIX_MODE": {
+-        "description": "/v1/models లో మోడల్-ID ప్రిఫిక్స్‌లను నియంత్రించండి: dual అనేది alias మరియు canonical ప్రిఫిక్స్‌లను విడుదల చేస్తుంది, alias కేవలం చిన్న ప్రిఫిక్స్‌లను మాత్రమే విడుదల చేస్తుంది మరియు canonical కేవలం పూర్తి ప్రొవైడర్ IDలను మాత్రమే విడుదల చేస్తుంది."
+-      },
+       "ARENA_ELO_SYNC_ENABLED": {
+         "description": "మోడల్-ఇంటెలిజెన్స్ ర్యాంకింగ్‌ల కోసం Arena AI లీడర్‌బోర్డ్ ELO డేటాను క్రమానుగతంగా సమకాలీకరించండి."
+       },
+diff --git a/src/i18n/messages/th.json b/src/i18n/messages/th.json
+index ca78348af..f8e289191 100644
+--- a/src/i18n/messages/th.json
++++ b/src/i18n/messages/th.json
+@@ -11802,9 +11802,6 @@
+       "MODEL_CATALOG_INCLUDE_NAMES": {
+         "description": "รวมฟิลด์ชื่อที่แสดงผลได้ง่ายในการตอบกลับ /v1/models ปิดใช้งานตัวเลือกนี้สำหรับไคลเอนต์ที่ยอมรับเฉพาะ ID โมเดลเท่านั้น"
+       },
+-      "MODELS_CATALOG_PREFIX_MODE": {
+-        "description": "ควบคุมคำนำหน้า ID โมเดลใน /v1/models: dual จะส่งคำนำหน้าทั้งแบบ alias และ canonical, alias จะส่งเฉพาะคำนำหน้าแบบสั้น และ canonical จะส่งเฉพาะ ID ผู้ให้บริการแบบเต็มเท่านั้น"
+-      },
+       "ARENA_ELO_SYNC_ENABLED": {
+         "description": "ซิงโครไนซ์ข้อมูล ELO ของลีดเดอร์บอร์ด Arena AI เป็นระยะสำหรับการจัดอันดับความฉลาดของโมเดล"
+       },
+diff --git a/src/i18n/messages/tr.json b/src/i18n/messages/tr.json
+index 43d303540..a3f7803c1 100644
+--- a/src/i18n/messages/tr.json
++++ b/src/i18n/messages/tr.json
+@@ -11802,9 +11802,6 @@
+       "MODEL_CATALOG_INCLUDE_NAMES": {
+         "description": "/v1/models yanıtlarına görüntüleme dostu ad alanlarını dahil edin. Yalnızca model kimliklerini kabul eden istemciler için bunu devre dışı bırakın."
+       },
+-      "MODELS_CATALOG_PREFIX_MODE": {
+-        "description": "/v1/models içindeki model kimliği öneklerini kontrol edin: \"dual\" hem takma ad (alias) hem de kurallı (canonical) önekleri yayınlar, \"alias\" yalnızca kısa önekleri yayınlar ve \"canonical\" yalnızca tam sağlayıcı kimliklerini yayınlar."
+-      },
+       "ARENA_ELO_SYNC_ENABLED": {
+         "description": "Model zekası sıralamaları için Arena AI liderlik tablosu ELO verilerini periyodik olarak senkronize edin."
+       },
+diff --git a/src/i18n/messages/uk-UA.json b/src/i18n/messages/uk-UA.json
+index 6685571c5..d5214a756 100644
+--- a/src/i18n/messages/uk-UA.json
++++ b/src/i18n/messages/uk-UA.json
+@@ -11802,9 +11802,6 @@
+       "MODEL_CATALOG_INCLUDE_NAMES": {
+         "description": "Включати зручні для відображення поля назв у відповіді /v1/models. Вимкніть це для клієнтів, які приймають лише ідентифікатори моделей."
+       },
+-      "MODELS_CATALOG_PREFIX_MODE": {
+-        "description": "Керування префіксами ідентифікаторів моделей у /v1/models: dual видає префікси псевдонімів і канонічні префікси, alias видає лише короткі префікси, а canonical видає лише повні ідентифікатори провайдерів."
+-      },
+       "ARENA_ELO_SYNC_ENABLED": {
+         "description": "Періодично синхронізувати дані ELO таблиці лідерів Arena AI для рейтингу інтелекту моделей."
+       },
+diff --git a/src/i18n/messages/ur.json b/src/i18n/messages/ur.json
+index dedbb20e5..f8118eec7 100644
+--- a/src/i18n/messages/ur.json
++++ b/src/i18n/messages/ur.json
+@@ -11802,9 +11802,6 @@
+       "MODEL_CATALOG_INCLUDE_NAMES": {
+         "description": "/v1/models کے جوابات میں ڈسپلے کے لیے موزوں نام کے فیلڈز شامل کریں۔ ان کلائنٹس کے لیے اسے غیر فعال کریں جو صرف ماڈل IDs قبول کرتے ہیں۔"
+       },
+-      "MODELS_CATALOG_PREFIX_MODE": {
+-        "description": "/v1/models میں ماڈل-ID کے سابقوں کو کنٹرول کریں: dual عرف (alias) اور کینونیکل سابقے خارج کرتا ہے، alias صرف مختصر سابقے خارج کرتا ہے، اور canonical صرف مکمل فراہم کنندہ IDs خارج کرتا ہے۔"
+-      },
+       "ARENA_ELO_SYNC_ENABLED": {
+         "description": "ماڈل انٹیلیجنس رینکنگ کے لیے Arena AI لیڈر بورڈ ELO ڈیٹا کو وقتاً فوقتاً سنکرونائز کریں۔"
+       },
+diff --git a/src/i18n/messages/vi.json b/src/i18n/messages/vi.json
+index 9ad7c0abe..36d9aa221 100644
+--- a/src/i18n/messages/vi.json
++++ b/src/i18n/messages/vi.json
+@@ -11827,9 +11827,6 @@
+       "MODEL_CATALOG_INCLUDE_NAMES": {
+         "description": "Thêm trường tên dễ đọc vào phản hồi /v1/models. Tắt với các ứng dụng khách chỉ chấp nhận ID mô hình."
+       },
+-      "MODELS_CATALOG_PREFIX_MODE": {
+-        "description": "Điều khiển tiền tố ID mô hình trong /v1/models: song song xuất cả bí danh và tiền tố chính thức, bí danh chỉ xuất tiền tố ngắn, còn chính thức chỉ xuất ID nhà cung cấp đầy đủ."
+-      },
+       "ARENA_ELO_SYNC_ENABLED": {
+         "description": "Định kỳ đồng bộ điểm ELO từ bảng xếp hạng Arena AI để xếp hạng năng lực mô hình."
+       },
+diff --git a/src/i18n/messages/zh-CN.json b/src/i18n/messages/zh-CN.json
+index 3bf881c7f..b56109a85 100644
+--- a/src/i18n/messages/zh-CN.json
++++ b/src/i18n/messages/zh-CN.json
+@@ -11802,9 +11802,6 @@
+       "MODEL_CATALOG_INCLUDE_NAMES": {
+         "description": "在 /v1/models 响应中包含易于显示的名称字段。对于仅接受模型 ID 的客户端，请禁用此项。"
+       },
+-      "MODELS_CATALOG_PREFIX_MODE": {
+-        "description": "控制 /v1/models 中的模型 ID 前缀：dual 发送别名和规范前缀，alias 仅发送短前缀，canonical 仅发送完整提供者 ID。"
+-      },
+       "ARENA_ELO_SYNC_ENABLED": {
+         "description": "定期同步 Arena AI 排行榜 ELO 数据以进行模型智能排名。"
+       },
+diff --git a/src/i18n/messages/zh-TW.json b/src/i18n/messages/zh-TW.json
+index 638231c2b..57c21ad6b 100644
+--- a/src/i18n/messages/zh-TW.json
++++ b/src/i18n/messages/zh-TW.json
+@@ -11802,9 +11802,6 @@
+       "MODEL_CATALOG_INCLUDE_NAMES": {
+         "description": "在 /v1/models 回應中包含顯示友善的名稱欄位。對於僅接受模型 ID 的用戶端請停用此項。"
+       },
+-      "MODELS_CATALOG_PREFIX_MODE": {
+-        "description": "控制 /v1/models 中的模型 ID 前綴：dual 同時發出別名與標準前綴，alias 僅發出簡短前綴，canonical 僅發出完整的提供者 ID。"
+-      },
+       "ARENA_ELO_SYNC_ENABLED": {
+         "description": "定期同步 Arena AI 排行榜的 ELO 資料以進行模型智慧排名。"
+       },
 diff --git a/src/instrumentation-node.ts b/src/instrumentation-node.ts
 index 822265d5c..398a7b548 100755
 --- a/src/instrumentation-node.ts
@@ -4341,6 +5590,30 @@ index 44a55b867..38d4d0769 100644
                      const providerColor = PROVIDER_COLORS[log.provider] || {
                        bg: "#374151",
                        text: "#fff",
+diff --git a/src/shared/constants/featureFlagDefinitions.ts b/src/shared/constants/featureFlagDefinitions.ts
+index b85a36ded..6c13ad164 100644
+--- a/src/shared/constants/featureFlagDefinitions.ts
++++ b/src/shared/constants/featureFlagDefinitions.ts
+@@ -373,19 +373,6 @@ export const FEATURE_FLAG_DEFINITIONS: FeatureFlagDefinition[] = [
+     requiresRestart: false,
+     warningLevel: "info",
+   },
+-  {
+-    key: "MODELS_CATALOG_PREFIX_MODE",
+-    label: "Models Catalog Prefix Mode",
+-    description:
+-      "Controls how model IDs are prefixed in /v1/models. 'dual' (default) emits both alias and canonical provider-id prefixes for backward compatibility. 'alias' emits only the short alias prefix (e.g. ds-web/model, not deepseek-web/model). 'canonical' emits only the full provider-id prefix.",
+-    descriptionI18nKey: "featureFlagModelsCatalogPrefixModeDescription",
+-    category: "runtime",
+-    defaultValue: "dual",
+-    type: "enum",
+-    enumValues: ["dual", "alias", "canonical"],
+-    requiresRestart: false,
+-    warningLevel: "info",
+-  },
+   {
+     key: "ARENA_ELO_SYNC_ENABLED",
+     label: "Arena ELO Sync",
 diff --git a/src/shared/constants/pricing/frontier-labs.ts b/src/shared/constants/pricing/frontier-labs.ts
 index 59e580e97..26a701263 100644
 --- a/src/shared/constants/pricing/frontier-labs.ts
@@ -5095,6 +6368,25 @@ index fd232ee36..de56f73ad 100644
    if (!requestedComboName && hasModelRestrictions) {
      if (modelStr.startsWith("auto/") || modelStr.startsWith("qtSd/")) {
        requestedComboName = modelStr;
+diff --git a/src/shared/utils/featureFlags.ts b/src/shared/utils/featureFlags.ts
+index 7568e982f..9a1a5c997 100644
+--- a/src/shared/utils/featureFlags.ts
++++ b/src/shared/utils/featureFlags.ts
+@@ -88,14 +88,6 @@ export function isModelCatalogNamesEnabled(): boolean {
+   return isFeatureFlagEnabled("MODEL_CATALOG_INCLUDE_NAMES");
+ }
+ 
+-export type ModelsCatalogPrefixMode = "dual" | "alias" | "canonical";
+-
+-export function getModelsCatalogPrefixMode(): ModelsCatalogPrefixMode {
+-  const value = resolveFeatureFlag("MODELS_CATALOG_PREFIX_MODE");
+-  if (value === "alias" || value === "canonical") return value;
+-  return "dual";
+-}
+-
+ export function isArenaEloSyncEnabled(): boolean {
+   return isFeatureFlagEnabled("ARENA_ELO_SYNC_ENABLED");
+ }
 diff --git a/src/shared/utils/providerDisplayLabel.ts b/src/shared/utils/providerDisplayLabel.ts
 index 1fa02d2a9..f42cdb9cb 100644
 --- a/src/shared/utils/providerDisplayLabel.ts
@@ -6116,10 +7408,10 @@ index 000000000..3cf797374
 +});
 diff --git a/tests/unit/catalog-alias-backed-node-prefix.test.ts b/tests/unit/catalog-alias-backed-node-prefix.test.ts
 new file mode 100644
-index 000000000..93f99f2de
+index 000000000..7bd5a2387
 --- /dev/null
 +++ b/tests/unit/catalog-alias-backed-node-prefix.test.ts
-@@ -0,0 +1,121 @@
+@@ -0,0 +1,119 @@
 +import test from "node:test";
 +import assert from "node:assert/strict";
 +import fs from "node:fs";
@@ -6137,14 +7429,12 @@ index 000000000..93f99f2de
 + * For a compatible-provider node BOTH sides of that `||` are the node's internal
 + * uuid — it is not in the static alias map by construction. So an operator who
 + * registered `setModelAlias("kimi", "<node-uuid>/kimi-k2.6")` got the uuid
-+ * published as the model-id prefix, and under the default `prefixMode="dual"`
-+ * the canonical branch minted a SECOND uuid-prefixed row plus one per
-+ * reasoning-effort variant and the `no-think/` alias — 10 rows in the observed
-+ * case, every one of them exposing storage state to clients.
++ * published as the model-id prefix, exposing storage state to clients.
 + *
-+ * The three other publishing loops (synced :836, custom :1212, fallback :1428)
-+ * already read `prefix || alias || id` and guard their canonical branch with
-+ * `!prefix`; this test pins the alias-backed loop to the same contract.
++ * Under the single-public-prefix contract the operator's node prefix wins the
++ * public-prefix selection, so the model must appear exactly once under that
++ * prefix and no raw UUID, registry, or alias sibling prefix may appear. This
++ * test pins the alias-backed source to that shared contract.
 + */
 +
 +const TEST_DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "omniroute-alias-backed-"));
@@ -6226,10 +7516,10 @@ index 000000000..93f99f2de
 +  );
 +});
 +
-+test("the canonical branch does not mint a second uuid-prefixed row under dual mode", async () => {
-+  // `prefixMode` defaults to "dual", which mints both the alias-prefixed and the
-+  // canonical-prefixed id. For a prefixed node the canonical id IS the uuid, so
-+  // that branch has to stay off — same `!prefix` guard as the synced/custom loops.
++test("the model is published exactly once and no sibling prefix leaks storage state", async () => {
++  // The single-public-prefix contract selects exactly one prefix per effective
++  // provider/model. For a prefixed node that selection is the operator prefix, so
++  // no row may be published under the raw uuid or any other sibling prefix.
 +  const ids = await listIds();
 +  const forModel = ids.filter((id) => id.endsWith(`/${MODEL}`));
 +  assert.ok(forModel.length > 0, "the alias-backed row must be published");
@@ -7611,6 +8901,52 @@ index 000000000..5cc1bb7ee
 +  );
 +  assert.equal(embedRes.status, 403, "embeddings rejects the same blocked model");
 +});
+diff --git a/tests/unit/feature-flags-settings.test.ts b/tests/unit/feature-flags-settings.test.ts
+index b9545445e..9cece453b 100644
+--- a/tests/unit/feature-flags-settings.test.ts
++++ b/tests/unit/feature-flags-settings.test.ts
+@@ -30,13 +30,13 @@ const {
+   isControlPlaneProxyDirectFallbackEnabled,
+ } = await import("../../src/shared/utils/featureFlags.ts");
+ 
+-const EXPECTED_FEATURE_FLAG_COUNT = 42;
++const EXPECTED_FEATURE_FLAG_COUNT = 41;
+ 
+ // ──────────────────────────────────────────────────────
+ // Test group 1 — Flag definitions registry
+ // ──────────────────────────────────────────────────────
+ describe("featureFlagDefinitions", () => {
+-  it("has exactly 42 flag definitions", () => {
++  it("has exactly 41 flag definitions", () => {
+     assert.strictEqual(FEATURE_FLAG_DEFINITIONS.length, EXPECTED_FEATURE_FLAG_COUNT);
+   });
+ 
+@@ -100,16 +100,6 @@ describe("featureFlagDefinitions", () => {
+     assert.strictEqual(def.requiresRestart, false);
+   });
+ 
+-  it("defines models catalog prefix mode as a runtime enum flag defaulting to dual", () => {
+-    const def = FEATURE_FLAG_DEFINITIONS.find((d) => d.key === "MODELS_CATALOG_PREFIX_MODE");
+-    assert.ok(def, "MODELS_CATALOG_PREFIX_MODE should exist");
+-    assert.strictEqual(def.category, "runtime");
+-    assert.strictEqual(def.type, "enum");
+-    assert.deepStrictEqual(def.enumValues, ["dual", "alias", "canonical"]);
+-    assert.strictEqual(def.defaultValue, "dual");
+-    assert.strictEqual(def.requiresRestart, false);
+-  });
+-
+   it("defines Arena ELO sync as a runtime boolean flag enabled by default", () => {
+     const def = FEATURE_FLAG_DEFINITIONS.find((d) => d.key === "ARENA_ELO_SYNC_ENABLED");
+     assert.ok(def, "ARENA_ELO_SYNC_ENABLED should exist");
+@@ -321,7 +311,7 @@ describe("resolveFeatureFlag", () => {
+   });
+ 
+   describe("resolveAllFeatureFlags", () => {
+-    it("returns all 42 flags", () => {
++    it("returns all 41 flags", () => {
+       const all = resolveAllFeatureFlags();
+       assert.strictEqual(all.length, EXPECTED_FEATURE_FLAG_COUNT);
+     });
 diff --git a/tests/unit/guardrails/visionBridgeHelpers.callVisionModel.test.ts b/tests/unit/guardrails/visionBridgeHelpers.callVisionModel.test.ts
 index 1465e927c..c3e5730f6 100644
 --- a/tests/unit/guardrails/visionBridgeHelpers.callVisionModel.test.ts
@@ -7648,6 +8984,19 @@ index 1465e927c..c3e5730f6 100644
 +
  test("callVisionModel fetches remote images before Anthropic requests", async () => {
    const fetchCalls: Array<{ url: string; init?: RequestInit }> = [];
+ 
+diff --git a/tests/unit/image-model-not-in-chat-catalog-6457.test.ts b/tests/unit/image-model-not-in-chat-catalog-6457.test.ts
+index 84187fe2f..af3c7572b 100644
+--- a/tests/unit/image-model-not-in-chat-catalog-6457.test.ts
++++ b/tests/unit/image-model-not-in-chat-catalog-6457.test.ts
+@@ -114,7 +114,7 @@ test("registered image model with explicit chat endpoints keeps both catalog ent
+   ]);
+ 
+   const response = await v1ModelsCatalog.getUnifiedModelsResponse(
+-    new Request("http://localhost/api/v1/models?prefix=alias")
++    new Request("http://localhost/api/v1/models")
+   );
+   assert.equal(response.status, 200);
  
 diff --git a/tests/unit/managed-available-models.test.ts b/tests/unit/managed-available-models.test.ts
 index 263586756..0ff19b1c7 100644
@@ -8305,11 +9654,35 @@ index 000000000..89fffc4a2
 +  await listCatalogIds();
 +  assert.equal(catalog.__getCatalogBuilderRunsForTest(), 1);
 +});
+diff --git a/tests/unit/models-catalog-combo-metadata.test.ts b/tests/unit/models-catalog-combo-metadata.test.ts
+index 51d5c5360..ca4b52ac9 100644
+--- a/tests/unit/models-catalog-combo-metadata.test.ts
++++ b/tests/unit/models-catalog-combo-metadata.test.ts
+@@ -38,7 +38,18 @@ test("single-target combo preserves its direct model metadata", async () => {
+     new Request("http://localhost/api/v1/models")
+   );
+   const body = (await response.json()) as { data: Array<Record<string, unknown>> };
+-  const direct = body.data.find((item) => item.id === "cx/gpt-5.6-sol");
++  // Cross-surface contract: `codex/gpt-5.6-sol` publishes two intentional surfaces
++  // under ONE public id — the chat/Responses surface and the image-registry surface.
++  // A chat combo mirrors the base chat surface, so select it by id PLUS its
++  // non-image surface criteria (never the effort variant, which is a synthetic
++  // client capability row, not the base surface).
++  const direct = body.data.find(
++    (item) =>
++      item.id === "codex/gpt-5.6-sol" &&
++      item.type !== "image" &&
++      Array.isArray(item.supported_endpoints) &&
++      (item.supported_endpoints as string[]).includes("responses")
++  );
+   const combo = body.data.find((item) => item.id === "gpt-5.6-sol-combo");
+ 
+   assert.equal(response.status, 200);
 diff --git a/tests/unit/models-catalog-exact-dup-4424.test.ts b/tests/unit/models-catalog-exact-dup-4424.test.ts
-index 7dfd3cd8e..d9dedb225 100644
+index 7dfd3cd8e..d7bfdb2dd 100644
 --- a/tests/unit/models-catalog-exact-dup-4424.test.ts
 +++ b/tests/unit/models-catalog-exact-dup-4424.test.ts
-@@ -1,6 +1,93 @@
+@@ -1,6 +1,91 @@
  import assert from "node:assert/strict";
  import { describe, it } from "node:test";
 -import { dedupeExactCatalogIds } from "../../src/app/api/v1/models/catalogDedupe.ts";
@@ -8390,13 +9763,11 @@ index 7dfd3cd8e..d9dedb225 100644
 +
 +    const out = applyCatalogPostFilters(new Request("http://localhost/v1/models"), sourceRows, {
 +      connections: [],
-+      prefixMode: "dual",
 +      aliasToProviderId: { cc: "claude" },
 +    });
 +    const ids = out.map((model) => model.id);
 +
 +    assert.equal(ids.filter((id) => id === "cc/claude-opus-4-6").length, 1);
-+    assert.ok(ids.includes("no-think/cc/claude-opus-4-6"));
 +    assert.ok(ids.includes("cc/claude-opus-4-6-low"));
 +    assert.equal(new Set(ids).size, ids.length, "every final public id must be unique");
 +  });
@@ -8404,11 +9775,208 @@ index 7dfd3cd8e..d9dedb225 100644
  
  describe("dedupeExactCatalogIds (#4424 / #8015)", () => {
    it("drops exact same-surface duplicates and keeps the first row", () => {
+@@ -60,6 +145,52 @@ describe("dedupeExactCatalogIds (#4424 / #8015)", () => {
+     );
+   });
+ 
++  it("keeps a row whose supported_endpoints name a non-chat surface (#6457 / single-prefix)", () => {
++    // Under the single-public-prefix contract a responses surface and an image
++    // surface collapse to the SAME public id. The responses row declares a
++    // genuinely non-chat endpoint, so it is a real second surface, not the false
++    // generic sibling the specialty guard suppresses.
++    const models = [
++      {
++        id: "codex/gpt-5.6-sol",
++        owned_by: "codex",
++        root: "gpt-5.6-sol",
++        supported_endpoints: ["responses"],
++      },
++      { id: "codex/gpt-5.6-sol", owned_by: "codex", root: "gpt-5.6-sol", type: "image" },
++    ];
++    const out = dedupeExactCatalogIds(models);
++    assert.deepEqual(
++      out.map((m) => [m.id, m.type, m.supported_endpoints]),
++      [
++        ["codex/gpt-5.6-sol", undefined, ["responses"]],
++        ["codex/gpt-5.6-sol", "image", undefined],
++      ],
++      "the responses surface must survive alongside the image row"
++    );
++  });
++
++  it("still suppresses an explicit chat-shaped sibling of a specialty row", () => {
++    // An explicit supported_endpoints:["chat"] is still chat-shaped — it is not a
++    // distinct surface, so the specialty guard must keep dropping it exactly like
++    // a bare chat row. Only genuinely non-chat endpoints earn survival.
++    const models = [
++      {
++        id: "codex/gpt-5.6-sol",
++        owned_by: "codex",
++        root: "gpt-5.6-sol",
++        supported_endpoints: ["chat"],
++      },
++      { id: "codex/gpt-5.6-sol", owned_by: "codex", root: "gpt-5.6-sol", type: "image" },
++    ];
++    const out = dedupeExactCatalogIds(models);
++    assert.deepEqual(
++      out.map((m) => [m.id, m.type]),
++      [["codex/gpt-5.6-sol", "image"]],
++      "an explicit [chat] sibling must be suppressed just like a bare generic row"
++    );
++  });
++
+   it("preserves intentional audio transcription + speech surfaces under the same id", () => {
+     const models = [
+       { id: "openai/gpt-4o-mini-tts", type: "audio", subtype: "transcription" },
+diff --git a/tests/unit/models-catalog-low-noise-flag.test.ts b/tests/unit/models-catalog-low-noise-flag.test.ts
+deleted file mode 100644
+index b3e6f1d8c..000000000
+--- a/tests/unit/models-catalog-low-noise-flag.test.ts
++++ /dev/null
+@@ -1,126 +0,0 @@
+-import test from "node:test";
+-import assert from "node:assert/strict";
+-import fs from "node:fs";
+-import os from "node:os";
+-import path from "node:path";
+-
+-const TEST_DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "omniroute-model-catalog-low-noise-"));
+-process.env.DATA_DIR = TEST_DATA_DIR;
+-process.env.API_KEY_SECRET = process.env.API_KEY_SECRET || "catalog-low-noise-test-secret";
+-
+-const core = await import("../../src/lib/db/core.ts");
+-const providersDb = await import("../../src/lib/db/providers.ts");
+-const modelsDb = await import("../../src/lib/db/models.ts");
+-const featureFlagsDb = await import("../../src/lib/db/featureFlags.ts");
+-const apiKeysDb = await import("../../src/lib/db/apiKeys.ts");
+-const v1ModelsCatalog = await import("../../src/app/api/v1/models/catalog.ts");
+-
+-type ModelsResponseBody = {
+-  data: Array<{ id: string }>;
+-};
+-
+-async function resetStorage() {
+-  core.resetDbInstance();
+-  apiKeysDb.resetApiKeyState();
+-  fs.rmSync(TEST_DATA_DIR, { recursive: true, force: true });
+-  fs.mkdirSync(TEST_DATA_DIR, { recursive: true });
+-}
+-
+-async function seedConnection(provider: string, accessToken: string) {
+-  return providersDb.createProviderConnection({
+-    provider,
+-    authType: "oauth",
+-    name: `${provider}-low-noise`,
+-    apiKey: null,
+-    accessToken,
+-    isActive: true,
+-    testStatus: "active",
+-    providerSpecificData: {},
+-  });
+-}
+-
+-async function getIds(url = "http://localhost/api/v1/models"): Promise<Set<string>> {
+-  const response = await v1ModelsCatalog.getUnifiedModelsResponse(new Request(url));
+-  const body = (await response.json()) as ModelsResponseBody;
+-  return new Set(body.data.map((item) => item.id));
+-}
+-
+-test.beforeEach(async () => {
+-  await resetStorage();
+-});
+-
+-test.after(async () => {
+-  core.resetDbInstance();
+-  apiKeysDb.resetApiKeyState();
+-  fs.rmSync(TEST_DATA_DIR, { recursive: true, force: true });
+-});
+-
+-test("MODELS_CATALOG_PREFIX_MODE=alias suppresses canonical provider-id prefixes", async () => {
+-  featureFlagsDb.setFeatureFlagOverride("MODELS_CATALOG_PREFIX_MODE", "alias");
+-  try {
+-    await seedConnection("claude", "claude-access");
+-    await seedConnection("cline", "cline-access");
+-    await modelsDb.addCustomModel("cline", "demo-custom", "Demo Custom");
+-    const ids = await getIds();
+-    assert.ok(ids.has("cc/claude-sonnet-4-6"), "alias prefix cc/ should be present");
+-    assert.equal(
+-      ids.has("claude/claude-sonnet-4-6"),
+-      false,
+-      "canonical prefix claude/ should be absent"
+-    );
+-    assert.ok(ids.has("cl/demo-custom"), "alias prefix cl/ should be present");
+-    assert.equal(ids.has("cline/demo-custom"), false, "canonical prefix cline/ should be absent");
+-  } finally {
+-    featureFlagsDb.removeFeatureFlagOverride("MODELS_CATALOG_PREFIX_MODE");
+-  }
+-});
+-
+-test("MODELS_CATALOG_PREFIX_MODE=dual emits both alias and canonical prefixes (default)", async () => {
+-  featureFlagsDb.setFeatureFlagOverride("MODELS_CATALOG_PREFIX_MODE", "dual");
+-  try {
+-    await seedConnection("claude", "claude-access");
+-    const ids = await getIds();
+-    assert.ok(ids.has("cc/claude-sonnet-4-6"), "alias prefix cc/ should be present in dual mode");
+-    assert.ok(
+-      ids.has("claude/claude-sonnet-4-6"),
+-      "canonical prefix claude/ should be present in dual mode"
+-    );
+-  } finally {
+-    featureFlagsDb.removeFeatureFlagOverride("MODELS_CATALOG_PREFIX_MODE");
+-  }
+-});
+-
+-test("?prefix=alias query param overrides flag to alias-only mode", async () => {
+-  featureFlagsDb.setFeatureFlagOverride("MODELS_CATALOG_PREFIX_MODE", "dual");
+-  try {
+-    await seedConnection("claude", "claude-access");
+-    const ids = await getIds("http://localhost/api/v1/models?prefix=alias");
+-    assert.ok(ids.has("cc/claude-sonnet-4-6"), "alias prefix present with ?prefix=alias");
+-    assert.equal(
+-      ids.has("claude/claude-sonnet-4-6"),
+-      false,
+-      "canonical prefix absent with ?prefix=alias"
+-    );
+-  } finally {
+-    featureFlagsDb.removeFeatureFlagOverride("MODELS_CATALOG_PREFIX_MODE");
+-  }
+-});
+-
+-test("?prefix=canonical query param overrides flag to canonical-only mode", async () => {
+-  featureFlagsDb.setFeatureFlagOverride("MODELS_CATALOG_PREFIX_MODE", "dual");
+-  try {
+-    await seedConnection("claude", "claude-access");
+-    const ids = await getIds("http://localhost/api/v1/models?prefix=canonical");
+-    assert.equal(
+-      ids.has("cc/claude-sonnet-4-6"),
+-      false,
+-      "alias prefix absent with ?prefix=canonical"
+-    );
+-    assert.ok(
+-      ids.has("claude/claude-sonnet-4-6"),
+-      "canonical prefix present with ?prefix=canonical"
+-    );
+-  } finally {
+-    featureFlagsDb.removeFeatureFlagOverride("MODELS_CATALOG_PREFIX_MODE");
+-  }
+-});
 diff --git a/tests/unit/models-catalog-route.test.ts b/tests/unit/models-catalog-route.test.ts
-index 2db47dbf9..a2b275fc7 100644
+index 2db47dbf9..1588b09d6 100644
 --- a/tests/unit/models-catalog-route.test.ts
 +++ b/tests/unit/models-catalog-route.test.ts
-@@ -308,6 +308,12 @@ test("v1 models catalog keeps only visible combos when no providers are active",
+@@ -280,8 +280,10 @@ test("v1 models catalog includes combos and custom models while excluding hidden
+ 
+   assert.equal(response.status, 200);
+   assert.ok(ids.has("team-router"));
+-  assert.ok(ids.has("kr/custom-kiro"));
++  // Single routable public prefix: kiro custom models publish under the canonical
++  // `kiro/` prefix only; the legacy `kr/` alias is inbound-callable, not a catalog row.
+   assert.ok(ids.has("kiro/custom-kiro"));
++  assert.equal(ids.has("kr/custom-kiro"), false);
+   assert.equal(ids.has("openai/gpt-4o-mini"), false);
+   assert.equal(
+     [...ids].some((id) => (id as any).startsWith("claude/") || (id as any).startsWith("cc/")),
+@@ -308,6 +310,12 @@ test("v1 models catalog keeps only visible combos when no providers are active",
      models: ["openai/gpt-4o"],
    });
    await combosDb.updateCombo((inactive as any).id, { isActive: false });
@@ -8421,7 +9989,7 @@ index 2db47dbf9..a2b275fc7 100644
  
    const response = await v1ModelsCatalog.getUnifiedModelsResponse(
      new Request("http://localhost/api/v1/models")
-@@ -330,6 +336,11 @@ test("v1 models catalog keeps only visible combos when no providers are active",
+@@ -330,6 +338,11 @@ test("v1 models catalog keeps only visible combos when no providers are active",
      body.data.some((item) => item.id === inactive.name),
      false
    );
@@ -8433,7 +10001,113 @@ index 2db47dbf9..a2b275fc7 100644
  });
  
  test("v1 models catalog derives combo metadata from known targets conservatively", async () => {
-@@ -1040,10 +1051,17 @@ test("v1 models catalog does not duplicate imported Jina specialty models", asyn
+@@ -589,7 +602,7 @@ test("v1 models catalog does not final-enrich combo names as real models", async
+   assert.equal("capabilities" in combo, false);
+ });
+ 
+-test("v1 models catalog exposes claude alias and provider-prefixed built-in models with vision metadata", async () => {
++test("v1 models catalog exposes provider-prefixed built-in models with vision metadata under a single public prefix", async () => {
+   await seedConnection("claude", {
+     authType: "oauth",
+     name: "claude-vision",
+@@ -601,16 +614,18 @@ test("v1 models catalog exposes claude alias and provider-prefixed built-in mode
+     new Request("http://localhost/api/v1/models")
+   );
+   const body = (await response.json()) as any;
+-  const aliasModel = body.data.find((item) => item.id === "cc/claude-sonnet-4-6");
+   const providerModel = body.data.find((item) => item.id === "claude/claude-sonnet-4-6");
++  const aliasModel = body.data.find((item) => item.id === "cc/claude-sonnet-4-6");
+ 
+   assert.equal(response.status, 200);
+-  assert.ok(aliasModel);
+   assert.ok(providerModel);
+-  assert.equal(providerModel.parent, aliasModel.id);
+-  assert.equal(aliasModel.capabilities?.vision, true);
+-  assert.deepEqual(aliasModel.input_modalities, ["text", "image"]);
+-  assert.deepEqual(aliasModel.output_modalities, ["text"]);
++  // Single routable public prefix: no legacy `cc/` catalog row and no parent chain —
++  // the alias remains inbound-callable only.
++  assert.equal(aliasModel, undefined);
++  assert.ok(providerModel.parent == null);
++  assert.equal(providerModel.capabilities?.vision, true);
++  assert.deepEqual(providerModel.input_modalities, ["text", "image"]);
++  assert.deepEqual(providerModel.output_modalities, ["text"]);
+ });
+ 
+ test("v1 models catalog exposes refreshed GitHub Copilot aliases and drops retired models", async () => {
+@@ -628,28 +643,32 @@ test("v1 models catalog exposes refreshed GitHub Copilot aliases and drops retir
+     new Request("http://localhost/api/v1/models")
+   );
+   const body = (await response.json()) as any;
+-  const aliasModel = body.data.find((item) => item.id === "gh/gpt-5.4");
+   const providerModel = body.data.find((item) => item.id === "github/gpt-5.4");
+-  const codexModel = body.data.find((item) => item.id === "gh/gpt-5.3-codex");
+   const opusModel = body.data.find((item) => item.id === "github/claude-opus-4.7");
++  const codexModel = body.data.find((item) => item.id === "github/gpt-5.3-codex");
+ 
+   assert.equal(response.status, 200);
+-  assert.ok(aliasModel);
+   assert.ok(providerModel);
+-  assert.ok(codexModel);
+   assert.ok(opusModel);
+-  assert.equal(providerModel.parent, aliasModel.id);
++  assert.ok(codexModel);
++  // Single routable public prefix: github publishes under its canonical id only —
++  // no `gh/` alias catalog rows and no parent chain.
++  assert.equal(
++    body.data.some((item) => item.id.startsWith("gh/")),
++    false
++  );
++  assert.ok(providerModel.parent == null);
+   assert.equal(
+-    body.data.some((item) => item.id === "gh/gpt-5.1"),
++    body.data.some((item) => item.id === "github/gpt-5.1"),
+     false
+   );
+   assert.equal(
+-    body.data.some((item) => item.id === "gh/claude-opus-4.1"),
++    body.data.some((item) => item.id === "github/claude-opus-4.1"),
+     false
+   );
+ });
+ 
+-test("v1 models catalog exposes bare Codex-preferred IDs for native Codex clients", async () => {
++test("v1 models catalog publishes native Codex models under a single canonical prefix", async () => {
+   await seedConnection("codex", {
+     authType: "oauth",
+     name: "codex-native",
+@@ -665,18 +684,21 @@ test("v1 models catalog exposes bare Codex-preferred IDs for native Codex client
+ 
+   assert.equal(response.status, 200);
+   const modelId = "codex-auto-review";
+-  const bareModel = getModel(modelId);
+   const providerModel = getModel(`codex/${modelId}`);
+-  const aliasModel = getModel(`cx/${modelId}`);
+-  const openAiModel = getModel(`openai/${modelId}`);
+ 
+-  assert.ok(bareModel, `expected bare ${modelId} model`);
++  // Single routable public prefix: exactly one catalog row, under the canonical
++  // `codex/` prefix. The bare id and the legacy `cx/` alias stay inbound-callable
++  // only — they are not second catalog rows and carry no parent chain.
+   assert.ok(providerModel, `expected codex/${modelId} model`);
+-  assert.ok(aliasModel, `expected cx/${modelId} model`);
+-  assert.equal(openAiModel, undefined);
+-  assert.equal(bareModel.owned_by, "codex");
+-  assert.equal(bareModel.parent, providerModel.id);
+-  assert.equal(providerModel.parent, aliasModel.id);
++  assert.equal(providerModel.owned_by, "codex");
++  assert.ok(providerModel.parent == null);
++  assert.equal(getModel(modelId), undefined);
++  assert.equal(getModel(`cx/${modelId}`), undefined);
++  assert.equal(getModel(`openai/${modelId}`), undefined);
++  assert.equal(
++    body.data.filter((item) => item.id === `codex/${modelId}`).length,
++    1
++  );
+ });
+ 
+ test("v1 models catalog exposes current Antigravity aliases without retired model IDs", async () => {
+@@ -1040,10 +1062,17 @@ test("v1 models catalog does not duplicate imported Jina specialty models", asyn
    );
  
    assert.equal(response.status, 200);
@@ -8453,106 +10127,139 @@ index 2db47dbf9..a2b275fc7 100644
  });
  
  test("v1 models catalog does not duplicate custom Jina specialty models", async () => {
-diff --git a/tests/unit/no-thinking-alias-root-contract.test.ts b/tests/unit/no-thinking-alias-root-contract.test.ts
-new file mode 100644
-index 000000000..beac651ed
---- /dev/null
-+++ b/tests/unit/no-thinking-alias-root-contract.test.ts
-@@ -0,0 +1,94 @@
-+import test from "node:test";
-+import assert from "node:assert/strict";
-+
-+/**
-+ * `root` on a catalog entry is the UNPREFIXED base model id — the id every metadata
-+ * consumer keys off. `appendNoThinkingVariants` was the one variant helper that set
-+ * `root` to its own synthetic id instead:
-+ *
-+ *     const variant = { ...model, id: aliasId, root: aliasId };   // "no-think/claude/claude-opus-4-6"
-+ *
-+ * `enrichCatalogModelEntry()` reads `asNonEmptyString(entry.root)` FIRST when deciding
-+ * which model to look up (modelMetadataRegistry.ts), so the registry lookup missed and
-+ * the published no-thinking entry lost `context_length`, `max_input_tokens` and
-+ * `max_output_tokens` — a client saw the variant advertise no context window at all
-+ * while the real model advertises 1M. The sibling helper `appendClaudeEffortVariants`
-+ * already documents and honours the unprefixed-root contract; this pins the same for
-+ * the no-thinking pass, on both the helper and the enrichment it feeds.
-+ */
-+
-+const noThink = await import("../../open-sse/utils/noThinkingAlias.ts");
-+const registry = await import("../../src/lib/modelMetadataRegistry.ts");
-+
-+const BASE_MODEL = "claude-opus-4-6";
-+const BASE_ID = `claude/${BASE_MODEL}`;
-+
-+function baseEntry() {
-+  return {
-+    id: BASE_ID,
-+    object: "model",
-+    owned_by: "claude",
-+    root: BASE_MODEL,
-+    name: "Claude Opus 4.6",
-+    supportsThinking: true,
-+  };
-+}
-+
-+function variantOf(entry: Record<string, unknown>) {
-+  const models = noThink.appendNoThinkingVariants([entry] as never) as Array<
-+    Record<string, unknown>
-+  >;
-+  assert.equal(models.length, 2, "the base model must be eligible for a no-thinking variant");
-+  return models[1];
-+}
-+
-+test("the no-thinking variant keeps the base model's unprefixed root", () => {
-+  const variant = variantOf(baseEntry());
-+
-+  assert.equal(variant.id, `no-think/${BASE_ID}`, "the id carries the gateway prefix");
-+  assert.equal(
-+    variant.root,
-+    BASE_MODEL,
-+    "root is the model, not the address — it must not carry no-think/ or the provider"
-+  );
-+});
-+
-+test("without a root on the source entry, the bare model name is derived", () => {
-+  const { root: _dropped, ...noRoot } = baseEntry();
-+  const variant = variantOf(noRoot);
-+
-+  assert.equal(variant.root, BASE_MODEL, "fall back to the last path segment, never the alias id");
-+});
-+
-+test("enrichment resolves registry metadata for the variant (the user-visible defect)", () => {
-+  const variant = variantOf(baseEntry());
-+  const enriched = registry.enrichCatalogModelEntry(variant as never) as Record<string, unknown>;
-+
-+  assert.ok(
-+    typeof enriched.context_length === "number" && enriched.context_length > 0,
-+    `the variant must advertise a context window; got ${JSON.stringify(enriched.context_length)}`
-+  );
-+
-+  // And the same window as the model it aliases — the variant is the same model.
-+  const enrichedBase = registry.enrichCatalogModelEntry(baseEntry() as never) as Record<
-+    string,
-+    unknown
-+  >;
-+  assert.equal(
-+    enriched.context_length,
-+    enrichedBase.context_length,
-+    "a no-thinking variant advertises the same window as the model it addresses"
-+  );
-+  assert.equal(enriched.max_output_tokens, enrichedBase.max_output_tokens);
-+  assert.equal(enriched.max_input_tokens, enrichedBase.max_input_tokens);
-+});
-+
-+test("the base entry is returned untouched alongside the variant", () => {
-+  const entry = baseEntry();
-+  const models = noThink.appendNoThinkingVariants([entry] as never) as Array<
-+    Record<string, unknown>
-+  >;
-+
-+  assert.equal(models[0].id, BASE_ID);
-+  assert.equal(models[0].root, BASE_MODEL, "appending a variant must not mutate the base row");
-+});
+@@ -1198,19 +1227,23 @@ test("v1 models catalog exposes provider-prefixed custom models, filters by raw
+   );
+   const body = (await response.json()) as any;
+   const ids = new Set(body.data.map((item) => item.id));
+-  const shortAlias = body.data.find((item) => item.id === "cl/demo-custom");
+-  const providerAlias = body.data.find((item) => item.id === "cline/demo-custom");
++  const providerModel = body.data.find((item) => item.id === "cline/demo-custom");
+ 
+   assert.equal(response.status, 200);
+-  assert.ok(ids.has("cl/demo-custom"));
++  // Single routable public prefix: cline custom models publish under the canonical
++  // `cline/` prefix only — the legacy `cl/` alias is inbound-callable, not a catalog row.
+   assert.ok(ids.has("cline/demo-custom"));
++  assert.equal(ids.has("cl/demo-custom"), false);
+   assert.equal(ids.has("cl/hidden-custom"), false);
++  assert.equal(ids.has("cline/hidden-custom"), false);
+   assert.equal(ids.has("gemini/gemini-custom-only"), false);
+-  assert.equal(shortAlias.type, "image");
+-  assert.equal(shortAlias.api_format, "responses");
+-  assert.deepEqual(shortAlias.supported_endpoints, ["images"]);
+-  assert.equal(shortAlias.context_length, 1234);
+-  assert.equal(providerAlias.parent, "cl/demo-custom");
++  assert.equal(providerModel.type, "image");
++  assert.equal(providerModel.api_format, "responses");
++  assert.deepEqual(providerModel.supported_endpoints, ["images"]);
++  assert.equal(providerModel.context_length, 1234);
++  // Single-prefix: the custom model publishes one surface with no parent chain
++  // (catalog rows carry an explicit `parent: null`, not `undefined`).
++  assert.ok(providerModel.parent == null);
+ });
+ 
+ test("v1 models catalog uses synced models.dev limits instead of provider defaults", async () => {
+@@ -1318,7 +1351,9 @@ test("v1 models catalog lets provider-specific synced limits beat global static
+       new Request("http://localhost/api/v1/models")
+     );
+     const body = (await response.json()) as any;
+-    const model = body.data.find((item) => item.id === "gh/gpt-5.5");
++    // Single routable public prefix: github synced models publish under the
++    // canonical `github/` prefix; the `gh/` alias is not a catalog row.
++    const model = body.data.find((item) => item.id === "github/gpt-5.5");
+ 
+     assert.equal(response.status, 200);
+     assert.ok(model);
+diff --git a/tests/unit/no-thinking-alias.test.ts b/tests/unit/no-thinking-alias.test.ts
+index 5818dc646..3dd5078a2 100644
+--- a/tests/unit/no-thinking-alias.test.ts
++++ b/tests/unit/no-thinking-alias.test.ts
+@@ -6,8 +6,6 @@ import {
+   isNoThinkingAlias,
+   stripNoThinkingAlias,
+   toNoThinkingAlias,
+-  shouldExposeNoThinkingAlias,
+-  appendNoThinkingVariants,
+   applyNoThinkingAlias,
+ } from "../../open-sse/utils/noThinkingAlias.ts";
+ 
+@@ -103,76 +101,3 @@ test("applyNoThinkingAlias ignores a malformed prefix-only model", () => {
+   );
+ });
+ 
+-// ── catalog gating ───────────────────────────────────────────────────────────
+-
+-const entry = (id: string, owned_by = "anthropic") => ({ id, object: "model", owned_by });
+-
+-test("shouldExposeNoThinkingAlias accepts a Claude reasoning model that honors disabled", () => {
+-  assert.equal(shouldExposeNoThinkingAlias(entry("claude-opus-4-5")), true);
+-  assert.equal(shouldExposeNoThinkingAlias(entry("anthropic/claude-sonnet-4-6")), true);
+-});
+-
+-test("shouldExposeNoThinkingAlias rejects models where suppression is meaningless", () => {
+-  // gpt-4o does not support thinking
+-  assert.equal(shouldExposeNoThinkingAlias(entry("gpt-4o", "openai")), false);
+-  // fable-5 rejects thinking.type:disabled — a no-thinking variant would be a lie
+-  assert.equal(shouldExposeNoThinkingAlias(entry("claude-fable-5")), false);
+-  // combos are virtual, never aliased
+-  assert.equal(shouldExposeNoThinkingAlias(entry("my-combo", "combo")), false);
+-  // never double-alias
+-  assert.equal(
+-    shouldExposeNoThinkingAlias(entry("no-think/anthropic/claude-opus-4-5")),
+-    false
+-  );
+-});
+-
+-test("appendNoThinkingVariants adds one variant per eligible model and preserves the rest", () => {
+-  const models = [entry("claude-opus-4-5"), entry("gpt-4o", "openai"), entry("claude-fable-5")];
+-  const out = appendNoThinkingVariants(models);
+-  const ids = out.map((m) => m.id);
+-  assert.ok(
+-    ids.includes("no-think/claude-opus-4-5"),
+-    "eligible model gets a variant"
+-  );
+-  assert.ok(
+-    !ids.includes("no-think/gpt-4o"),
+-    "non-thinking model has no variant"
+-  );
+-  assert.ok(
+-    !ids.includes("no-think/claude-fable-5"),
+-    "reject-disabled model has no variant"
+-  );
+-  assert.equal(out.length, models.length + 1, "exactly one variant appended");
+-  // originals preserved up front
+-  assert.deepEqual(out.slice(0, 3), models);
+-});
+-
+-test("appendNoThinkingVariants returns the same array reference when nothing is eligible", () => {
+-  const models = [entry("gpt-4o", "openai")];
+-  assert.equal(appendNoThinkingVariants(models), models);
+-});
+-
+-test("appendNoThinkingVariants normalizes alias prefix to canonical when aliasToCanonical map is provided", () => {
+-  const models = [entry("cc/claude-opus-4-5")];
+-  const aliasToCanonical = { cc: "claude" };
+-  const out = appendNoThinkingVariants(models, aliasToCanonical);
+-  const ids = out.map((m) => m.id);
+-  assert.ok(
+-    ids.includes("no-think/claude/claude-opus-4-5"),
+-    "uses canonical prefix"
+-  );
+-  assert.ok(
+-    !ids.includes("no-think/cc/claude-opus-4-5"),
+-    "alias prefix not used"
+-  );
+-});
+-
+-test("appendNoThinkingVariants keeps alias prefix when no map is provided", () => {
+-  const models = [entry("cc/claude-opus-4-5")];
+-  const out = appendNoThinkingVariants(models);
+-  const ids = out.map((m) => m.id);
+-  assert.ok(
+-    ids.includes("no-think/cc/claude-opus-4-5"),
+-    "alias prefix preserved"
+-  );
+-});
 diff --git a/tests/unit/pricing-model-id-spelling-parity.test.ts b/tests/unit/pricing-model-id-spelling-parity.test.ts
 new file mode 100644
 index 000000000..3b834b0b0
@@ -9697,6 +11404,484 @@ index a73e19a77..ceb0a979c 100644
  
  // ── OAUTH_TEST_CONFIG Validation ────────────────────────────────────────────
  
+diff --git a/tests/unit/quota-exclusive-catalog-short-circuit.test.ts b/tests/unit/quota-exclusive-catalog-short-circuit.test.ts
+index c3710a1cf..bf69b2c82 100644
+--- a/tests/unit/quota-exclusive-catalog-short-circuit.test.ts
++++ b/tests/unit/quota-exclusive-catalog-short-circuit.test.ts
+@@ -126,13 +126,13 @@ await test("chave quota-exclusive não constrói o catálogo completo", async (t
+   });
+ 
+   await t.test("os espelhos de discovery continuam valendo no caminho de cota", async () => {
+-    // A cadeia de pós-filtros (variantes de esforço, no-thinking, espelhos
++    // A cadeia de pós-filtros (variantes de esforço, espelhos
+     // `claude/*` do discovery, dedupe) roda DEPOIS do filtro por chave, então o
+     // atalho da cota também a deve. Sem isso o Claude Code deixa de enxergar os
+     // modelos de um pool — que é justamente o fluxo-alvo.
+     const prev = process.env.EXPOSE_CC_DISCOVERY_ALIASES;
+     process.env.EXPOSE_CC_DISCOVERY_ALIASES = "1";
+-    // A chave do cache é `prefix|isCodex|apiKey|configuredOnly` — um query param
++    // A chave do cache é `isCodex|apiKey|configuredOnly` — um query param
+     // qualquer NÃO a invalida, então a resposta do subteste anterior seria servida.
+     v1ModelsCatalog.__expireCatalogCacheForTest(
+       v1ModelsCatalog.CATALOG_STALE_WHILE_REVALIDATE_MS + 1000
+diff --git a/tests/unit/single-public-prefix-contract.test.ts b/tests/unit/single-public-prefix-contract.test.ts
+new file mode 100644
+index 000000000..9e4c8921d
+--- /dev/null
++++ b/tests/unit/single-public-prefix-contract.test.ts
+@@ -0,0 +1,452 @@
++/**
++ * tests/unit/single-public-prefix-contract.test.ts
++ *
++ * Full matrix for the single routable public-prefix contract (catalog.ts
++ * `resolvePublicPrefix`). Precedence:
++ *   1. operator node prefix wins;
++ *   2. else canonical registry id — only when `${id}/x` round-trips through
++ *      parseModel to that provider AND the noauth policy permits it;
++ *   3. else the routable alias.
++ *
++ * Legacy aliases stay INBOUND-callable but must never create a second catalog
++ * identity. no-think is inbound-only. Effort variants inherit the base's
++ * published prefix. Combo rows (owned_by:"combo") never go through prefix logic.
++ *
++ * Mandatory focused gate (run together):
++ *   - this file
++ *   - tests/unit/image-model-not-in-chat-catalog-6457.test.ts  (G: responses+image same-id)
++ *   - tests/unit/models-catalog-exact-dup-4424.test.ts          (dedupe contract)
++ */
++import test from "node:test";
++import assert from "node:assert/strict";
++import fs from "node:fs";
++import os from "node:os";
++import path from "node:path";
++
++const TEST_DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "omni-single-prefix-"));
++process.env.DATA_DIR = TEST_DATA_DIR;
++process.env.API_KEY_SECRET = process.env.API_KEY_SECRET || "single-prefix-test-secret";
++
++const core = await import("../../src/lib/db/core.ts");
++const providersDb = await import("../../src/lib/db/providers.ts");
++const combosDb = await import("../../src/lib/db/combos.ts");
++const apiKeysDb = await import("../../src/lib/db/apiKeys.ts");
++const v1ModelsCatalog = await import("../../src/app/api/v1/models/catalog.ts");
++const providerScopedRoute = await import("../../src/app/api/v1/providers/[provider]/models/route.ts");
++const { parseModel } = await import("../../open-sse/services/model.ts");
++const { buildAliasMaps } = await import("../../src/app/api/v1/models/catalogProviderMaps.ts");
++const { NOAUTH_PROVIDERS } = await import("../../src/shared/constants/providers/noauth.ts");
++const { appendSyncedEffortVariants } = await import("../../open-sse/utils/syncedEffortVariants.ts");
++const { resolveResponsesApiModel } = await import(
++  "../../src/app/api/internal/codex-responses-ws/modelResolution.ts"
++);
++
++type Entry = { id?: unknown; owned_by?: unknown; root?: unknown; [k: string]: unknown };
++type CatalogBody = { data?: Entry[] };
++
++// ── helpers ──────────────────────────────────────────────────────────────────
++
++async function resetStorage() {
++  core.resetDbInstance();
++  apiKeysDb.resetApiKeyState();
++  fs.rmSync(TEST_DATA_DIR, { recursive: true, force: true });
++  fs.mkdirSync(TEST_DATA_DIR, { recursive: true });
++  v1ModelsCatalog.__resetCatalogBuilderRunsForTest();
++}
++
++async function seedConnection(provider: string) {
++  return providersDb.createProviderConnection({
++    provider,
++    authType: "apikey",
++    name: `${provider}-sp`,
++    apiKey: "sk-test",
++    accessToken: null,
++    isActive: true,
++    testStatus: "active",
++    providerSpecificData: {},
++  });
++}
++
++async function listEntries(): Promise<Entry[]> {
++  const res = await v1ModelsCatalog.getUnifiedModelsResponse(
++    new Request("http://localhost/api/v1/models")
++  );
++  assert.equal(res.status, 200);
++  return ((await res.json()) as CatalogBody).data ?? [];
++}
++
++async function listIds(): Promise<string[]> {
++  return (await listEntries())
++    .map((e) => e.id)
++    .filter((v): v is string => typeof v === "string" && v.length > 0);
++}
++
++const byPrefix = (ids: string[], pre: string) => ids.filter((i) => i.startsWith(`${pre}/`));
++const effortRe = /-(low|medium|high|max|min|xhigh|extra-low|extra-high)$/;
++
++test.beforeEach(async () => { await resetStorage(); });
++test.after(async () => {
++  core.resetDbInstance();
++  apiKeysDb.resetApiKeyState();
++  fs.rmSync(TEST_DATA_DIR, { recursive: true, force: true });
++});
++
++// ── A. Fragmenting providers: exact-one identity + no alias/canonical siblings ─
++
++test("A: codex antigravity kiro ollama-cloud each publish canonical only, zero alias siblings", async () => {
++  for (const p of ["codex", "antigravity", "kiro", "ollama-cloud"]) await seedConnection(p);
++  const ids = await listIds();
++
++  const pairs: Array<[string, string]> = [
++    ["codex", "cx"],
++    ["antigravity", "ag"],
++    ["kiro", "kr"],
++    ["ollama-cloud", "ollamacloud"],
++  ];
++
++  for (const [canon, alias] of pairs) {
++    const canonRows = byPrefix(ids, canon).filter((i) => !effortRe.test(i));
++    const aliasRows = byPrefix(ids, alias);
++    assert.ok(
++      canonRows.length > 0,
++      `${canon}: expected canonical rows to be published, got 0`
++    );
++    assert.equal(
++      aliasRows.length,
++      0,
++      `${alias}: alias sibling rows must not exist, got ${JSON.stringify(aliasRows.slice(0, 3))}`
++    );
++  }
++});
++
++// ── B. opencode: oc/ nonzero, opencode/ is NOT free OpenCode, opencode-zen distinct ─
++
++test("B: opencode publishes under oc/ only; opencode/ and opencode-zen stay separate", async () => {
++  const ids = await listIds();
++  const ocRows = byPrefix(ids, "oc");
++  const opencodeRows = byPrefix(ids, "opencode");
++  const zenRows = byPrefix(ids, "opencode-zen");
++
++  assert.ok(ocRows.length > 0, "oc/ must have rows (free OpenCode publishes via its alias)");
++  assert.equal(
++    opencodeRows.length,
++    0,
++    `opencode/ canonical rows must not appear (slug-hijacked to opencode-zen): ${JSON.stringify(opencodeRows.slice(0, 3))}`
++  );
++  for (const id of zenRows) {
++    assert.ok(!ocRows.includes(id), `${id} must not collide with a free-opencode oc/ id`);
++  }
++  assert.equal(parseModel("opencode/__p__").provider, "opencode-zen", "opencode/ slug routes to opencode-zen");
++  assert.equal(parseModel("oc/__p__").provider, "opencode", "oc/ routes to opencode");
++  assert.notEqual(parseModel("oc/__p__").provider, parseModel("opencode/__p__").provider);
++});
++
++// ── C. Owner-aware: every emitted slash-id routes to its owned_by provider ─
++
++test("C: every emitted slash-id routes back to its owned_by provider (owner-aware, all rows)", async () => {
++  for (const p of ["codex", "antigravity", "kiro", "ollama-cloud"]) await seedConnection(p);
++  const entries = await listEntries();
++
++  const offenders: string[] = [];
++  let checked = 0;
++
++  for (const entry of entries) {
++    const id = typeof entry.id === "string" ? entry.id : "";
++    const owner = typeof entry.owned_by === "string" ? entry.owned_by : "";
++    if (!id.includes("/")) continue; // bare ids (combo names, native) are not prefixed
++    if (owner === "combo") continue; // combo rows never go through prefix logic
++    if (!owner) continue; // rows without an owner cannot be checked
++    checked++;
++    const got = parseModel(id).provider;
++    if (got !== owner) {
++      offenders.push(`id="${id}" owned_by="${owner}" parseModel→"${got}"`);
++    }
++  }
++
++  assert.ok(checked > 20, `expected broad coverage, only checked ${checked} slash-id rows`);
++  assert.deepEqual(offenders, [], `owner-aware round-trip failures:\n  ${offenders.join("\n  ")}`);
++});
++
++// ── D. Eight non-opencode noauth providers not broadened ─
++
++test("D: eight non-opencode noauth providers gain zero chat-shaped canonical-prefix rows", async () => {
++  // Source of truth: NOAUTH_PROVIDERS (9 entries) minus opencode (which publishes oc/).
++  const noauthCanonical = Object.keys(NOAUTH_PROVIDERS).filter((id) => id !== "opencode");
++  assert.equal(noauthCanonical.length, 8, `expected exactly 8 non-opencode noauth providers, got ${noauthCanonical.length}: ${noauthCanonical.join(", ")}`);
++
++  // Modality (non-chat) registries — video/image/audio/etc. — publish under the
++  // canonical provider id directly and are OUT OF SCOPE for the chat prefix contract.
++  // Only chat-shaped rows (untyped or type:"chat") count as "broadened".
++  const MODALITY_TYPES = new Set(["video", "image", "audio", "embedding", "rerank", "moderation", "music"]);
++
++  const entries = await listEntries();
++  const broadened: string[] = [];
++  for (const canon of noauthCanonical) {
++    const chatRows = entries.filter((e) => {
++      const id = String(e.id ?? "");
++      if (!id.startsWith(`${canon}/`)) return false;
++      const type = String(e.type ?? "chat");
++      return !MODALITY_TYPES.has(type);
++    });
++    if (chatRows.length > 0) broadened.push(`${canon}: ${JSON.stringify(chatRows.slice(0, 2).map((e) => ({ id: e.id, type: e.type })))}`);
++  }
++  assert.deepEqual(broadened, [], `noauth providers must not gain chat-shaped canonical rows:\n  ${broadened.join("\n  ")}`);
++});
++
++// ── E. Effort variants inherit published prefix; oc/ never rewritten ─
++
++test("E: effort variants carry their base's prefix; oc/ base never rewritten to opencode/", async () => {
++  await seedConnection("antigravity");
++  const ids = await listIds();
++
++  const agEffort = ids.filter((i) => i.startsWith("antigravity/") && effortRe.test(i));
++  assert.ok(agEffort.length > 0, `expected antigravity effort variants, got none; sample: ${JSON.stringify(ids.slice(0, 5))}`);
++  for (const id of agEffort) {
++    assert.ok(!id.startsWith("ag/"), `effort variant must not be rewritten to alias prefix: ${id}`);
++  }
++
++  const opencodeEffort = ids.filter((i) => i.startsWith("opencode/") && effortRe.test(i));
++  assert.equal(opencodeEffort.length, 0, `opencode/ effort rows must not exist: ${JSON.stringify(opencodeEffort)}`);
++});
++
++test("E (unit): appendSyncedEffortVariants preserves an oc/ base prefix verbatim — never rewrites to opencode/", () => {
++  // Direct synthetic test: pass an oc/-prefixed base entry through the synced effort
++  // variant generator. appendSyncedEffortVariants builds variantId = `${model.id}-${tier}`
++  // and never consults any alias map, so the oc/ prefix must survive unchanged.
++  const base: Record<string, unknown> = {
++    id: "oc/mimo-v2.5-free",
++    owned_by: "opencode",
++    root: "mimo-v2.5-free",
++    capabilities: { effort_tiers: ["low", "high"] },
++  };
++  const out = appendSyncedEffortVariants([base as never]) as Array<Record<string, unknown>>;
++  const variantIds = out.map((m) => String(m.id));
++  assert.ok(variantIds.includes("oc/mimo-v2.5-free-low"), `expected oc/mimo-v2.5-free-low in ${JSON.stringify(variantIds)}`);
++  assert.ok(variantIds.includes("oc/mimo-v2.5-free-high"), `expected oc/mimo-v2.5-free-high in ${JSON.stringify(variantIds)}`);
++  assert.equal(
++    variantIds.filter((i) => i.startsWith("opencode/")).length,
++    0,
++    `no variant may be rewritten to opencode/: ${JSON.stringify(variantIds)}`
++  );
++});
++
++// ── F. Combo shadow + bare-model inbound compatibility ─
++
++test("F: combo row appears bare in catalog; bare-model and combo inbound routing both preserved", async () => {
++  await seedConnection("codex");
++  await combosDb.createCombo({
++    name: "gpt-5.5",
++    description: "single-prefix combo shadow probe",
++    steps: [{ provider: "codex", model: "codex/gpt-5.5", temperature: 0.7 }],
++    isActive: true,
++  });
++
++  const entries = await listEntries();
++  const ids = entries.map((e) => String(e.id ?? ""));
++
++  // Combo row is present and bare (owned_by:"combo", no prefix).
++  const comboRow = entries.find((e) => e.id === "gpt-5.5" && e.owned_by === "combo");
++  assert.ok(comboRow, `combo "gpt-5.5" (owned_by:combo) must appear; ids: ${JSON.stringify(ids.filter((i) => i.includes("gpt-5.5")))}`);
++  assert.ok(!String(comboRow!.id).includes("/"), `combo id must be bare, got "${comboRow!.id}"`);
++
++  // The prefixed model row coexists — combo never displaces it.
++  assert.ok(ids.some((i) => i.startsWith("codex/") && i.includes("gpt-5.5")), "codex/gpt-5.5 model row must coexist");
++
++  // Inbound: a bare combo name must NOT be rewritten to codex/ (combo routing path).
++  // `resolveResponsesApiModel` expects a getModelInfo-style async resolver; parseModel
++  // is the synchronous parse, so adapt it to the ResolvedModelInfo shape it consumes.
++  const resolver = async (modelStr: string) => parseModel(modelStr);
++  const isCombo = async (name: string) => name === "gpt-5.5";
++  const comboOut = await resolveResponsesApiModel("gpt-5.5", resolver, isCombo);
++  assert.equal(comboOut.changed, false, `bare combo "gpt-5.5" must not be codex-prefixed`);
++  assert.equal(comboOut.model, "gpt-5.5");
++
++  // Inbound: a bare model id (not a combo) IS rewritten to codex/ (bare-model compat path).
++  const isNotCombo = async () => false;
++  const modelOut = await resolveResponsesApiModel("gpt-5.5", resolver, isNotCombo);
++  assert.equal(modelOut.changed, true, "bare model id must be codex-prefixed when not a combo");
++  assert.equal(modelOut.model, "codex/gpt-5.5");
++});
++
++// ── G. Provider-scoped selector + cross-surface (responses+image) same-id survival ─
++
++test("G: provider-scoped endpoint returns bare ids including gpt-5.6-sol; responses+image surfaces coexist (see image-6457)", async () => {
++  await seedConnection("codex");
++  // Seed gpt-5.6-sol with responses endpoint so it appears in the synced catalog.
++  const modelsDb = await import("../../src/lib/db/models.ts");
++  const conn = await providersDb.getProviderConnections();
++  const codexConn = (conn as Array<{ id: string; provider: string }>).find((c) => c.provider === "codex");
++  assert.ok(codexConn, "codex connection must exist");
++  await modelsDb.replaceSyncedAvailableModelsForConnection("codex", codexConn!.id, [
++    { id: "gpt-5.6-sol", name: "GPT 5.6 Sol", supportedEndpoints: ["responses"] },
++  ]);
++
++  // Provider-scoped endpoint: GET /api/v1/providers/codex/models
++  const res = await providerScopedRoute.GET(
++    new Request("http://localhost/api/v1/providers/codex/models"),
++    { params: Promise.resolve({ provider: "codex" }) }
++  );
++  assert.equal(res.status, 200);
++  const body = (await res.json()) as { data?: Array<{ id: string }> };
++  const scopedIds = (body.data ?? []).map((m) => m.id);
++
++  // Provider-scoped ids are bare (no prefix) per the endpoint's contract.
++  assert.ok(scopedIds.length > 0, "provider-scoped endpoint must return models");
++  for (const id of scopedIds) {
++    assert.ok(!id.includes("/"), `provider-scoped id must be bare, got "${id}"`);
++  }
++  assert.ok(scopedIds.includes("gpt-5.6-sol"), `gpt-5.6-sol must appear bare in provider-scoped output; got ${JSON.stringify(scopedIds.slice(0, 5))}`);
++
++  // Cross-surface: the unified catalog must keep both the responses row AND the image
++  // row under the same public id codex/gpt-5.6-sol (delegated to image-6457 test for
++  // the full two-row assertion; here we confirm both surfaces are present).
++  const entries = await listEntries();
++  const solEntries = entries.filter((e) => String(e.id) === "codex/gpt-5.6-sol");
++  const types = new Set(solEntries.map((e) => String(e.type ?? "chat")));
++  assert.ok(types.has("image"), `image surface must survive; types: ${[...types].join(", ")}`);
++  // The responses surface is the non-image row (type undefined/"chat" with supported_endpoints).
++  assert.ok(
++    solEntries.some((e) => String(e.type ?? "chat") !== "image"),
++    `responses surface must survive alongside image; entries: ${JSON.stringify(solEntries.map((e) => ({ id: e.id, type: e.type })))}`
++  );
++});
++
++// ── G2. Same cross-surface contract on the DEFAULT (static) connection path ─
++// Test G above seeds gpt-5.6-sol via synced discovery (supportedEndpoints). The
++// regression that motivated the emission fix hit the DEFAULT path: a plain codex
++// connection with NO synced models, where the static chat loop and the image
++// registry both emit `codex/gpt-5.6-sol`. Single-prefix must keep BOTH intentional
++// surfaces under one public id — the Responses chat surface and the image surface —
++// not collapse them into the image row alone.
++test("G2: default codex connection (no synced models) keeps both responses + image base surfaces under one id", async () => {
++  await seedConnection("codex");
++  const entries = await listEntries();
++  const solEntries = entries.filter((e) => String(e.id) === "codex/gpt-5.6-sol");
++
++  const imageSurface = solEntries.find((e) => String(e.type ?? "chat") === "image");
++  const responsesSurface = solEntries.find(
++    (e) =>
++      String(e.type ?? "chat") !== "image" &&
++      Array.isArray(e.supported_endpoints) &&
++      (e.supported_endpoints as string[]).includes("responses")
++  );
++
++  assert.ok(
++    imageSurface,
++    `default path must keep the image surface; got: ${JSON.stringify(solEntries.map((e) => ({ id: e.id, type: e.type })))}`
++  );
++  assert.ok(
++    responsesSurface,
++    `default path must keep the Responses chat surface (not collapse into image-only); got: ${JSON.stringify(solEntries.map((e) => ({ id: e.id, type: e.type, se: e.supported_endpoints })))}`
++  );
++  // Exactly the two intentional base surfaces, both under the one canonical id.
++  assert.equal(
++    solEntries.length,
++    2,
++    `expected exactly the responses + image base surfaces, got: ${JSON.stringify(solEntries.map((e) => ({ id: e.id, type: e.type, se: e.supported_endpoints })))}`
++  );
++  // Sibling absence must be proven against the FULL entry list, not solEntries
++  // (which only filters the canonical id). The single-prefix contract publishes
++  // this model under `codex/` alone: no `cx/` alias row and no bare id row.
++  assert.equal(
++    entries.some((e) => String(e.id) === "cx/gpt-5.6-sol"),
++    false,
++    "the legacy cx/ alias must NOT be a catalog row (inbound-callable only)"
++  );
++  assert.equal(
++    entries.some((e) => String(e.id) === "gpt-5.6-sol"),
++    false,
++    "the bare id must NOT be a catalog row (inbound-callable only)"
++  );
++  // Effort variants are distinct synthetic ids, not extra base surfaces.
++  assert.ok(entries.some((e) => String(e.id) === "codex/gpt-5.6-sol-high"));
++});
++
++// ── H. Node-prefix wins; no UUID, canonical, or alias siblings leak ─
++
++test("H: node prefix wins and no UUID/canonical/alias siblings appear", async () => {
++  const NODE_ID = "openai-compatible-chat-99999999-8888-7777-6666-555555555555";
++  const PREFIX = "pix4k";
++  await providersDb.createProviderNode({
++    id: NODE_ID,
++    type: "openai-compatible",
++    name: "pix4k node",
++    prefix: PREFIX,
++    baseUrl: "https://example.invalid/v1",
++    chatPath: "/v1/chat/completions",
++    modelsPath: "/v1/models",
++  } as never);
++  const conn = await providersDb.createProviderConnection({
++    provider: NODE_ID,
++    authType: "apikey",
++    name: "pix4k-conn",
++    apiKey: "sk-test",
++    isActive: true,
++    testStatus: "active",
++    providerSpecificData: { baseUrl: "https://example.invalid/v1" },
++  } as never);
++  const NODE_MODEL = "pix4k-unique-probe-model";
++  const modelsDb = await import("../../src/lib/db/models.ts");
++  await modelsDb.replaceSyncedAvailableModelsForConnection(
++    NODE_ID,
++    (conn as { id: string }).id,
++    [{ id: NODE_MODEL, name: "Pix4k Probe", source: "imported", supportedEndpoints: ["chat"] }]
++  );
++
++  const ids = await listIds();
++  const forModel = ids.filter((i) => i.includes(NODE_MODEL));
++
++  assert.ok(
++    forModel.includes(`${PREFIX}/${NODE_MODEL}`),
++    `expected ${PREFIX}/${NODE_MODEL}; got ${JSON.stringify(forModel)}`
++  );
++  assert.deepEqual(forModel.filter((i) => i.includes(NODE_ID)), [], "raw node UUID must never appear as a prefix");
++  assert.equal(forModel.length, 1, `exactly one row expected; got ${JSON.stringify(forModel)}`);
++});
++
++// ── I. Inbound aliases still route (including ollamacloud) ─
++
++test("I: inbound aliases resolve to the correct provider including ollamacloud", async () => {
++  const { aliasToProviderId } = buildAliasMaps();
++  const expected: Record<string, string> = {
++    cc: "claude",
++    cx: "codex",
++    ag: "antigravity",
++    kr: "kiro",
++    ollamacloud: "ollama-cloud",
++    oc: "opencode",
++  };
++  for (const [alias, provider] of Object.entries(expected)) {
++    assert.equal(aliasToProviderId[alias], provider, `inbound alias "${alias}" regressed`);
++    assert.equal(parseModel(`${alias}/__probe__`).provider, provider, `parseModel("${alias}/...") must route to "${provider}"`);
++  }
++});
++
++// ── J. Zero no-think in catalog; inbound no-think still works ─
++
++test("J: catalog has zero no-think ids; inbound applyNoThinkingAlias still suppresses", async () => {
++  for (const p of ["codex", "antigravity"]) await seedConnection(p);
++  const ids = await listIds();
++  assert.deepEqual(ids.filter((i) => i.startsWith("no-think/")), [], "zero no-think ids in discovery");
++
++  const { applyNoThinkingAlias } = await import("../../open-sse/utils/noThinkingAlias.ts");
++  const body: Record<string, unknown> = {
++    model: "no-think/anthropic/claude-opus-4-5",
++    thinking: { type: "enabled" },
++    messages: [],
++  };
++  const res = applyNoThinkingAlias(body, { claudeFormat: true });
++  assert.equal(res.applied, true);
++  assert.equal(body.model, "anthropic/claude-opus-4-5");
++  assert.deepEqual(body.thinking, { type: "disabled" });
++});
++
++// ── K. Codex-native: exactly one public row ─
++
++test("K: codex-auto-review publishes exactly one public row", async () => {
++  await seedConnection("codex");
++  const ids = await listIds();
++  const rows = ids.filter((i) => i === "codex-auto-review" || i.endsWith("/codex-auto-review"));
++  assert.equal(rows.length, 1, `exactly one row expected; got ${JSON.stringify(rows)}`);
++  assert.equal(parseModel(rows[0]).provider, "codex", `${rows[0]} must route to codex`);
++});
 diff --git a/tests/unit/specialty-model-catalog-routes.test.ts b/tests/unit/specialty-model-catalog-routes.test.ts
 index 73c95336e..34f12403d 100644
 --- a/tests/unit/specialty-model-catalog-routes.test.ts
@@ -9826,6 +12011,46 @@ index e060f7eb5..e9fa1c379 100644
 +  assert.equal(response.status, 200);
 +  assert.equal(body.byProvider[0].provider, "My Analytics Provider");
  });
+diff --git a/tests/unit/v1-models-concurrent-6408.test.ts b/tests/unit/v1-models-concurrent-6408.test.ts
+index 4aa543e50..347e9bce6 100644
+--- a/tests/unit/v1-models-concurrent-6408.test.ts
++++ b/tests/unit/v1-models-concurrent-6408.test.ts
+@@ -85,15 +85,15 @@ test("#6408 — a second call within the TTL window is served from cache without
+   assert.equal(await res2.text(), await res1.text());
+ });
+ 
+-test("#6408 — requests with different cache keys (prefix param) run the builder independently", async () => {
+-  const resAlias = await v1ModelsCatalog.getUnifiedModelsResponse(
+-    new Request("http://localhost/v1/models?prefix=alias")
++test("#6408 — requests with different cache keys (configuredOnly) run the builder independently", async () => {
++  const resAll = await v1ModelsCatalog.getUnifiedModelsResponse(
++    new Request("http://localhost/v1/models")
+   );
+-  const resCanon = await v1ModelsCatalog.getUnifiedModelsResponse(
+-    new Request("http://localhost/v1/models?prefix=canonical")
++  const resConfigured = await v1ModelsCatalog.getUnifiedModelsResponse(
++    new Request("http://localhost/v1/models?configuredOnly=true")
+   );
+-  assert.equal(resAlias.status, 200);
+-  assert.equal(resCanon.status, 200);
++  assert.equal(resAll.status, 200);
++  assert.equal(resConfigured.status, 200);
+   assert.equal(
+     v1ModelsCatalog.__getCatalogBuilderRunsForTest(),
+     2,
+diff --git a/tests/unit/v1-models-discovery-conformance.test.ts b/tests/unit/v1-models-discovery-conformance.test.ts
+index e1ab77800..96eebcdbd 100644
+--- a/tests/unit/v1-models-discovery-conformance.test.ts
++++ b/tests/unit/v1-models-discovery-conformance.test.ts
+@@ -179,7 +179,7 @@ test("6. a DB-state change drops the cache outright — the next response is a f
+ });
+ 
+ test("7. the 500 error path is sanitized — no stack trace or absolute source path leaks into the body", async () => {
+-  const request = new Request("http://localhost/v1/models?prefix=alias&__d1_err_test=1");
++  const request = new Request("http://localhost/v1/models?__d1_err_test=1");
+   const rawMessage =
+     "Query failed at /home/diegosouzapw/dev/proxys/OmniRoute-Enterprise/secret/catalog.ts:42:1";
+   const err = new Error(rawMessage);
 diff --git a/tests/unit/v1beta-models-route.test.ts b/tests/unit/v1beta-models-route.test.ts
 index 1f66e7ae2..2eedba265 100644
 --- a/tests/unit/v1beta-models-route.test.ts
