@@ -1006,34 +1006,168 @@ index c13466a80..fa23d7e2e 100644
      return NextResponse.json({ combos, total });
    } catch (error) {
 diff --git a/src/app/api/models/route.ts b/src/app/api/models/route.ts
-index 9c3d07822..eaf0bffe5 100644
+index 9c3d07822..8a4742cf5 100644
 --- a/src/app/api/models/route.ts
 +++ b/src/app/api/models/route.ts
-@@ -1,5 +1,6 @@
+@@ -1,114 +1,62 @@
  import { NextResponse } from "next/server";
- import { getModelAliases, setModelAlias, getProviderConnections } from "@/models";
-+import { getModelIsHidden } from "@/lib/db/models";
- import { AI_MODELS, PROVIDER_ID_TO_ALIAS } from "@/shared/constants/models";
+-import { getModelAliases, setModelAlias, getProviderConnections } from "@/models";
+-import { AI_MODELS, PROVIDER_ID_TO_ALIAS } from "@/shared/constants/models";
++import { getModelAliases, setModelAlias } from "@/models";
++import { getUnifiedModelsResponse } from "@/app/api/v1/models/catalog";
++import { isUsableChatModel } from "@/lib/vscode/usableChatModel";
  import { updateModelAliasSchema } from "@/shared/validation/schemas";
  import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
-@@ -85,7 +86,16 @@ export async function GET(request: Request) {
-         alias: modelAliases[fullModel] || m.model,
-         available,
-       };
--    }).filter((m: any) => showAll || m.available);
-+    })
-+      // Eye-hidden models must not come back from here either. This route feeds the
-+      // dashboard model pickers (ModelSelectField, HomePageClient) and is the documented
-+      // fallback the API manager uses when `/v1/models` is key-protected — so a model the
-+      // operator hid stayed pickable in the UI even though `/v1/models` had dropped it.
-+      // `AI_MODELS[].provider` is the canonical provider id, which is the key the eye
-+      // toggle writes under; `?all=true` does not bypass the eye, only the active-connection
-+      // filter. Hidden is not the same as trashed: this is the eye only.
-+      .filter((m: any) => !getModelIsHidden(m.provider, m.model))
-+      .filter((m: any) => showAll || m.available);
+-import { hasEligibleConnectionForModel } from "@/domain/connectionModelRules";
+-import { getSettings } from "@/lib/db/settings";
+-import { isFreeModel, providerHasFreeModels } from "@/shared/utils/freeModels";
  
-     // #6328 (follow-up to #6495): REMOVE — not just hide — paid models from the
-     // dashboard model picker when the operator opts into hidePaidModels. Mirrors
+-// GET /api/models - Get models with aliases (only from active providers by default)
++// GET /api/models - Adapt the canonical unified catalog to the legacy dashboard shape.
+ export async function GET(request: Request) {
+   try {
+-    const { searchParams } = new URL(request.url);
+-    const showAll = searchParams.get("all") === "true";
++    const requestUrl = new URL(request.url);
++    const showAll = requestUrl.searchParams.get("all") === "true";
++    const catalogUrl = new URL("/v1/models", requestUrl.origin);
++    if (!showAll) catalogUrl.searchParams.set("configuredOnly", "true");
+ 
+-    const modelAliases = await getModelAliases();
+-
+-    // Get active provider connections to filter available models
+-    let activeProviders: Set<string> | null = null;
+-    if (!showAll) {
+-      try {
+-        const connections = await getProviderConnections();
+-        const active = connections.filter((c: any) => c.isActive !== false);
+-        // Include both provider IDs and their aliases in the active set.
+-        // PROVIDER_MODELS keys are aliases (e.g. 'cc' for 'claude', 'gh' for 'github').
+-        // DB connections are stored under provider IDs ('claude', 'github').
+-        // Without this, models for aliased providers always appear unconfigured.
+-        activeProviders = new Set<string>();
+-        for (const c of active) {
+-          const pId = String((c as Record<string, unknown>).provider);
+-          activeProviders.add(pId);
+-          const alias = PROVIDER_ID_TO_ALIAS[pId];
+-          if (alias) activeProviders.add(alias);
+-        }
+-        const connectionsByProvider = new Map<string, typeof active>();
+-        const registerConnectionKey = (
+-          key: string | null | undefined,
+-          connection: (typeof active)[number]
+-        ) => {
+-          if (!key) return;
+-          const existing = connectionsByProvider.get(key) || [];
+-          existing.push(connection);
+-          connectionsByProvider.set(key, existing);
+-        };
+-        for (const connection of active) {
+-          registerConnectionKey(connection.provider, connection);
+-          registerConnectionKey(PROVIDER_ID_TO_ALIAS[connection.provider], connection);
+-        }
+-        const getConnectionsForProvider = (...keys: Array<string | null | undefined>) => {
+-          const seen = new Set<string>();
+-          const collected: typeof active = [];
+-          for (const key of keys) {
+-            if (!key) continue;
+-            for (const connection of connectionsByProvider.get(key) || []) {
+-              if (!connection?.id || seen.has(connection.id)) continue;
+-              seen.add(connection.id);
+-              collected.push(connection);
+-            }
+-          }
+-          return collected;
+-        };
+-
+-        activeProviders = new Set(
+-          AI_MODELS.flatMap((model: any) => {
+-            const providerKeys = [model.provider, PROVIDER_ID_TO_ALIAS[model.provider]];
+-            return hasEligibleConnectionForModel(
+-              getConnectionsForProvider(...providerKeys),
+-              model.model
+-            )
+-              ? providerKeys.filter(Boolean)
+-              : [];
+-          })
+-        );
+-      } catch {
+-        // If DB unavailable, show all models
+-      }
++    const catalogRequest = new Request(catalogUrl, {
++      headers: request.headers,
++      method: "GET",
++    });
++    const [catalogResponse, modelAliases] = await Promise.all([
++      getUnifiedModelsResponse(catalogRequest),
++      getModelAliases(),
++    ]);
++    const body = await catalogResponse.json();
++    if (!catalogResponse.ok) {
++      return NextResponse.json(body, { status: catalogResponse.status });
+     }
+ 
+-    const models = AI_MODELS.map((m: any) => {
+-      const fullModel = `${m.provider}/${m.model}`;
+-      const available = !activeProviders || activeProviders.has(m.provider);
+-      return {
+-        ...m,
+-        fullModel,
+-        alias: modelAliases[fullModel] || m.model,
+-        available,
+-      };
+-    }).filter((m: any) => showAll || m.available);
+-
+-    // #6328 (follow-up to #6495): REMOVE — not just hide — paid models from the
+-    // dashboard model picker when the operator opts into hidePaidModels. Mirrors
+-    // the `shouldHidePaid` guard in `src/app/api/v1/models/catalog.ts` (public
+-    // catalog). Settings read fails open: on error we preserve pre-patch behavior.
+-    let hidePaid = false;
+-    try {
+-      const settings = await getSettings();
+-      hidePaid = settings?.hidePaidModels === true;
+-    } catch {}
+-    const filtered = hidePaid
+-      ? models.filter(
+-          (m: { provider: string; model: string }) => providerHasFreeModels(m.provider) && isFreeModel(m.provider, { id: m.model })
+-        )
+-      : models;
++    const seen = new Set<string>();
++    const models = (Array.isArray(body.data) ? body.data : [])
++      .filter((model: Record<string, unknown>) => isUsableChatModel(model))
++      .filter((model: Record<string, unknown>) => {
++        if (typeof model.id !== "string" || seen.has(model.id)) return false;
++        seen.add(model.id);
++        return true;
++      })
++      .map((model: Record<string, unknown>) => {
++        const fullModel = model.id as string;
++        const separator = fullModel.indexOf("/");
++        const provider =
++          separator > 0 ? fullModel.slice(0, separator) : String(model.owned_by || "");
++        const rawModel =
++          separator > 0 ? fullModel.slice(separator + 1) : String(model.root || fullModel);
++        return {
++          ...model,
++          provider,
++          model: rawModel,
++          fullModel,
++          alias: modelAliases[fullModel] || rawModel,
++          available: true,
++        };
++      });
+ 
+-    return NextResponse.json({ models: filtered });
++    return NextResponse.json({ models });
+   } catch (error) {
+     console.log("Error fetching models:", error);
+     return NextResponse.json({ error: "Failed to fetch models" }, { status: 500 });
+   }
+ }
+-
+ // PUT /api/models - Update model alias
+ export async function PUT(request) {
+   let rawBody;
 diff --git a/src/app/api/provider-models/route.ts b/src/app/api/provider-models/route.ts
 index 0bb1ee765..d147e29e5 100644
 --- a/src/app/api/provider-models/route.ts
@@ -2147,19 +2281,29 @@ index 34ccbdfba..964bf828d 100644
      };
  
 diff --git a/src/app/api/v1/models/catalogCache.ts b/src/app/api/v1/models/catalogCache.ts
-index 316120293..57f0e06f9 100644
+index 316120293..771b46182 100644
 --- a/src/app/api/v1/models/catalogCache.ts
 +++ b/src/app/api/v1/models/catalogCache.ts
-@@ -72,11 +72,10 @@ let _catalogBuilderRuns = 0;
+@@ -15,7 +15,7 @@
+ import { getModelCatalogCacheVersion } from "@/lib/db/readCache";
+ import { extractApiKey } from "@/sse/services/auth";
+ 
+-import { isCodexModelCatalogClient } from "./catalogRequest";
++import { isCcDiscoveryModelCatalogClient, isCodexModelCatalogClient } from "./catalogRequest";
+ 
+ export type CachedCatalog = {
+   body: string;
+@@ -72,11 +72,11 @@ let _catalogBuilderRuns = 0;
  
  function buildCatalogCacheKey(request: Request): string {
    const url = new URL(request.url);
 -  const prefix = url.searchParams.get("prefix") || "";
    const apiKey = extractApiKey(request) || "";
    const isCodex = isCodexModelCatalogClient(request) ? "1" : "0";
++  const isClaudeCode = isCcDiscoveryModelCatalogClient(request) ? "1" : "0";
    const configuredOnly = url.searchParams.get("configuredOnly") === "true" ? "1" : "0";
 -  return `${prefix}|${isCodex}|${apiKey}|${configuredOnly}`;
-+  return `${isCodex}|${apiKey}|${configuredOnly}`;
++  return `${isCodex}|${isClaudeCode}|${apiKey}|${configuredOnly}`;
  }
  
  // Tracks the model-catalog cache version (src/lib/db/readCache.ts) as of the last
@@ -2527,16 +2671,16 @@ index 6de91e645..7d3594f46 100644
      if (modelStr.startsWith(prefixWithSlash)) {
        const modelId = modelStr.slice(prefixWithSlash.length).trim();
 diff --git a/src/app/api/v1/models/catalogResponse.ts b/src/app/api/v1/models/catalogResponse.ts
-index dee78d995..8217989d7 100644
+index dee78d995..f1e24ea21 100644
 --- a/src/app/api/v1/models/catalogResponse.ts
 +++ b/src/app/api/v1/models/catalogResponse.ts
-@@ -8,14 +8,13 @@
+@@ -8,21 +8,18 @@
   * mirrors the first time it was written as a duplicate.
   */
  
 -import { appendNoThinkingVariants } from "@omniroute/open-sse/utils/noThinkingAlias";
- import { appendClaudeEffortVariants } from "@omniroute/open-sse/utils/claudeEffortVariants";
- import { appendSyncedEffortVariants } from "@omniroute/open-sse/utils/syncedEffortVariants";
+-import { appendClaudeEffortVariants } from "@omniroute/open-sse/utils/claudeEffortVariants";
+-import { appendSyncedEffortVariants } from "@omniroute/open-sse/utils/syncedEffortVariants";
  import { appendCcDiscoveryAliases } from "@omniroute/open-sse/utils/ccDiscoveryAliases";
  import { isCcAliasGlobalEnabled, getCcAliasSettingsBulk } from "@/lib/db/ccDiscoveryAliases";
  import { buildCcAliasPredicate } from "./ccAliasPredicate";
@@ -2546,7 +2690,15 @@ index dee78d995..8217989d7 100644
  import {
    disambiguateCatalogModelNames,
    enrichCatalogModelEntry,
-@@ -37,7 +36,6 @@ export function applyCatalogPostFilters(
+ } from "@/lib/modelMetadataRegistry";
+ import { isModelCatalogNamesEnabled } from "@/shared/utils/featureFlags";
+ import { maybeOmitCatalogModelName } from "./catalogHelpers";
+-import { isCodexModelCatalogClient } from "./catalogRequest";
++import { isCcDiscoveryModelCatalogClient, isCodexModelCatalogClient } from "./catalogRequest";
+ 
+ /**
+  * Post-filter chain applied AFTER the API-key filter, so variants and mirrors are
+@@ -37,7 +34,6 @@ export function applyCatalogPostFilters(
    models: Array<Record<string, any>>,
    ctx: {
      connections: any;
@@ -2554,7 +2706,7 @@ index dee78d995..8217989d7 100644
      aliasToProviderId: Record<string, string>;
    }
  ): Array<Record<string, any>> {
-@@ -51,22 +49,21 @@ export function applyCatalogPostFilters(
+@@ -51,52 +47,33 @@ export function applyCatalogPostFilters(
      });
    }
  
@@ -2567,34 +2719,60 @@ index dee78d995..8217989d7 100644
 -    finalModels,
 -    ctx.prefixMode === "canonical" ? ctx.aliasToProviderId : undefined
 -  );
-+  // Collapse source rows that carry the same storage identity under more than one
-+  // public prefix. The catalog now publishes exactly one routable public identity per
-+  // model, so this is a defensive guard against any source that still pushes two. It must
-+  // run before synthetic variants are derived so those rows inherit a single base.
-+  finalModels = dedupeCanonicalModelIdentities(finalModels);
- 
+-
 -  // Advertise no-thinking gateway variants (Fase 8.1). Derived from the already
 -  // key-filtered list, so a variant only appears when its real model is permitted.
 -  finalModels = appendNoThinkingVariants(
 -    finalModels,
 -    ctx.prefixMode === "canonical" ? ctx.aliasToProviderId : undefined
 -  );
-+  // Advertise Claude reasoning-effort variants (<published>/<model>-{low,medium,high[,xhigh]}).
-+  // Derived from the already key-filtered list so a variant only appears when its real
-+  // model is permitted. The variant inherits the base model's single routable public
-+  // prefix verbatim — we must NOT rewrite the prefix through aliasToProviderId, because the
-+  // published prefix is not always the registry id: the free `oc` provider publishes
-+  // `oc/<model>`, and its registry id `opencode` is slug-hijacked to opencode-zen. The
-+  // gateway already routes these suffixed ids (claudeEffortVariant.ts); this just makes
-+  // them selectable in catalog-only clients that can't set reasoning_effort like VS Code.
-+  finalModels = appendClaudeEffortVariants(finalModels);
++  // Collapse source rows that carry the same storage identity under more than one
++  // public prefix. The catalog now publishes exactly one routable public identity per
++  // model, so this is a defensive guard against any source that still pushes two. It must
++  // run before synthetic variants are derived so those rows inherit a single base.
++  finalModels = dedupeCanonicalModelIdentities(finalModels);
  
-   // Advertise `claude/<id>` discovery-mirror aliases so Claude Code's gateway
-   // model discovery (which only lists `claude`/`anthropic`-prefixed ids) can see
-@@ -93,10 +90,10 @@ export function applyCatalogPostFilters(
-   // Derived from the already key-filtered list; skips codex/kimi (own suffix mechanism).
-   finalModels = appendSyncedEffortVariants(finalModels);
- 
+-  // Advertise `claude/<id>` discovery-mirror aliases so Claude Code's gateway
+-  // model discovery (which only lists `claude`/`anthropic`-prefixed ids) can see
+-  // every model this gate allows. Gated 3 levels deep (global > provider > model,
+-  // see ccDiscoveryAliases.ts) and default-off. Deliberately NOT filtered by model
+-  // `type` here — non-chat entries (embedding/image/etc.) get a mirror too; the
+-  // gate itself (default-off + explicit opt-in) is the operator's filter, not a
+-  // hardcoded type allowlist.
+-  const ccAliasGlobal = isCcAliasGlobalEnabled();
+-  const ccAliasSettings = getCcAliasSettingsBulk();
+-  if (ccAliasGlobal || ccAliasSettings.providers.size > 0 || ccAliasSettings.models.size > 0) {
+-    finalModels = appendCcDiscoveryAliases(
+-      finalModels,
+-      buildCcAliasPredicate({
+-        global: ccAliasGlobal,
+-        providers: ccAliasSettings.providers,
+-        models: ccAliasSettings.models,
+-      })
+-    );
++  // Claude Code only discovers `claude`/`anthropic`-prefixed ids. Keep those mirrors
++  // scoped to that client instead of publishing a second identity to every catalog
++  // consumer. The three-level operator gate remains authoritative.
++  if (isCcDiscoveryModelCatalogClient(request)) {
++    const ccAliasGlobal = isCcAliasGlobalEnabled();
++    const ccAliasSettings = getCcAliasSettingsBulk();
++    if (ccAliasGlobal || ccAliasSettings.providers.size > 0 || ccAliasSettings.models.size > 0) {
++      finalModels = appendCcDiscoveryAliases(
++        finalModels,
++        buildCcAliasPredicate({
++          global: ccAliasGlobal,
++          providers: ccAliasSettings.providers,
++          models: ccAliasSettings.models,
++        })
++      );
++    }
+   }
+-
+-  // #7694: advertise `<provider>/<model>-<tier>` variants for synced models that
+-  // captured `reasoning.supported_efforts` at sync time (capabilities.effort_tiers).
+-  // Derived from the already key-filtered list; skips codex/kimi (own suffix mechanism).
+-  finalModels = appendSyncedEffortVariants(finalModels);
+-
 -  // #4424 follow-up — drop exact-duplicate ids that slip through the per-source push
 -  // guards (e.g. `codex/gpt-5.5`, `veo-free/seedance` listed twice). Keyed by listing
 -  // identity (id, type, subtype) so the intentional same-id audio transcription/speech
@@ -4178,7 +4356,7 @@ index 822265d5c..398a7b548 100755
      { initGracefulShutdown },
      { initApiBridgeServer },
 diff --git a/src/lib/combos/builderOptions.ts b/src/lib/combos/builderOptions.ts
-index 8d73047e9..c9c9f4ce5 100644
+index 8d73047e9..0e8c8840b 100644
 --- a/src/lib/combos/builderOptions.ts
 +++ b/src/lib/combos/builderOptions.ts
 @@ -8,7 +8,7 @@ import {
@@ -4190,7 +4368,80 @@ index 8d73047e9..c9c9f4ce5 100644
  import { getResolvedModelCapabilities } from "@/lib/modelCapabilities";
  import { getSyncedCapabilities } from "@/lib/modelsDevSync";
  import { getModelsByProviderId } from "@/shared/constants/models";
-@@ -635,6 +635,21 @@ export async function getComboBuilderOptions(): Promise<ComboBuilderOptionsPaylo
+@@ -20,7 +20,6 @@ import {
+   isOpenAICompatibleProvider,
+ } from "@/shared/constants/providers";
+ import type { RegistryModel } from "@omniroute/open-sse/config/providerRegistry.ts";
+-import { appendSyncedEffortVariants } from "@omniroute/open-sse/utils/syncedEffortVariants";
+ 
+ type JsonRecord = Record<string, unknown>;
+ 
+@@ -384,64 +383,6 @@ function buildModelOptions(
+     });
+   }
+ 
+-  // #8072: expose reasoning-effort variants (e.g. model-high, model-medium)
+-  // in the Combo Builder picker, matching the catalog/Playground behaviour.
+-  // Convert synced models with supportedThinkingEfforts into catalog-shaped
+-  // entries, run the shared appendSyncedEffortVariants utility, and add any
+-  // new variant ids that aren't already in the model map.
+-  const catalogShaped = syncedModels
+-    .filter(
+-      (m): m is SyncedModelLike & { id: string; supportedThinkingEfforts: string[] } =>
+-        typeof m.id === "string" &&
+-        Array.isArray(m.supportedThinkingEfforts) &&
+-        m.supportedThinkingEfforts.length > 0
+-    )
+-    .map((m) => ({
+-      id: `${providerId}/${m.id}`,
+-      owned_by: providerId,
+-      root: m.id,
+-      name: m.name || m.id,
+-      capabilities: { effort_tiers: m.supportedThinkingEfforts },
+-    }));
+-  if (catalogShaped.length > 0) {
+-    // Track each tier variant's true base model id (the synced model's own raw,
+-    // unsuffixed id) directly while iterating tiers here. We can't re-derive the
+-    // base id from `variant.root` after calling appendSyncedEffortVariants: that
+-    // utility sets a variant's `root` to `${baseRoot}-${tier}` (still tier-suffixed,
+-    // see open-sse/utils/syncedEffortVariants.ts), not the base model id, so a
+-    // lookup keyed on it never matches an entry in modelMap and variants silently
+-    // fail to inherit contextLength/outputTokenLimit/supportedEndpoints/supportsThinking.
+-    const baseRawIdByVariantId = new Map<string, string>();
+-    for (const shaped of catalogShaped) {
+-      for (const tier of shaped.capabilities.effort_tiers) {
+-        if (typeof tier === "string" && tier.length > 0) {
+-          baseRawIdByVariantId.set(`${shaped.id}-${tier}`, shaped.root);
+-        }
+-      }
+-    }
+-
+-    const withVariants = appendSyncedEffortVariants(catalogShaped);
+-    for (const variant of withVariants) {
+-      if (typeof variant.id !== "string") continue;
+-      // Strip the provider prefix to get the raw model id for the builder
+-      const rawId = variant.id.startsWith(`${providerId}/`)
+-        ? variant.id.slice(providerId.length + 1)
+-        : variant.id;
+-      if (modelMap.has(rawId)) continue;
+-      const baseId = baseRawIdByVariantId.get(variant.id) ?? rawId;
+-      const base = modelMap.get(baseId);
+-      addModelOption(modelMap, providerId, {
+-        id: rawId,
+-        name: base ? `${base.name} (${rawId.slice(baseId.length + 1)})` : rawId,
+-        source: "imported",
+-        supportedEndpoints: base?.supportedEndpoints,
+-        contextLength: base?.contextLength ?? null,
+-        outputTokenLimit: base?.outputTokenLimit ?? null,
+-        supportsThinking: base?.supportsThinking,
+-      });
+-    }
+-  }
+-
+   for (const model of builtInModels) {
+     const resolved = getResolvedModelCapabilities({
+       provider: providerId,
+@@ -635,6 +576,21 @@ export async function getComboBuilderOptions(): Promise<ComboBuilderOptionsPaylo
        customModels
      );
  
@@ -6672,6 +6923,40 @@ index b34670855..807690c7d 100644
 +    assert.equal(getCompatibleProviderLabel(live.nodeId, nodes), CONFIGURED_NAME);
    });
  });
+diff --git a/tests/unit/8327-models-owned-by-prefix.test.ts b/tests/unit/8327-models-owned-by-prefix.test.ts
+index 01b130e0f..2cfe750fb 100644
+--- a/tests/unit/8327-models-owned-by-prefix.test.ts
++++ b/tests/unit/8327-models-owned-by-prefix.test.ts
+@@ -30,6 +30,7 @@ const core = await import("../../src/lib/db/core.ts");
+ const providersDb = await import("../../src/lib/db/providers.ts");
+ const modelsDb = await import("../../src/lib/db/models.ts");
+ const v1ModelsCatalog = await import("../../src/app/api/v1/models/catalog.ts");
++const dashboardModelsRoute = await import("../../src/app/api/models/route.ts");
+ 
+ // A realistic provider-node id shape, matching `openai-compatible-chat-<uuid>` per
+ // src/app/api/provider-nodes/route.ts / createProviderNode()'s `id: data.id || uuidv4()`.
+@@ -108,6 +109,21 @@ test("#8327: synced models on a compatible provider node expose the configured p
+     `owned_by must be the configured prefix "${CONFIGURED_PREFIX}", not the raw provider-node id — got "${entry!.owned_by}"`
+   );
+ 
++  const dashboardResponse = await dashboardModelsRoute.GET(
++    new Request("http://localhost/api/models")
++  );
++  const dashboardBody = (await dashboardResponse.json()) as {
++    models: Array<{ provider: string; model: string; fullModel: string }>;
++  };
++  assert.ok(
++    dashboardBody.models.some(
++      (model) =>
++        model.provider === CONFIGURED_PREFIX &&
++        model.model === "glm-5.2" &&
++        model.fullModel === `${CONFIGURED_PREFIX}/glm-5.2`
++    ),
++    "dashboard /api/models must adapt the synced compatible model from the unified catalog"
++  );
+   // The raw UUID-shaped provider-node id must never appear as owned_by anywhere.
+   for (const model of body.data) {
+     assert.equal(
 diff --git a/tests/unit/apikey-policy-fail-open-holes.test.ts b/tests/unit/apikey-policy-fail-open-holes.test.ts
 new file mode 100644
 index 000000000..640ad7008
@@ -8454,6 +8739,89 @@ index 000000000..6038d1fec
 +  assert.equal(response.status, 200);
 +  assertQuotaContract(await expectedQuotaIds(poolId), comboNames(body));
 +});
+diff --git a/tests/unit/combo-builder-effort-variants-8072.test.ts b/tests/unit/combo-builder-effort-variants-8072.test.ts
+index 166a00a17..fb5259f89 100644
+--- a/tests/unit/combo-builder-effort-variants-8072.test.ts
++++ b/tests/unit/combo-builder-effort-variants-8072.test.ts
+@@ -1,23 +1,8 @@
+ /**
+- * #8072 — the Combo Builder model picker did not expose the `<model>-<tier>`
+- * reasoning-effort variants that the catalog/Playground already surface for
+- * synced models declaring `supportedThinkingEfforts` (#7694). PR #8165 wired
+- * `buildModelOptions()` (src/lib/combos/builderOptions.ts) to run the shared
+- * `appendSyncedEffortVariants` utility and add the resulting variant ids.
+- *
+- * Regression guard for a baseId-derivation bug found in that wiring:
+- * `appendSyncedEffortVariants` sets a variant's own `root` field to
+- * `${baseRoot}-${tier}` (still tier-suffixed — see
+- * open-sse/utils/syncedEffortVariants.ts), not the true base model id. Deriving
+- * `baseId` from `variant.root` therefore never matches an entry in `modelMap`,
+- * so every effort variant silently fell back to bare defaults instead of
+- * inheriting contextLength/outputTokenLimit/supportedEndpoints/supportsThinking
+- * from its base model. This test seeds a synced model with
+- * `supportedThinkingEfforts` via `replaceSyncedAvailableModelsForConnection`,
+- * calls `getComboBuilderOptions()`, and asserts both that the variant ids
+- * appear and that they inherit the base entry's metadata.
+- */
+-import test from "node:test";
++ * Universal selectors publish one canonical model identity. Synced reasoning-effort
++ * metadata belongs to the base model; suffixed compatibility ids remain an inbound
++ * routing concern and must not multiply Combo Builder options.
++ */ import test from "node:test";
+ import assert from "node:assert/strict";
+ import fs from "node:fs";
+ import os from "node:os";
+@@ -36,7 +21,7 @@ test.after(() => {
+   fs.rmSync(TEST_DATA_DIR, { recursive: true, force: true });
+ });
+ 
+-test("#8072 buildModelOptions: synced <model>-<tier> effort variants appear in the Combo Builder picker and inherit the base model's metadata", async () => {
++test("Combo Builder keeps one base identity for synced effort-capable models", async () => {
+   const connection = await providersDb.createProviderConnection({
+     provider: "huggingface",
+     authType: "apikey",
+@@ -67,33 +52,17 @@ test("#8072 buildModelOptions: synced <model>-<tier> effort variants appear in t
+   const base = provider!.models.find((m) => m.id === BASE_MODEL_ID);
+   assert.ok(base, "base synced model must appear in the provider's models list");
+ 
++  assert.equal(base!.contextLength, 131072);
++  assert.equal(base!.outputTokenLimit, 8192);
++  assert.deepEqual(base!.supportedEndpoints, ["chat"]);
++  assert.equal(base!.supportsThinking, true);
++
+   for (const tier of ["low", "medium", "high"]) {
+     const variantId = `${BASE_MODEL_ID}-${tier}`;
+-    const variant = provider!.models.find((m) => m.id === variantId);
+-    assert.ok(variant, `expected a "${variantId}" effort-variant entry in the model picker`);
+-
+-    // The bug: baseId was derived from `variant.root` (tier-suffixed), which never
+-    // matched the base entry in modelMap, so these fields silently fell back to
+-    // null/undefined instead of being inherited from the base model.
+-    assert.equal(
+-      variant!.contextLength,
+-      base!.contextLength,
+-      `${variantId} must inherit contextLength from the base model`
+-    );
+-    assert.equal(
+-      variant!.outputTokenLimit,
+-      base!.outputTokenLimit,
+-      `${variantId} must inherit outputTokenLimit from the base model`
+-    );
+-    assert.deepEqual(
+-      variant!.supportedEndpoints,
+-      base!.supportedEndpoints,
+-      `${variantId} must inherit supportedEndpoints from the base model`
+-    );
+     assert.equal(
+-      variant!.supportsThinking,
+-      base!.supportsThinking,
+-      `${variantId} must inherit supportsThinking from the base model`
++      provider!.models.some((model) => model.id === variantId),
++      false,
++      `${variantId} must stay inbound-only instead of becoming a second picker identity`
+     );
+   }
+ });
 diff --git a/tests/unit/combo-target-node-prefix.test.ts b/tests/unit/combo-target-node-prefix.test.ts
 new file mode 100644
 index 000000000..76b4d1813
@@ -11405,25 +11773,69 @@ index a73e19a77..ceb0a979c 100644
  // ── OAUTH_TEST_CONFIG Validation ────────────────────────────────────────────
  
 diff --git a/tests/unit/quota-exclusive-catalog-short-circuit.test.ts b/tests/unit/quota-exclusive-catalog-short-circuit.test.ts
-index c3710a1cf..bf69b2c82 100644
+index c3710a1cf..e31d40ea3 100644
 --- a/tests/unit/quota-exclusive-catalog-short-circuit.test.ts
 +++ b/tests/unit/quota-exclusive-catalog-short-circuit.test.ts
-@@ -126,13 +126,13 @@ await test("chave quota-exclusive não constrói o catálogo completo", async (t
+@@ -125,38 +125,43 @@ await test("chave quota-exclusive não constrói o catálogo completo", async (t
+     );
    });
  
-   await t.test("os espelhos de discovery continuam valendo no caminho de cota", async () => {
+-  await t.test("os espelhos de discovery continuam valendo no caminho de cota", async () => {
 -    // A cadeia de pós-filtros (variantes de esforço, no-thinking, espelhos
-+    // A cadeia de pós-filtros (variantes de esforço, espelhos
-     // `claude/*` do discovery, dedupe) roda DEPOIS do filtro por chave, então o
-     // atalho da cota também a deve. Sem isso o Claude Code deixa de enxergar os
-     // modelos de um pool — que é justamente o fluxo-alvo.
+-    // `claude/*` do discovery, dedupe) roda DEPOIS do filtro por chave, então o
+-    // atalho da cota também a deve. Sem isso o Claude Code deixa de enxergar os
+-    // modelos de um pool — que é justamente o fluxo-alvo.
++  await t.test("espelhos de discovery ficam isolados ao cliente Claude Code", async () => {
      const prev = process.env.EXPOSE_CC_DISCOVERY_ALIASES;
      process.env.EXPOSE_CC_DISCOVERY_ALIASES = "1";
 -    // A chave do cache é `prefix|isCodex|apiKey|configuredOnly` — um query param
-+    // A chave do cache é `isCodex|apiKey|configuredOnly` — um query param
-     // qualquer NÃO a invalida, então a resposta do subteste anterior seria servida.
+-    // qualquer NÃO a invalida, então a resposta do subteste anterior seria servida.
      v1ModelsCatalog.__expireCatalogCacheForTest(
        v1ModelsCatalog.CATALOG_STALE_WHILE_REVALIDATE_MS + 1000
+     );
+     try {
+-      const res = await v1ModelsCatalog.getUnifiedModelsResponse(
++      const commonHeaders = { Authorization: `Bearer ${quotaKey.key}` };
++      const normalResponse = await v1ModelsCatalog.getUnifiedModelsResponse(
++        new Request("http://localhost/api/v1/models", { headers: commonHeaders })
++      );
++      assert.equal(normalResponse.status, 200);
++      const normalBody = (await normalResponse.json()) as { data: Array<{ id: string }> };
++      assert.equal(
++        normalBody.data.some((model) => model.id.startsWith("claude/")),
++        false,
++        "caller thường không được thấy identity mirror dành riêng cho Claude Code"
++      );
++
++      const claudeCodeResponse = await v1ModelsCatalog.getUnifiedModelsResponse(
+         new Request("http://localhost/api/v1/models", {
+-          headers: { Authorization: `Bearer ${quotaKey.key}` },
++          headers: { ...commonHeaders, "user-agent": "claude-cli/2.0" },
+         })
+       );
+-      assert.equal(res.status, 200);
+-      const body = (await res.json()) as { data: Array<{ id: string }> };
+-      const mirrors = body.data.filter((m) => m.id.startsWith("claude/"));
++      assert.equal(claudeCodeResponse.status, 200);
++      const claudeCodeBody = (await claudeCodeResponse.json()) as {
++        data: Array<{ id: string }>;
++      };
+       assert.ok(
+-        mirrors.length > 0,
+-        `com a flag ligada, a lista da chave de cota deve trazer espelhos claude/*; ` +
+-          `ids=${JSON.stringify(body.data.map((m) => m.id).slice(0, 6))}`
++        claudeCodeBody.data.some((model) => model.id.startsWith("claude/")),
++        "Claude Code vẫn phải nhận discovery mirrors khi operator bật gate"
+       );
+     } finally {
+       if (prev === undefined) delete process.env.EXPOSE_CC_DISCOVERY_ALIASES;
+       else process.env.EXPOSE_CC_DISCOVERY_ALIASES = prev;
+     }
+   });
+-
+   await t.test("uma chave normal continua construindo o catálogo completo", async () => {
+     // Prova que o observável funciona: sem a chave de cota, o build vai à rede.
+     const res = await v1ModelsCatalog.getUnifiedModelsResponse(
 diff --git a/tests/unit/single-public-prefix-contract.test.ts b/tests/unit/single-public-prefix-contract.test.ts
 new file mode 100644
 index 000000000..9e4c8921d
@@ -11922,6 +12334,57 @@ index 73c95336e..34f12403d 100644
  test("video catalog GET hides credential-backed providers without credentials", async () => {
    await seedConnection("kie");
  
+diff --git a/tests/unit/sync-reasoning-supported-efforts-7694.test.ts b/tests/unit/sync-reasoning-supported-efforts-7694.test.ts
+index f81440ea1..d8673f319 100644
+--- a/tests/unit/sync-reasoning-supported-efforts-7694.test.ts
++++ b/tests/unit/sync-reasoning-supported-efforts-7694.test.ts
+@@ -24,18 +24,16 @@ const providersDb = await import("../../src/lib/db/providers.ts");
+ const modelsDb = await import("../../src/lib/db/models.ts");
+ const v1ModelsCatalog = await import("../../src/app/api/v1/models/catalog.ts");
+ const { getModelInfo } = await import("../../src/sse/services/model.ts");
+-const { normalizeDiscoveredModels, detectSupportedThinkingEfforts } = await import(
+-  "../../src/lib/providerModels/modelDiscovery.ts"
+-);
++const { normalizeDiscoveredModels, detectSupportedThinkingEfforts } =
++  await import("../../src/lib/providerModels/modelDiscovery.ts");
+ const { splitSyncedEffortSuffix } = await import("../../open-sse/services/model.ts");
+ const {
+   appendSyncedEffortVariants,
+   shouldExposeSyncedEffortVariants,
+   SYNCED_EFFORT_SKIP_PROVIDERS,
+ } = await import("../../open-sse/utils/syncedEffortVariants.ts");
+-const { applyDefaultReasoningEffort } = await import(
+-  "../../open-sse/services/defaultReasoningEffort.ts"
+-);
++const { applyDefaultReasoningEffort } =
++  await import("../../open-sse/services/defaultReasoningEffort.ts");
+ 
+ async function resetStorage() {
+   core.resetDbInstance();
+@@ -170,10 +168,10 @@ test("#7694 catalog: a synced model with no supportedThinkingEfforts gets no cap
+ });
+ 
+ // ---------------------------------------------------------------------------
+-// Step 4: catalog generates `-{effort}` alias ids per declared tier.
++// Step 4: universal catalog keeps effort aliases inbound-only.
+ // ---------------------------------------------------------------------------
+ 
+-test("#7694 catalog: GET /api/v1/models advertises a <model>-<tier> alias id per declared effort tier", async () => {
++test("#7694 catalog: GET /api/v1/models publishes only the base identity for effort-capable models", async () => {
+   const connection = await seedProviderConnection("huggingface");
+ 
+   await modelsDb.replaceSyncedAvailableModelsForConnection("huggingface", connection.id, [
+@@ -193,8 +191,8 @@ test("#7694 catalog: GET /api/v1/models advertises a <model>-<tier> alias id per
+ 
+   const highVariant = body.data.find((m) => m.id === `${baseEntry!.id}-high`);
+   const lowVariant = body.data.find((m) => m.id === `${baseEntry!.id}-low`);
+-  assert.ok(highVariant, `expected a "${baseEntry!.id}-high" alias entry`);
+-  assert.ok(lowVariant, `expected a "${baseEntry!.id}-low" alias entry`);
++  assert.equal(highVariant, undefined, "high effort alias must stay inbound-only");
++  assert.equal(lowVariant, undefined, "low effort alias must stay inbound-only");
+ });
+ 
+ // ---------------------------------------------------------------------------
 diff --git a/tests/unit/usage-analytics-provider-display-name-7534.test.ts b/tests/unit/usage-analytics-provider-display-name-7534.test.ts
 index e060f7eb5..e9fa1c379 100644
 --- a/tests/unit/usage-analytics-provider-display-name-7534.test.ts
