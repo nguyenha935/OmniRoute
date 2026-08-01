@@ -1920,7 +1920,15 @@ export async function handleChatCore({
 
   let translatedBody = body;
   const isClaudePassthrough = sourceFormat === FORMATS.CLAUDE && targetFormat === FORMATS.CLAUDE;
-  const isClaudeCodeCompatible = isClaudeCodeCompatibleProvider(provider);
+  // A provider may expose the Claude Code wire image as its default protocol while
+  // selecting a declared OpenAI alternate on a connection (for example AgentRouter).
+  // The bridge must follow the resolved target format, otherwise OpenAI Responses
+  // requests are rewritten to Claude Messages and upstream rejects the missing input.
+  const configuredTargetFormat = credentials?.providerSpecificData?.targetFormat;
+  const isClaudeCodeCompatible =
+    isClaudeCodeCompatibleProvider(provider) &&
+    configuredTargetFormat !== FORMATS.OPENAI &&
+    configuredTargetFormat !== FORMATS.OPENAI_RESPONSES;
   const isClaudeCodeSemanticPassthrough = isClaudeCodeSemanticPassthroughRequest({
     provider,
     sourceFormat,

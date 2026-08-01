@@ -788,6 +788,48 @@ index 95842ad47..b72c307d0 100644
  import { getProviderServiceKinds } from "@/lib/providers/serviceKindIndex";
  import { providerLacksModelListing } from "@/lib/providers/modelListingCapability";
  import { providerUsesCuratedModelsOnly } from "@/lib/providers/modelListingCapability";
+diff --git a/src/app/(dashboard)/dashboard/translator/hooks/useAvailableModels.tsx b/src/app/(dashboard)/dashboard/translator/hooks/useAvailableModels.tsx
+index 0a74df038..2ce219f5f 100644
+--- a/src/app/(dashboard)/dashboard/translator/hooks/useAvailableModels.tsx
++++ b/src/app/(dashboard)/dashboard/translator/hooks/useAvailableModels.tsx
+@@ -1,7 +1,6 @@
+ "use client";
+ 
+ import { useState, useEffect, useCallback, useMemo } from "react";
+-import { compareTr } from "@/shared/utils/turkishText";
+ import type { ModelReasoningCapabilities } from "@/app/(dashboard)/dashboard/playground/components/reasoningControlUtils";
+ 
+ /**
+@@ -38,6 +37,16 @@ export function filterModelsByProvider(allModels: string[], provider?: string):
+     : allModels;
+ }
+ 
++/**
++ * Project catalog entries to their id list, preserving the server's canonical
++ * provider-grouped order verbatim. No client-side re-sort, which would re-fragment it.
++ */
++export function entriesToModelIds(entries: Array<{ id?: unknown }>): string[] {
++  return entries
++    .map((m) => m.id)
++    .filter((id): id is string => typeof id === "string" && id.length > 0);
++}
++
+ export function useAvailableModels(provider?: string) {
+   const [model, setModel] = useState("");
+   const [allModels, setAllModels] = useState<string[]>([]);
+@@ -55,7 +64,11 @@ export function useAvailableModels(provider?: string) {
+         const res = await fetch("/api/v1/models");
+         const data = await res.json();
+         const entries = data.data || [];
+-        const models = entries.map((m) => m.id).sort((a, b) => compareTr(a, b));
++        // Inherit the server's canonical provider-grouped order (combos first,
++        // registry precedence, grouped by owned_by). No client-side re-sort: a flat
++        // alphabetical sort here would discard that contract and re-fragment the
++        // chooser. pickModelForFormat still finds format matches by prefix.
++        const models = entriesToModelIds(entries);
+         const caps: Record<string, ModelReasoningCapabilities> = {};
+         for (const entry of entries) {
+           if (entry && typeof entry.id === "string" && entry.capabilities) {
 diff --git a/src/app/api/assess/route.ts b/src/app/api/assess/route.ts
 index a8c83bedd..cf7127f5a 100644
 --- a/src/app/api/assess/route.ts
@@ -1006,10 +1048,10 @@ index c13466a80..fa23d7e2e 100644
      return NextResponse.json({ combos, total });
    } catch (error) {
 diff --git a/src/app/api/models/route.ts b/src/app/api/models/route.ts
-index 9c3d07822..8a4742cf5 100644
+index 9c3d07822..7b735eea3 100644
 --- a/src/app/api/models/route.ts
 +++ b/src/app/api/models/route.ts
-@@ -1,114 +1,62 @@
+@@ -1,114 +1,75 @@
  import { NextResponse } from "next/server";
 -import { getModelAliases, setModelAlias, getProviderConnections } from "@/models";
 -import { AI_MODELS, PROVIDER_ID_TO_ALIAS } from "@/shared/constants/models";
@@ -1023,16 +1065,30 @@ index 9c3d07822..8a4742cf5 100644
 -import { isFreeModel, providerHasFreeModels } from "@/shared/utils/freeModels";
  
 -// GET /api/models - Get models with aliases (only from active providers by default)
++/**
++ * Derive provider and model fields from a catalog row.
++ * Provider is the prefix before the first slash; model is the full suffix after it,
++ * preserving any nested slashes (e.g., openrouter/anthropic/claude-3 → model="anthropic/claude-3").
++ * For slashless IDs, provider falls back to owned_by and model to root.
++ */
++export function deriveProviderAndModel(model: Record<string, unknown>): {
++  provider: string;
++  model: string;
++  fullModel: string;
++} {
++  const fullModel = model.id as string;
++  const separator = fullModel.indexOf("/");
++  const provider = separator > 0 ? fullModel.slice(0, separator) : String(model.owned_by || "");
++  const rawModel = separator > 0 ? fullModel.slice(separator + 1) : String(model.root || fullModel);
++  return { provider, model: rawModel, fullModel };
++}
++
 +// GET /api/models - Adapt the canonical unified catalog to the legacy dashboard shape.
  export async function GET(request: Request) {
    try {
 -    const { searchParams } = new URL(request.url);
 -    const showAll = searchParams.get("all") === "true";
-+    const requestUrl = new URL(request.url);
-+    const showAll = requestUrl.searchParams.get("all") === "true";
-+    const catalogUrl = new URL("/v1/models", requestUrl.origin);
-+    if (!showAll) catalogUrl.searchParams.set("configuredOnly", "true");
- 
+-
 -    const modelAliases = await getModelAliases();
 -
 -    // Get active provider connections to filter available models
@@ -1079,7 +1135,11 @@ index 9c3d07822..8a4742cf5 100644
 -          }
 -          return collected;
 -        };
--
++    const requestUrl = new URL(request.url);
++    const showAll = requestUrl.searchParams.get("all") === "true";
++    const catalogUrl = new URL("/v1/models", requestUrl.origin);
++    if (!showAll) catalogUrl.searchParams.set("configuredOnly", "true");
+ 
 -        activeProviders = new Set(
 -          AI_MODELS.flatMap((model: any) => {
 -            const providerKeys = [model.provider, PROVIDER_ID_TO_ALIAS[model.provider]];
@@ -1141,12 +1201,7 @@ index 9c3d07822..8a4742cf5 100644
 +        return true;
 +      })
 +      .map((model: Record<string, unknown>) => {
-+        const fullModel = model.id as string;
-+        const separator = fullModel.indexOf("/");
-+        const provider =
-+          separator > 0 ? fullModel.slice(0, separator) : String(model.owned_by || "");
-+        const rawModel =
-+          separator > 0 ? fullModel.slice(separator + 1) : String(model.root || fullModel);
++        const { provider, model: rawModel, fullModel } = deriveProviderAndModel(model);
 +        return {
 +          ...model,
 +          provider,
@@ -2436,6 +2491,53 @@ index 1dcd106c3..93acb37f7 100644
  export function parseJsonStringArray(value: unknown): string[] {
    if (typeof value !== "string" || value.trim().length === 0) return [];
    try {
+diff --git a/src/app/api/v1/models/catalogOrder.ts b/src/app/api/v1/models/catalogOrder.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..d34645e90098fc813b6c4cf4dd172566ae48e779
+GIT binary patch
+literal 4058
+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
+E1ENAtmH+?%
+
+literal 0
+HcmV?d00001
+
 diff --git a/src/app/api/v1/models/catalogProviderMaps.ts b/src/app/api/v1/models/catalogProviderMaps.ts
 index 6de91e645..7d3594f46 100644
 --- a/src/app/api/v1/models/catalogProviderMaps.ts
@@ -2671,10 +2773,10 @@ index 6de91e645..7d3594f46 100644
      if (modelStr.startsWith(prefixWithSlash)) {
        const modelId = modelStr.slice(prefixWithSlash.length).trim();
 diff --git a/src/app/api/v1/models/catalogResponse.ts b/src/app/api/v1/models/catalogResponse.ts
-index dee78d995..f1e24ea21 100644
+index dee78d995..98ba70d21 100644
 --- a/src/app/api/v1/models/catalogResponse.ts
 +++ b/src/app/api/v1/models/catalogResponse.ts
-@@ -8,21 +8,18 @@
+@@ -8,21 +8,19 @@
   * mirrors the first time it was written as a duplicate.
   */
  
@@ -2687,6 +2789,7 @@ index dee78d995..f1e24ea21 100644
  import { hasEligibleConnectionForModel } from "@/domain/connectionModelRules";
 -import { dedupeExactCatalogIds } from "./catalogDedupe";
 +import { dedupeCanonicalModelIdentities, dedupeExactCatalogIds } from "./catalogDedupe";
++import { sortCatalogModelsProviderGrouped } from "./catalogOrder";
  import {
    disambiguateCatalogModelNames,
    enrichCatalogModelEntry,
@@ -2698,7 +2801,7 @@ index dee78d995..f1e24ea21 100644
  
  /**
   * Post-filter chain applied AFTER the API-key filter, so variants and mirrors are
-@@ -37,7 +34,6 @@ export function applyCatalogPostFilters(
+@@ -37,7 +35,6 @@ export function applyCatalogPostFilters(
    models: Array<Record<string, any>>,
    ctx: {
      connections: any;
@@ -2706,7 +2809,7 @@ index dee78d995..f1e24ea21 100644
      aliasToProviderId: Record<string, string>;
    }
  ): Array<Record<string, any>> {
-@@ -51,52 +47,33 @@ export function applyCatalogPostFilters(
+@@ -51,52 +48,33 @@ export function applyCatalogPostFilters(
      });
    }
  
@@ -2784,6 +2887,28 @@ index dee78d995..f1e24ea21 100644
    finalModels = dedupeExactCatalogIds(finalModels);
  
    return finalModels;
+@@ -130,6 +108,12 @@ export function finalizeCatalogResponse(
+       return maybeOmitCatalogModelName(listedModel, includeModelNames);
+     })
+   );
++  // Canonical provider-grouped publication: one contiguous block per provider,
++  // combos pinned first. Stable — preserves combo sort_order, connection priority,
++  // and equal-id audio twins. Grouped by owned_by (canonical identity), not the
++  // routing alias prefix. Applied after enrichment/disambiguation so the final
++  // serialized order is what every consumer sees; cached as part of the body.
++  const orderedModels = sortCatalogModelsProviderGrouped(enrichedModels);
+   // Codex CLI compatibility: its model-catalog refresh (codex_models_manager) does
+   // GET /v1/models?client_version=<v> and decodes a JSON object with a TOP-LEVEL
+   // `models` array, so the OpenAI-standard `{object,data}` shape makes it fail with
+@@ -146,7 +130,7 @@ export function finalizeCatalogResponse(
+   // keeps codex on its built-in model info — same inference as today, minus the error.
+   const responseBody: Record<string, unknown> = {
+     object: "list",
+-    data: enrichedModels,
++    data: orderedModels,
+   };
+   if (isCodexModelCatalogClient(request)) {
+     responseBody.models = [];
 diff --git a/src/app/api/v1/providers/[provider]/models/route.ts b/src/app/api/v1/providers/[provider]/models/route.ts
 index 9e5450be9..f42762146 100644
 --- a/src/app/api/v1/providers/[provider]/models/route.ts
@@ -6957,6 +7082,150 @@ index 01b130e0f..2cfe750fb 100644
    // The raw UUID-shaped provider-node id must never appear as owned_by anywhere.
    for (const model of body.data) {
      assert.equal(
+diff --git a/tests/unit/api-models-order-and-derivation.test.ts b/tests/unit/api-models-order-and-derivation.test.ts
+new file mode 100644
+index 000000000..222cf0294
+--- /dev/null
++++ b/tests/unit/api-models-order-and-derivation.test.ts
+@@ -0,0 +1,138 @@
++/**
++ * /api/models route: exact ID sequence preservation and provider/model derivation.
++ * Combos are excluded by isUsableChatModel, so combo-first is a /v1/models contract
++ * (catalog-order-contract.test.ts), not an /api/models assertion.
++ */
++import test from "node:test";
++import assert from "node:assert/strict";
++import fs from "node:fs";
++import os from "node:os";
++import path from "node:path";
++
++const TEST_DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "omniroute-api-models-order-"));
++process.env.DATA_DIR = TEST_DATA_DIR;
++process.env.API_KEY_SECRET = process.env.API_KEY_SECRET || "api-models-order-secret";
++
++const core = await import("../../src/lib/db/core.ts");
++const providersDb = await import("../../src/lib/db/providers.ts");
++const apiKeysDb = await import("../../src/lib/db/apiKeys.ts");
++const v1ModelsCatalog = await import("../../src/app/api/v1/models/catalog.ts");
++const modelsRoute = await import("../../src/app/api/models/route.ts");
++const { isUsableChatModel } = await import("../../src/lib/vscode/usableChatModel.ts");
++
++async function resetStorage() {
++  core.resetDbInstance();
++  apiKeysDb.resetApiKeyState();
++  fs.rmSync(TEST_DATA_DIR, { recursive: true, force: true });
++  fs.mkdirSync(TEST_DATA_DIR, { recursive: true });
++  v1ModelsCatalog.__resetCatalogBuilderRunsForTest();
++}
++
++async function seedConnection(provider: string) {
++  return providersDb.createProviderConnection({
++    provider,
++    authType: "apikey",
++    name: `${provider}-order-test`,
++    apiKey: "sk-test",
++    isActive: true,
++    testStatus: "active",
++    providerSpecificData: {},
++  });
++}
++
++test.beforeEach(resetStorage);
++test.after(() => {
++  core.resetDbInstance();
++  apiKeysDb.resetApiKeyState();
++  try {
++    fs.rmSync(TEST_DATA_DIR, { recursive: true, force: true });
++  } catch {
++    /* best-effort */
++  }
++});
++
++test("deriveProviderAndModel: exact fields including nested slash suffix", async () => {
++  const { deriveProviderAndModel } = modelsRoute;
++  // Standard case
++  const standard = deriveProviderAndModel({ id: "openai/gpt-4", owned_by: "openai" });
++  assert.deepEqual(standard, {
++    provider: "openai",
++    model: "gpt-4",
++    fullModel: "openai/gpt-4",
++  });
++
++  // Nested slash: openrouter/anthropic/claude-3 → model="anthropic/claude-3"
++  const nested = deriveProviderAndModel({
++    id: "openrouter/anthropic/claude-3",
++    owned_by: "openrouter",
++  });
++  assert.deepEqual(nested, {
++    provider: "openrouter",
++    model: "anthropic/claude-3",
++    fullModel: "openrouter/anthropic/claude-3",
++  });
++
++  // Slashless: provider from owned_by, model from root
++  const slashless = deriveProviderAndModel({
++    id: "bare-model",
++    owned_by: "someprovider",
++    root: "bare-root",
++  });
++  assert.deepEqual(slashless, {
++    provider: "someprovider",
++    model: "bare-root",
++    fullModel: "bare-model",
++  });
++});
++
++test("/api/models: exact ID sequence equals filtered v1 catalog, multi-provider blocks contiguous", async () => {
++  await seedConnection("openai");
++  await seedConnection("anthropic");
++
++  // Authoritative catalog
++  const catalogRes = await v1ModelsCatalog.getUnifiedModelsResponse(
++    new Request("http://localhost/api/v1/models?configuredOnly=true")
++  );
++  assert.equal(catalogRes.status, 200);
++  const catalogBody = (await catalogRes.json()) as { data: Array<Record<string, unknown>> };
++
++  // Apply the same filter + dedup the route performs
++  const seen = new Set<string>();
++  const expectedIds: string[] = [];
++  for (const model of catalogBody.data) {
++    if (!isUsableChatModel(model as any)) continue;
++    const id = model.id as string;
++    if (typeof id !== "string" || seen.has(id)) continue;
++    seen.add(id);
++    expectedIds.push(id);
++  }
++
++  // Non-vacuous preconditions
++  assert.ok(expectedIds.length > 0, "filtered catalog has usable chat models");
++  const expectedProviders = [...new Set(expectedIds.map((id) => id.split("/")[0]))];
++  assert.ok(
++    expectedProviders.length >= 2,
++    `expected at least 2 providers, got: ${JSON.stringify(expectedProviders)}`
++  );
++
++  // /api/models
++  const apiRes = await modelsRoute.GET(new Request("http://localhost/api/models"));
++  assert.equal(apiRes.status, 200);
++  const apiBody = (await apiRes.json()) as {
++    models: Array<{ id: string; provider: string }>;
++  };
++
++  const actualIds = apiBody.models.map((m) => m.id);
++  assert.deepEqual(actualIds, expectedIds, "exact ID sequence equality");
++
++  // Contiguity: each provider appears in exactly one contiguous block
++  const providers = apiBody.models.map((m) => m.provider);
++  const blockCount = providers.filter(
++    (p, i) => i === 0 || providers[i - 1] !== p
++  ).length;
++  assert.equal(
++    blockCount,
++    expectedProviders.length,
++    `each provider in one contiguous block; got ${blockCount} blocks for ${expectedProviders.length} providers`
++  );
++});
 diff --git a/tests/unit/apikey-policy-fail-open-holes.test.ts b/tests/unit/apikey-policy-fail-open-holes.test.ts
 new file mode 100644
 index 000000000..640ad7008
@@ -8082,6 +8351,302 @@ index 48ce36435..04102f6fe 100644
  test("catalogRequest: isCodexModelCatalogClient detects codex originator/user-agent", () => {
    const byOriginator = new Request("https://x/v1/models", {
      headers: { originator: "codex_cli_rs" },
+diff --git a/tests/unit/catalog-order-contract.test.ts b/tests/unit/catalog-order-contract.test.ts
+new file mode 100644
+index 000000000..3c25d645c
+--- /dev/null
++++ b/tests/unit/catalog-order-contract.test.ts
+@@ -0,0 +1,149 @@
++/**
++ * tests/unit/catalog-order-contract.test.ts
++ *
++ * Provider-grouped ordering contract for the unified model catalog.
++ *
++ * Red-first: proves the current tree publishes fragmented provider blocks.
++ * Uses the same DB module set and reset pattern as models-catalog-route.test.ts.
++ * /api/models, quota-short-circuit, and inbound-alias cases are split into
++ * separate files to avoid extra module imports that break the sql.js lifecycle.
++ */
++
++import test from "node:test";
++import assert from "node:assert/strict";
++import fs from "node:fs";
++import os from "node:os";
++import path from "node:path";
++
++const TEST_DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "omniroute-catalog-order-"));
++process.env.DATA_DIR = TEST_DATA_DIR;
++process.env.API_KEY_SECRET = process.env.API_KEY_SECRET || "catalog-order-secret";
++
++const core = await import("../../src/lib/db/core.ts");
++const providersDb = await import("../../src/lib/db/providers.ts");
++const modelsDb = await import("../../src/lib/db/models.ts");
++const combosDb = await import("../../src/lib/db/combos.ts");
++const apiKeysDb = await import("../../src/lib/db/apiKeys.ts");
++const v1ModelsCatalog = await import("../../src/app/api/v1/models/catalog.ts");
++
++async function resetStorage() {
++  core.resetDbInstance();
++  apiKeysDb.resetApiKeyState();
++  fs.rmSync(TEST_DATA_DIR, { recursive: true, force: true });
++  fs.mkdirSync(TEST_DATA_DIR, { recursive: true });
++  v1ModelsCatalog.__resetCatalogBuilderRunsForTest();
++}
++
++test.beforeEach(async () => {
++  await resetStorage();
++});
++
++test.after(async () => {
++  core.resetDbInstance();
++  apiKeysDb.resetApiKeyState();
++  fs.rmSync(TEST_DATA_DIR, { recursive: true, force: true });
++});
++
++async function seedConnection(provider: string, overrides: Record<string, unknown> = {}) {
++  return providersDb.createProviderConnection({
++    provider,
++    authType: (overrides.authType as string) || "apikey",
++    name: `${provider}-test-${Math.random().toString(16).slice(2, 8)}`,
++    apiKey: (overrides.apiKey as string) || "sk-test",
++    accessToken: overrides.accessToken as string | undefined,
++    isActive: true,
++    testStatus: "active",
++    providerSpecificData: {},
++  }) as Promise<{ id: string }>;
++}
++
++function countProviderBlocks(ownedBySequence: string[]): number {
++  const blocks: string[] = [];
++  for (const ownedBy of ownedBySequence) {
++    if (blocks.length === 0 || blocks[blocks.length - 1] !== ownedBy) {
++      blocks.push(ownedBy);
++    }
++  }
++  return blocks.length;
++}
++
++// ─────────────────────────────────────────────────────────────────────────────
++// Exact provider-grouped order: blocks === distinct owned_by
++// ─────────────────────────────────────────────────────────────────────────────
++
++test("catalog /v1/models: exact provider-grouped order (blocks === distinct owned_by)", async () => {
++  // Seed 3 providers with synced models to guarantee fragmentation if unsorted.
++  // The static registry also emits models for active providers, so the catalog
++  // will contain rows from openai, anthropic, and opencode from multiple loops.
++  const conn1 = await seedConnection("openai");
++  const conn2 = await seedConnection("anthropic");
++  const conn3 = await seedConnection("opencode");
++
++  await modelsDb.replaceSyncedAvailableModelsForConnection("openai", (conn1 as any).id, [
++    { id: "gpt-4", name: "GPT-4" },
++    { id: "gpt-3.5-turbo", name: "GPT-3.5 Turbo" },
++  ]);
++  await modelsDb.replaceSyncedAvailableModelsForConnection("anthropic", (conn2 as any).id, [
++    { id: "claude-3-opus", name: "Claude 3 Opus" },
++  ]);
++  await modelsDb.replaceSyncedAvailableModelsForConnection("opencode", (conn3 as any).id, [
++    { id: "kimi-k2", name: "Kimi K2" },
++    { id: "glm-4", name: "GLM-4" },
++  ]);
++
++  const response = await v1ModelsCatalog.getUnifiedModelsResponse(
++    new Request("http://localhost/v1/models?configuredOnly=true")
++  );
++  assert.equal(response.status, 200);
++  const body = (await response.json()) as { data: Array<{ owned_by: string }> };
++
++  // Guarantee rows from all 3 seeded providers are present
++  const ownedByValues = body.data.map((m) => m.owned_by);
++  const distinctOwnedBy = new Set(ownedByValues);
++  assert.ok(distinctOwnedBy.has("openai"), "openai rows present");
++  assert.ok(distinctOwnedBy.has("anthropic"), "anthropic rows present");
++  assert.ok(distinctOwnedBy.has("opencode"), "opencode rows present");
++
++  // Exact invariant: each provider appears in exactly one contiguous block
++  const blockCount = countProviderBlocks(ownedByValues);
++  assert.equal(
++    blockCount,
++    distinctOwnedBy.size,
++    `Fragmented: ${blockCount} blocks for ${distinctOwnedBy.size} distinct providers. ` +
++      `Sequence: ${ownedByValues.join(", ")}`
++  );
++});
++
++// ─────────────────────────────────────────────────────────────────────────────
++// Combo block pinned first
++// ─────────────────────────────────────────────────────────────────────────────
++
++test("catalog /v1/models: combo block appears first", async () => {
++  const conn = await seedConnection("openai");
++  await modelsDb.replaceSyncedAvailableModelsForConnection("openai", (conn as any).id, [
++    { id: "gpt-4", name: "GPT-4" },
++  ]);
++  await combosDb.createCombo({
++    name: "test-combo",
++    modelIds: ["openai/gpt-4"],
++    strategy: "fallback",
++    isActive: true,
++  });
++
++  const response = await v1ModelsCatalog.getUnifiedModelsResponse(
++    new Request("http://localhost/v1/models?configuredOnly=true")
++  );
++  const body = (await response.json()) as { data: Array<{ owned_by: string }> };
++
++  const hasCombo = body.data.some((m) => m.owned_by === "combo");
++  const hasNonCombo = body.data.some((m) => m.owned_by !== "combo");
++  assert.ok(hasCombo, "combo rows present");
++  assert.ok(hasNonCombo, "non-combo rows present");
++
++  const firstNonComboIndex = body.data.findIndex((m) => m.owned_by !== "combo");
++  const lastComboIndex = body.data.map((m) => m.owned_by).lastIndexOf("combo");
++  assert.ok(
++    lastComboIndex < firstNonComboIndex,
++    `Combo block not first: last combo at ${lastComboIndex}, first non-combo at ${firstNonComboIndex}`
++  );
++});
+diff --git a/tests/unit/catalog-order-helper.test.ts b/tests/unit/catalog-order-helper.test.ts
+new file mode 100644
+index 000000000..f01571d1b
+--- /dev/null
++++ b/tests/unit/catalog-order-helper.test.ts
+@@ -0,0 +1,135 @@
++import test from "node:test";
++import assert from "node:assert/strict";
++import { sortCatalogModelsProviderGrouped } from "../../src/app/api/v1/models/catalogOrder.ts";
++
++test("combo pinning: combos move to front regardless of input or registry order", () => {
++  // Combos are at input positions 1 and 3, and "combo" is not a registry key
++  // (would rank Infinity/unknown without pinning). Asserting they land first
++  // proves pinning overrides both input order and registry precedence.
++  const input = [
++    { id: "openai/gpt-4", owned_by: "openai" },
++    { id: "auto/smart", owned_by: "combo" },
++    { id: "anthropic/claude", owned_by: "anthropic" },
++    { id: "auto/cheap", owned_by: "combo" },
++  ];
++  const out = sortCatalogModelsProviderGrouped(input);
++  assert.deepEqual(
++    out.map((m) => m.id),
++    ["auto/smart", "auto/cheap", "openai/gpt-4", "anthropic/claude"]
++  );
++});
++
++test("canonical owned_by grouping: oc prefix with opencode owned_by stays contiguous", () => {
++  const input = [
++    { id: "oc/kimi-k2", owned_by: "opencode" },
++    { id: "openai/gpt-4", owned_by: "openai" },
++    { id: "oc/glm-5", owned_by: "opencode" },
++    { id: "openai/gpt-5", owned_by: "openai" },
++  ];
++  const out = sortCatalogModelsProviderGrouped(input);
++  const keys = out.map((m) => m.owned_by);
++  assert.equal(keys.lastIndexOf("opencode") - keys.indexOf("opencode"), 1);
++  assert.equal(keys.lastIndexOf("openai") - keys.indexOf("openai"), 1);
++});
++
++test("registry precedence over code-unit: qoder before agy (both oauth)", () => {
++  // oauth.ts key order: qoder (idx 3) before agy (idx 4); code-unit: agy < qoder.
++  const input = [
++    { id: "agy/gemini", owned_by: "agy" },
++    { id: "qoder/model", owned_by: "qoder" },
++  ];
++  const out = sortCatalogModelsProviderGrouped(input);
++  assert.deepEqual(
++    out.map((m) => m.owned_by),
++    ["qoder", "agy"]
++  );
++});
++
++test("registry precedence over code-unit: zed (oauth) before openai (apikey)", () => {
++  // oauth tier precedes apikey tier; code-unit: openai < zed.
++  const input = [
++    { id: "openai/gpt-4", owned_by: "openai" },
++    { id: "zed/model", owned_by: "zed" },
++  ];
++  const out = sortCatalogModelsProviderGrouped(input);
++  assert.deepEqual(
++    out.map((m) => m.owned_by),
++    ["zed", "openai"]
++  );
++});
++
++test("unknown providers: deterministic code-unit order", () => {
++  const input = [
++    { id: "zzz-unknown/m1", owned_by: "zzz-unknown" },
++    { id: "Zed-unknown/m2", owned_by: "Zed-unknown" },
++    { id: "aaa-unknown/m3", owned_by: "aaa-unknown" },
++    { id: "9nine-unknown/m4", owned_by: "9nine-unknown" },
++  ];
++  const out = sortCatalogModelsProviderGrouped(input);
++  // Code-unit: '9'(0x39) < 'Z'(0x5A) < 'a'(0x61) < 'z'(0x7A).
++  assert.deepEqual(
++    out.map((m) => m.owned_by),
++    ["9nine-unknown", "Zed-unknown", "aaa-unknown", "zzz-unknown"]
++  );
++});
++
++test("malformed rows: fallback to id-prefix, exact ordered sequence", () => {
++  // Empty id ("") is legal by the Record<string, unknown> type; group key ""
++  // sorts first among unknown fallbacks by code unit. Covers missing owned_by,
++  // empty owned_by, slashless id, and empty id, plus stability within a group.
++  const input = [
++    { id: "openai/gpt-4", owned_by: "openai" }, // registry group
++    { id: "weird/model", owned_by: "" }, // empty owned_by → prefix "weird"
++    { id: "slashless", owned_by: "" }, // empty owned_by, no slash → "slashless"
++    { id: "openai/gpt-5", owned_by: "openai" }, // registry group
++    { id: "weird/model2" }, // missing owned_by → prefix "weird"
++    { id: "", owned_by: "" }, // empty id → group key ""
++  ];
++  const out = sortCatalogModelsProviderGrouped(input);
++  // openai (finite registry rank) first in input order; then unknown fallbacks
++  // by code-unit of group key: "" < "slashless" < "weird"; stable within "weird".
++  assert.deepEqual(
++    out.map((m) => m.id),
++    ["openai/gpt-4", "openai/gpt-5", "", "slashless", "weird/model", "weird/model2"]
++  );
++});
++
++test("stability: equal-ID twins preserve input order", () => {
++  const input = [
++    { id: "openai/gpt-4", owned_by: "openai", subtype: "chat" },
++    { id: "openai/gpt-4", owned_by: "openai", subtype: "speech" },
++    { id: "openai/gpt-3.5", owned_by: "openai" },
++  ];
++  const out = sortCatalogModelsProviderGrouped(input);
++  assert.equal(out[0].subtype, "chat");
++  assert.equal(out[1].subtype, "speech");
++  assert.equal(out[2].id, "openai/gpt-3.5");
++});
++
++test("non-mutation: input array and elements untouched", () => {
++  const input = [
++    { id: "openai/gpt-4", owned_by: "openai" },
++    { id: "anthropic/claude", owned_by: "anthropic" },
++  ];
++  const snapshot = JSON.parse(JSON.stringify(input));
++  const out = sortCatalogModelsProviderGrouped(input);
++  assert.deepEqual(input, snapshot);
++  assert.notEqual(out, input);
++  assert.equal(out.length, input.length);
++});
++
++test("no drops or dupes: every row present exactly once", () => {
++  const input = [
++    { id: "openai/gpt-4", owned_by: "openai" },
++    { id: "auto/x", owned_by: "combo" },
++    { id: "anthropic/claude", owned_by: "anthropic" },
++    { id: "weird/m", owned_by: "" },
++    { id: "openai/gpt-5", owned_by: "openai" },
++  ];
++  const out = sortCatalogModelsProviderGrouped(input);
++  assert.equal(out.length, input.length);
++  assert.deepEqual(
++    out.map((m) => m.id).sort(),
++    input.map((m) => m.id).sort()
++  );
++});
 diff --git a/tests/unit/cc-compatible-provider.test.ts b/tests/unit/cc-compatible-provider.test.ts
 index 43a155a3f..580911a25 100644
 --- a/tests/unit/cc-compatible-provider.test.ts
@@ -10628,6 +11193,60 @@ index 5818dc646..3dd5078a2 100644
 -    "alias prefix preserved"
 -  );
 -});
+diff --git a/tests/unit/playground-model-filter-3505.test.ts b/tests/unit/playground-model-filter-3505.test.ts
+index 931189f1e..01fa20dc4 100644
+--- a/tests/unit/playground-model-filter-3505.test.ts
++++ b/tests/unit/playground-model-filter-3505.test.ts
+@@ -1,6 +1,9 @@
+ import test from "node:test";
+ import assert from "node:assert/strict";
+-import { filterModelsByProvider } from "../../src/app/(dashboard)/dashboard/translator/hooks/useAvailableModels.tsx";
++import {
++  filterModelsByProvider,
++  entriesToModelIds,
++} from "../../src/app/(dashboard)/dashboard/translator/hooks/useAvailableModels.tsx";
+ 
+ // Regression for #3505: the playground model selector filtered the /v1/models list by the
+ // provider OPTION VALUE (a compatible provider's node id, e.g. "openai-compatible-<uuid>"),
+@@ -28,3 +31,38 @@ test("#3505 an exact bare match is included; no provider returns all", () => {
+   assert.deepEqual(filterModelsByProvider(["auto", "openai/gpt-4o"], "auto"), ["auto"]);
+   assert.deepEqual(filterModelsByProvider(["a", "b"], undefined), ["a", "b"]);
+ });
++
++// entriesToModelIds preserves the server's catalog order verbatim (no re-sort).
++
++test("entriesToModelIds preserves an arbitrary server sequence verbatim", () => {
++  const entries = [
++    { id: "auto/fast" },
++    { id: "zed/model1" },
++    { id: "anthropic/claude-opus-4" },
++    { id: "zed/model2" },
++    { id: "openai/gpt-4o" },
++    { id: "qoder/m1" },
++    { id: "agy/m1" },
++  ];
++  assert.deepEqual(entriesToModelIds(entries), [
++    "auto/fast",
++    "zed/model1",
++    "anthropic/claude-opus-4",
++    "zed/model2",
++    "openai/gpt-4o",
++    "qoder/m1",
++    "agy/m1",
++  ]);
++});
++
++test("entriesToModelIds skips ids that are not non-empty strings", () => {
++  const entries = [
++    { id: "openai/gpt-4o" },
++    { id: "" },
++    { id: null },
++    { id: undefined },
++    {},
++    { id: "anthropic/claude-opus-4" },
++  ];
++  assert.deepEqual(entriesToModelIds(entries), ["openai/gpt-4o", "anthropic/claude-opus-4"]);
++});
 diff --git a/tests/unit/pricing-model-id-spelling-parity.test.ts b/tests/unit/pricing-model-id-spelling-parity.test.ts
 new file mode 100644
 index 000000000..3b834b0b0
