@@ -563,7 +563,7 @@ index f83cefc69..74626cb4e 100644
 -  return variants.length > 0 ? [...models, ...variants] : models;
 -}
 diff --git a/package.json b/package.json
-index 5b995b365..8acaccae9 100644
+index 8fef0d920..fb811f498 100644
 --- a/package.json
 +++ b/package.json
 @@ -12,6 +12,7 @@
@@ -3720,10 +3720,10 @@ index 9daf5450f..445289348 100644
  
      return Response.json({ models });
 diff --git a/src/i18n/messages/ar.json b/src/i18n/messages/ar.json
-index b3a61c40d..24ea8d41a 100644
+index 3f0b33767..0fc44e6ec 100644
 --- a/src/i18n/messages/ar.json
 +++ b/src/i18n/messages/ar.json
-@@ -11802,9 +11802,6 @@
+@@ -11804,9 +11804,6 @@
        "MODEL_CATALOG_INCLUDE_NAMES": {
          "description": "تضمين حقول الأسماء المناسبة للعرض في استجابات /v1/models. عطل هذا للعملاء الذين يقبلون معرفات النماذج فقط."
        },
@@ -3734,10 +3734,10 @@ index b3a61c40d..24ea8d41a 100644
          "description": "مزامنة بيانات ELO للوحة صدارة Arena AI دورياً لتصنيفات ذكاء النماذج."
        },
 diff --git a/src/i18n/messages/az.json b/src/i18n/messages/az.json
-index 418c3bc0e..2da00c7b7 100644
+index 6975c959e..ea0318fa4 100644
 --- a/src/i18n/messages/az.json
 +++ b/src/i18n/messages/az.json
-@@ -11802,9 +11802,6 @@
+@@ -11804,9 +11804,6 @@
        "MODEL_CATALOG_INCLUDE_NAMES": {
          "description": "/v1/models cavablarına göstərilməsi asan olan ad sahələrini daxil edin. Bunu yalnız model ID-lərini qəbul edən müştərilər üçün sıradan çıxarın."
        },
@@ -3748,10 +3748,10 @@ index 418c3bc0e..2da00c7b7 100644
          "description": "Model zəkası reytinqləri üçün Arena AI liderlər cədvəlinin ELO məlumatlarını vaxtaşırı sinxronlaşdırın."
        },
 diff --git a/src/i18n/messages/bg.json b/src/i18n/messages/bg.json
-index 82295b902..af0ff018b 100644
+index fa7b84738..b0f3f22e6 100644
 --- a/src/i18n/messages/bg.json
 +++ b/src/i18n/messages/bg.json
-@@ -11802,9 +11802,6 @@
+@@ -11804,9 +11804,6 @@
        "MODEL_CATALOG_INCLUDE_NAMES": {
          "description": "Включване на лесни за четене полета за имена в отговорите на /v1/models. Деактивирайте това за клиенти, които приемат само идентификатори на модели."
        },
@@ -3762,10 +3762,10 @@ index 82295b902..af0ff018b 100644
          "description": "Периодично синхронизиране на ELO данните от класацията на Arena AI за класиране на интелигентността на моделите."
        },
 diff --git a/src/i18n/messages/bn.json b/src/i18n/messages/bn.json
-index 87bddc248..1d842115e 100644
+index 6be7b82b1..4fc8b8f10 100644
 --- a/src/i18n/messages/bn.json
 +++ b/src/i18n/messages/bn.json
-@@ -11802,9 +11802,6 @@
+@@ -11804,9 +11804,6 @@
        "MODEL_CATALOG_INCLUDE_NAMES": {
          "description": "/v1/models প্রতিক্রিয়াগুলিতে প্রদর্শন-বান্ধব নামের ক্ষেত্রগুলি অন্তর্ভুক্ত করুন। শুধুমাত্র মডেল ID গ্রহণ করে এমন ক্লায়েন্টদের জন্য এটি নিষ্ক্রিয় করুন।"
        },
@@ -3776,10 +3776,10 @@ index 87bddc248..1d842115e 100644
          "description": "মডেল-বুদ্ধিমত্তা র‍্যাঙ্কিংয়ের জন্য পর্যায়ক্রমে Arena AI লিডারবোর্ড ELO ডেটা সিঙ্ক্রোনাইজ করুন।"
        },
 diff --git a/src/i18n/messages/cs.json b/src/i18n/messages/cs.json
-index e3bb0fb74..f99c08e55 100644
+index 5707bcf2e..3eff1c177 100644
 --- a/src/i18n/messages/cs.json
 +++ b/src/i18n/messages/cs.json
-@@ -11802,9 +11802,6 @@
+@@ -11804,9 +11804,6 @@
        "MODEL_CATALOG_INCLUDE_NAMES": {
          "description": "Zahrnout uživatelsky přívětivá pole názvů v odpovědích /v1/models. Zakažte to pro klienty, kteří přijímají pouze ID modelů."
        },
@@ -3790,10 +3790,10 @@ index e3bb0fb74..f99c08e55 100644
          "description": "Periodicky synchronizovat data ELO z žebříčku Arena AI pro hodnocení inteligence modelů."
        },
 diff --git a/src/i18n/messages/da.json b/src/i18n/messages/da.json
-index ce03c456a..e7aafd581 100644
+index 45b6f3133..1203a6f60 100644
 --- a/src/i18n/messages/da.json
 +++ b/src/i18n/messages/da.json
-@@ -11802,9 +11802,6 @@
+@@ -11804,9 +11804,6 @@
        "MODEL_CATALOG_INCLUDE_NAMES": {
          "description": "Inkluder visningsvenlige navnefelter i /v1/models-svar. Deaktivér dette for klienter, der kun accepterer model-id'er."
        },
@@ -3804,10 +3804,10 @@ index ce03c456a..e7aafd581 100644
          "description": "Synkroniser periodisk ELO-data fra Arena AI-førertavlen til rangering af modelintelligens."
        },
 diff --git a/src/i18n/messages/de.json b/src/i18n/messages/de.json
-index abed70d55..40b65b5a6 100644
+index 6acb03e5d..ee21e5498 100644
 --- a/src/i18n/messages/de.json
 +++ b/src/i18n/messages/de.json
-@@ -11802,9 +11802,6 @@
+@@ -11804,9 +11804,6 @@
        "MODEL_CATALOG_INCLUDE_NAMES": {
          "description": "Benutzerfreundliche Namensfelder in /v1/models-Antworten einschließen. Deaktivieren Sie dies für Clients, die nur Modell-IDs akzeptieren."
        },
@@ -3818,10 +3818,10 @@ index abed70d55..40b65b5a6 100644
          "description": "ELO-Daten der Arena AI-Bestenliste regelmäßig für Modell-Intelligenz-Rankings synchronisieren."
        },
 diff --git a/src/i18n/messages/en.json b/src/i18n/messages/en.json
-index 3d9bb9bc8..0ba05568e 100644
+index ee50e4e21..7b20e1c6c 100644
 --- a/src/i18n/messages/en.json
 +++ b/src/i18n/messages/en.json
-@@ -11828,9 +11828,6 @@
+@@ -11830,9 +11830,6 @@
        "MODEL_CATALOG_INCLUDE_NAMES": {
          "description": "Include display-friendly name fields in /v1/models responses. Disable this for clients that accept model IDs only."
        },
@@ -3832,10 +3832,10 @@ index 3d9bb9bc8..0ba05568e 100644
          "description": "Periodically synchronize Arena AI leaderboard ELO data for model-intelligence rankings."
        },
 diff --git a/src/i18n/messages/es.json b/src/i18n/messages/es.json
-index 7d7e8cc49..a11f9d0b4 100644
+index c26df5081..dc342d1a9 100644
 --- a/src/i18n/messages/es.json
 +++ b/src/i18n/messages/es.json
-@@ -11802,9 +11802,6 @@
+@@ -11804,9 +11804,6 @@
        "MODEL_CATALOG_INCLUDE_NAMES": {
          "description": "Include display-friendly name fields in /v1/models responses. Disable this for clients that accept model IDs only."
        },
@@ -3846,10 +3846,10 @@ index 7d7e8cc49..a11f9d0b4 100644
          "description": "Periodically synchronize Arena AI leaderboard ELO data for model-intelligence rankings."
        },
 diff --git a/src/i18n/messages/fa.json b/src/i18n/messages/fa.json
-index a07a9fc9a..7393be2db 100644
+index bcb708b0e..9de732182 100644
 --- a/src/i18n/messages/fa.json
 +++ b/src/i18n/messages/fa.json
-@@ -11802,9 +11802,6 @@
+@@ -11804,9 +11804,6 @@
        "MODEL_CATALOG_INCLUDE_NAMES": {
          "description": "گنجاندن فیلدهای نام مناسب برای نمایش در پاسخ‌های /v1/models. این را برای کلاینت‌هایی که فقط شناسه مدل را می‌پذیرند غیرفعال کنید."
        },
@@ -3860,10 +3860,10 @@ index a07a9fc9a..7393be2db 100644
          "description": "همگام‌سازی دوره‌ای داده‌های ELO جدول امتیازات Arena AI برای رتبه‌بندی هوش مدل‌ها."
        },
 diff --git a/src/i18n/messages/fi.json b/src/i18n/messages/fi.json
-index a4f323989..e143b3248 100644
+index aec971da1..61e0a6122 100644
 --- a/src/i18n/messages/fi.json
 +++ b/src/i18n/messages/fi.json
-@@ -11802,9 +11802,6 @@
+@@ -11804,9 +11804,6 @@
        "MODEL_CATALOG_INCLUDE_NAMES": {
          "description": "Sisällytä näyttöystävälliset nimikentät /v1/models-vastauksiin. Poista tämä käytöstä asiakkaille, jotka hyväksyvät vain mallitunnuksia."
        },
@@ -3874,10 +3874,10 @@ index a4f323989..e143b3248 100644
          "description": "Synkronoi säännöllisesti Arena AI -tulostaulukon ELO-tiedot mallien älykkyysluokituksia varten."
        },
 diff --git a/src/i18n/messages/fr.json b/src/i18n/messages/fr.json
-index c963fa1fc..eddcc075a 100644
+index f37a9e4f0..0a4400e98 100644
 --- a/src/i18n/messages/fr.json
 +++ b/src/i18n/messages/fr.json
-@@ -11802,9 +11802,6 @@
+@@ -11804,9 +11804,6 @@
        "MODEL_CATALOG_INCLUDE_NAMES": {
          "description": "Inclure des champs de nom conviviaux pour l'affichage dans les réponses /v1/models. Désactivez cette option pour les clients qui n'acceptent que les ID de modèle."
        },
@@ -3888,10 +3888,10 @@ index c963fa1fc..eddcc075a 100644
          "description": "Synchroniser périodiquement les données ELO du classement Arena AI pour les classements d'intelligence des modèles."
        },
 diff --git a/src/i18n/messages/gu.json b/src/i18n/messages/gu.json
-index 89f696a61..c0f31cac3 100644
+index 97b516ba3..a1315a18e 100644
 --- a/src/i18n/messages/gu.json
 +++ b/src/i18n/messages/gu.json
-@@ -11802,9 +11802,6 @@
+@@ -11804,9 +11804,6 @@
        "MODEL_CATALOG_INCLUDE_NAMES": {
          "description": "/v1/models પ્રતિસાદોમાં પ્રદર્શન-અનુકૂળ નામ ફીલ્ડ્સ શામેલ કરો. ફક્ત મોડલ IDs સ્વીકારતા ક્લાયન્ટ્સ માટે આને નિષ્ક્રિય કરો."
        },
@@ -3902,10 +3902,10 @@ index 89f696a61..c0f31cac3 100644
          "description": "મોડલ-ઇન્ટેલિજન્સ રેન્કિંગ માટે સમયાંતરે Arena AI લીડરબોર્ડ ELO ડેટા સિંક્રનાઇઝ કરો."
        },
 diff --git a/src/i18n/messages/he.json b/src/i18n/messages/he.json
-index ac2399743..c7b90ff94 100644
+index f161156a8..a223a1b53 100644
 --- a/src/i18n/messages/he.json
 +++ b/src/i18n/messages/he.json
-@@ -11802,9 +11802,6 @@
+@@ -11804,9 +11804,6 @@
        "MODEL_CATALOG_INCLUDE_NAMES": {
          "description": "הכללת שדות שם ידידותיים לתצוגה בתגובות של /v1/models. השבת זאת עבור לקוחות המקבלים מזהי מודל בלבד."
        },
@@ -3916,10 +3916,10 @@ index ac2399743..c7b90ff94 100644
          "description": "סנכרון תקופתי של נתוני ELO מלוח המובילים של Arena AI עבור דירוגי אינטליגנציית מודלים."
        },
 diff --git a/src/i18n/messages/hi.json b/src/i18n/messages/hi.json
-index 56f409ab0..95c39e5ad 100644
+index 7c8159ef9..246546017 100644
 --- a/src/i18n/messages/hi.json
 +++ b/src/i18n/messages/hi.json
-@@ -11802,9 +11802,6 @@
+@@ -11804,9 +11804,6 @@
        "MODEL_CATALOG_INCLUDE_NAMES": {
          "description": "/v1/models प्रतिक्रियाओं में प्रदर्शन-अनुकूल नाम फ़ील्ड शामिल करें। उन क्लाइंट्स के लिए इसे अक्षम करें जो केवल मॉडल ID स्वीकार करते हैं।"
        },
@@ -3930,10 +3930,10 @@ index 56f409ab0..95c39e5ad 100644
          "description": "मॉडल-इंटेलिजेंस रैंकिंग के लिए समय-समय पर Arena AI लीडरबोर्ड ELO डेटा को सिंक्रनाइज़ करें।"
        },
 diff --git a/src/i18n/messages/hu.json b/src/i18n/messages/hu.json
-index 21695842a..b7d0ed12e 100644
+index f698b6f59..50a2498b1 100644
 --- a/src/i18n/messages/hu.json
 +++ b/src/i18n/messages/hu.json
-@@ -11802,9 +11802,6 @@
+@@ -11804,9 +11804,6 @@
        "MODEL_CATALOG_INCLUDE_NAMES": {
          "description": "Megjelenítésbarát névmezők szerepeltetése a /v1/models válaszokban. Tiltsa le ezt azon ügyfelek esetében, amelyek csak modell-azonosítókat fogadnak el."
        },
@@ -3944,10 +3944,10 @@ index 21695842a..b7d0ed12e 100644
          "description": "Az Arena AI ranglista ELO adatainak időszakos szinkronizálása a modell-intelligencia rangsoroláshoz."
        },
 diff --git a/src/i18n/messages/id.json b/src/i18n/messages/id.json
-index c65693c53..d57945a4a 100644
+index 36d3eec7e..99f42e2a4 100644
 --- a/src/i18n/messages/id.json
 +++ b/src/i18n/messages/id.json
-@@ -11802,9 +11802,6 @@
+@@ -11804,9 +11804,6 @@
        "MODEL_CATALOG_INCLUDE_NAMES": {
          "description": "Sertakan bidang nama yang mudah dibaca dalam respons /v1/models. Nonaktifkan ini untuk klien yang hanya menerima ID model."
        },
@@ -3958,10 +3958,10 @@ index c65693c53..d57945a4a 100644
          "description": "Sinkronkan data ELO papan peringkat Arena AI secara berkala untuk pemeringkatan kecerdasan model."
        },
 diff --git a/src/i18n/messages/in.json b/src/i18n/messages/in.json
-index a69d33694..d7479626b 100644
+index fc5120d9c..4230291b9 100644
 --- a/src/i18n/messages/in.json
 +++ b/src/i18n/messages/in.json
-@@ -11802,9 +11802,6 @@
+@@ -11804,9 +11804,6 @@
        "MODEL_CATALOG_INCLUDE_NAMES": {
          "description": "Sertakan bidang nama yang ramah tampilan dalam respons /v1/models. Nonaktifkan ini untuk klien yang hanya menerima ID model."
        },
@@ -3972,10 +3972,10 @@ index a69d33694..d7479626b 100644
          "description": "Sinkronkan data ELO papan peringkat Arena AI secara berkala untuk peringkat kecerdasan model."
        },
 diff --git a/src/i18n/messages/it.json b/src/i18n/messages/it.json
-index 21329d2aa..69ae1005f 100644
+index ca9178ccf..6061356b2 100644
 --- a/src/i18n/messages/it.json
 +++ b/src/i18n/messages/it.json
-@@ -11802,9 +11802,6 @@
+@@ -11804,9 +11804,6 @@
        "MODEL_CATALOG_INCLUDE_NAMES": {
          "description": "Includi campi con nomi descrittivi nelle risposte di /v1/models. Disabilita questa opzione per i client che accettano solo ID modello."
        },
@@ -3986,10 +3986,10 @@ index 21329d2aa..69ae1005f 100644
          "description": "Sincronizza periodicamente i dati ELO della classifica di Arena AI per le graduatorie di intelligenza dei modelli."
        },
 diff --git a/src/i18n/messages/ja.json b/src/i18n/messages/ja.json
-index aac71c81f..1d6e7795a 100644
+index f9559c187..c300dcd8d 100644
 --- a/src/i18n/messages/ja.json
 +++ b/src/i18n/messages/ja.json
-@@ -11802,9 +11802,6 @@
+@@ -11804,9 +11804,6 @@
        "MODEL_CATALOG_INCLUDE_NAMES": {
          "description": "Include display-friendly name fields in /v1/models responses. Disable this for clients that accept model IDs only."
        },
@@ -4000,10 +4000,10 @@ index aac71c81f..1d6e7795a 100644
          "description": "Periodically synchronize Arena AI leaderboard ELO data for model-intelligence rankings."
        },
 diff --git a/src/i18n/messages/ko.json b/src/i18n/messages/ko.json
-index 11c649976..05e850486 100644
+index 01d5c7edf..2e1414fce 100644
 --- a/src/i18n/messages/ko.json
 +++ b/src/i18n/messages/ko.json
-@@ -11802,9 +11802,6 @@
+@@ -11804,9 +11804,6 @@
        "MODEL_CATALOG_INCLUDE_NAMES": {
          "description": "/v1/models 응답에 표시용 이름 필드를 포함합니다. 모델 ID만 허용하는 클라이언트의 경우 이 설정을 비활성화하세요."
        },
@@ -4014,10 +4014,10 @@ index 11c649976..05e850486 100644
          "description": "모델 지능 순위를 위해 Arena AI 리더보드 ELO 데이터를 주기적으로 동기화합니다."
        },
 diff --git a/src/i18n/messages/mr.json b/src/i18n/messages/mr.json
-index 545145467..dda1d33b4 100644
+index 060f2feff..2aaaabdd1 100644
 --- a/src/i18n/messages/mr.json
 +++ b/src/i18n/messages/mr.json
-@@ -11802,9 +11802,6 @@
+@@ -11804,9 +11804,6 @@
        "MODEL_CATALOG_INCLUDE_NAMES": {
          "description": "/v1/models प्रतिसादांमध्ये प्रदर्शनासाठी अनुकूल नाव फील्ड समाविष्ट करा. केवळ मॉडेल आयडी स्वीकारणाऱ्या क्लायंटसाठी हे अक्षम करा."
        },
@@ -4028,10 +4028,10 @@ index 545145467..dda1d33b4 100644
          "description": "मॉडेल-इंटेलिजन्स रँकिंगसाठी Arena AI लीडरबोर्ड ELO डेटा वेळोवेळी सिंक्रोनाइझ करा."
        },
 diff --git a/src/i18n/messages/ms.json b/src/i18n/messages/ms.json
-index 592e2bd36..8aebbe3a1 100644
+index 2fe34426d..56ad5a752 100644
 --- a/src/i18n/messages/ms.json
 +++ b/src/i18n/messages/ms.json
-@@ -11802,9 +11802,6 @@
+@@ -11804,9 +11804,6 @@
        "MODEL_CATALOG_INCLUDE_NAMES": {
          "description": "Sertakan medan nama mesra paparan dalam respons /v1/models. Nyahdayakan ini untuk pelanggan yang hanya menerima ID model."
        },
@@ -4042,10 +4042,10 @@ index 592e2bd36..8aebbe3a1 100644
          "description": "Segerakkan data ELO papan pendahulu Arena AI secara berkala untuk kedudukan kecerdasan model."
        },
 diff --git a/src/i18n/messages/nl.json b/src/i18n/messages/nl.json
-index afe5aea54..9b7562ec0 100644
+index 86043ad9a..c6f119aef 100644
 --- a/src/i18n/messages/nl.json
 +++ b/src/i18n/messages/nl.json
-@@ -11802,9 +11802,6 @@
+@@ -11804,9 +11804,6 @@
        "MODEL_CATALOG_INCLUDE_NAMES": {
          "description": "Voeg weergavevriendelijke naamvelden toe aan /v1/models-responsen. Schakel dit uit voor clients die alleen model-ID's accepteren."
        },
@@ -4056,10 +4056,10 @@ index afe5aea54..9b7562ec0 100644
          "description": "Synchroniseer periodiek Arena AI-leaderboard ELO-gegevens voor modelintelligentieranglijsten."
        },
 diff --git a/src/i18n/messages/no.json b/src/i18n/messages/no.json
-index 82dbeff23..bb61a7146 100644
+index 894692a4a..f0a684832 100644
 --- a/src/i18n/messages/no.json
 +++ b/src/i18n/messages/no.json
-@@ -11802,9 +11802,6 @@
+@@ -11804,9 +11804,6 @@
        "MODEL_CATALOG_INCLUDE_NAMES": {
          "description": "Inkluder visningsvennlige navnefelt i /v1/models-svar. Deaktiver dette for klienter som kun godtar modell-ID-er."
        },
@@ -4070,10 +4070,10 @@ index 82dbeff23..bb61a7146 100644
          "description": "Synkroniser Arena AI-ledertavlens ELO-data med jevne mellomrom for rangering av modellintelligens."
        },
 diff --git a/src/i18n/messages/phi.json b/src/i18n/messages/phi.json
-index 23074a502..0601bf33f 100644
+index c2849454a..eb73d7a60 100644
 --- a/src/i18n/messages/phi.json
 +++ b/src/i18n/messages/phi.json
-@@ -11802,9 +11802,6 @@
+@@ -11804,9 +11804,6 @@
        "MODEL_CATALOG_INCLUDE_NAMES": {
          "description": "Isama ang mga display-friendly na field ng pangalan sa mga tugon ng /v1/models. I-disable ito para sa mga client na tumatanggap lamang ng mga model ID."
        },
@@ -4084,10 +4084,10 @@ index 23074a502..0601bf33f 100644
          "description": "Pana-panahong i-synchronize ang data ng ELO sa leaderboard ng Arena AI para sa mga ranggo ng katalinuhan ng modelo."
        },
 diff --git a/src/i18n/messages/pl.json b/src/i18n/messages/pl.json
-index 378b493ab..31a11763d 100644
+index 1461f73a3..92a03988d 100644
 --- a/src/i18n/messages/pl.json
 +++ b/src/i18n/messages/pl.json
-@@ -11824,9 +11824,6 @@
+@@ -11826,9 +11826,6 @@
        "MODEL_CATALOG_INCLUDE_NAMES": {
          "description": "Dołączaj przyjazne do wyświetlania pola nazw w odpowiedziach /v1/models. Wyłącz tę opcję dla klientów, którzy akceptują tylko identyfikatory modeli."
        },
@@ -4098,10 +4098,10 @@ index 378b493ab..31a11763d 100644
          "description": "Okresowo synchronizuj dane ELO tabeli liderów Arena AI dla rankingów inteligencji modeli."
        },
 diff --git a/src/i18n/messages/pt-BR.json b/src/i18n/messages/pt-BR.json
-index 8f836bb50..5a2b960c2 100644
+index 3c2b09f6b..ea0d450c9 100644
 --- a/src/i18n/messages/pt-BR.json
 +++ b/src/i18n/messages/pt-BR.json
-@@ -11827,9 +11827,6 @@
+@@ -11829,9 +11829,6 @@
        "MODEL_CATALOG_INCLUDE_NAMES": {
          "description": "Incluir campos de nome amigáveis para exibição nas respostas de /v1/models. Desative isso para clientes que aceitam apenas IDs de modelo."
        },
@@ -4112,10 +4112,10 @@ index 8f836bb50..5a2b960c2 100644
          "description": "Sincronizar periodicamente os dados de ELO da tabela de classificação da Arena AI para classificações de inteligência de modelo."
        },
 diff --git a/src/i18n/messages/pt.json b/src/i18n/messages/pt.json
-index 9891203fe..a36c99bf4 100644
+index e19674282..a136c647c 100644
 --- a/src/i18n/messages/pt.json
 +++ b/src/i18n/messages/pt.json
-@@ -11802,9 +11802,6 @@
+@@ -11804,9 +11804,6 @@
        "MODEL_CATALOG_INCLUDE_NAMES": {
          "description": "Incluir campos de nome fáceis de ler nas respostas de /v1/models. Desative isto para clientes que aceitam apenas IDs de modelo."
        },
@@ -4126,10 +4126,10 @@ index 9891203fe..a36c99bf4 100644
          "description": "Sincronizar periodicamente os dados de ELO da tabela de classificação da Arena AI para classificações de inteligência de modelos."
        },
 diff --git a/src/i18n/messages/ro.json b/src/i18n/messages/ro.json
-index 68c9f9978..ba6bd0e53 100644
+index e90fb8ed5..1ce094adb 100644
 --- a/src/i18n/messages/ro.json
 +++ b/src/i18n/messages/ro.json
-@@ -11802,9 +11802,6 @@
+@@ -11804,9 +11804,6 @@
        "MODEL_CATALOG_INCLUDE_NAMES": {
          "description": "Include câmpuri de nume ușor de afișat în răspunsurile /v1/models. Dezactivează această opțiune pentru clienții care acceptă doar ID-uri de model."
        },
@@ -4140,10 +4140,10 @@ index 68c9f9978..ba6bd0e53 100644
          "description": "Sincronizează periodic datele ELO din clasamentul Arena AI pentru ierarhiile de inteligență a modelelor."
        },
 diff --git a/src/i18n/messages/ru.json b/src/i18n/messages/ru.json
-index 2a337ee4f..2eaaff501 100644
+index 363498218..0c856e133 100644
 --- a/src/i18n/messages/ru.json
 +++ b/src/i18n/messages/ru.json
-@@ -11802,9 +11802,6 @@
+@@ -11804,9 +11804,6 @@
        "MODEL_CATALOG_INCLUDE_NAMES": {
          "description": "Include display-friendly name fields in /v1/models responses. Disable this for clients that accept model IDs only."
        },
@@ -4154,10 +4154,10 @@ index 2a337ee4f..2eaaff501 100644
          "description": "Periodically synchronize Arena AI leaderboard ELO data for model-intelligence rankings."
        },
 diff --git a/src/i18n/messages/sk.json b/src/i18n/messages/sk.json
-index a3ed834ac..1b000044b 100644
+index 2aa552dee..15156bab6 100644
 --- a/src/i18n/messages/sk.json
 +++ b/src/i18n/messages/sk.json
-@@ -11802,9 +11802,6 @@
+@@ -11804,9 +11804,6 @@
        "MODEL_CATALOG_INCLUDE_NAMES": {
          "description": "Zahrnúť polia s používateľsky prívetivými názvami v odpovediach /v1/models. Zakážte túto možnosť pre klientov, ktorí prijímajú iba ID modelov."
        },
@@ -4168,10 +4168,10 @@ index a3ed834ac..1b000044b 100644
          "description": "Pravidelne synchronizovať ELO dáta z rebríčka Arena AI pre hodnotenie inteligencie modelov."
        },
 diff --git a/src/i18n/messages/sv.json b/src/i18n/messages/sv.json
-index 4cbcc38ea..b306722fa 100644
+index 46220430c..d3e57b7f6 100644
 --- a/src/i18n/messages/sv.json
 +++ b/src/i18n/messages/sv.json
-@@ -11802,9 +11802,6 @@
+@@ -11804,9 +11804,6 @@
        "MODEL_CATALOG_INCLUDE_NAMES": {
          "description": "Inkludera visningsvänliga namnfält i svar från /v1/models. Inaktivera detta för klienter som endast accepterar modell-ID:n."
        },
@@ -4182,10 +4182,10 @@ index 4cbcc38ea..b306722fa 100644
          "description": "Synkronisera Arena AI-topplistans ELO-data regelbundet för modellintelligensrankningar."
        },
 diff --git a/src/i18n/messages/sw.json b/src/i18n/messages/sw.json
-index e85b452be..8ba609571 100644
+index 031b62968..282f89ea9 100644
 --- a/src/i18n/messages/sw.json
 +++ b/src/i18n/messages/sw.json
-@@ -11802,9 +11802,6 @@
+@@ -11804,9 +11804,6 @@
        "MODEL_CATALOG_INCLUDE_NAMES": {
          "description": "Jumuisha sehemu za majina rahisi kuonyeshwa katika majibu ya /v1/models. Zima hii kwa wateja wanaokubali vitambulisho vya mfano pekee."
        },
@@ -4196,10 +4196,10 @@ index e85b452be..8ba609571 100644
          "description": "Lanisha mara kwa mara data ya ELO ya ubao wa wanaoongoza wa Arena AI kwa viwango vya akili ya mfano."
        },
 diff --git a/src/i18n/messages/ta.json b/src/i18n/messages/ta.json
-index b66212a38..44679a0c1 100644
+index 31f1c945e..ee3cd5c6b 100644
 --- a/src/i18n/messages/ta.json
 +++ b/src/i18n/messages/ta.json
-@@ -11802,9 +11802,6 @@
+@@ -11804,9 +11804,6 @@
        "MODEL_CATALOG_INCLUDE_NAMES": {
          "description": "/v1/models பதில்களில் காட்சிக்கு ஏற்ற பெயர் புலங்களைச் சேர்க்கவும். மாடல் ஐடிகளை மட்டுமே ஏற்கும் கிளையண்டுகளுக்கு இதை முடக்கவும்."
        },
@@ -4210,10 +4210,10 @@ index b66212a38..44679a0c1 100644
          "description": "மாடல்-நுண்ணறிவு தரவரிசைகளுக்கான Arena AI லீடர்போர்டு ELO தரவை அவ்வப்போது ஒத்திசைக்கவும்."
        },
 diff --git a/src/i18n/messages/te.json b/src/i18n/messages/te.json
-index ce813f0f9..2886ebf62 100644
+index 60ae0fbdf..05c2132eb 100644
 --- a/src/i18n/messages/te.json
 +++ b/src/i18n/messages/te.json
-@@ -11802,9 +11802,6 @@
+@@ -11804,9 +11804,6 @@
        "MODEL_CATALOG_INCLUDE_NAMES": {
          "description": "/v1/models ప్రతిస్పందనలలో ప్రదర్శనకు అనుకూలమైన పేరు ఫీల్డ్‌లను చేర్చండి. మోడల్ IDలను మాత్రమే ఆమోదించే క్లయింట్‌ల కోసం దీనిని నిలిపివేయండి."
        },
@@ -4224,10 +4224,10 @@ index ce813f0f9..2886ebf62 100644
          "description": "మోడల్-ఇంటెలిజెన్స్ ర్యాంకింగ్‌ల కోసం Arena AI లీడర్‌బోర్డ్ ELO డేటాను క్రమానుగతంగా సమకాలీకరించండి."
        },
 diff --git a/src/i18n/messages/th.json b/src/i18n/messages/th.json
-index ca78348af..f8e289191 100644
+index 13cd3a536..4acdad55d 100644
 --- a/src/i18n/messages/th.json
 +++ b/src/i18n/messages/th.json
-@@ -11802,9 +11802,6 @@
+@@ -11804,9 +11804,6 @@
        "MODEL_CATALOG_INCLUDE_NAMES": {
          "description": "รวมฟิลด์ชื่อที่แสดงผลได้ง่ายในการตอบกลับ /v1/models ปิดใช้งานตัวเลือกนี้สำหรับไคลเอนต์ที่ยอมรับเฉพาะ ID โมเดลเท่านั้น"
        },
@@ -4238,10 +4238,10 @@ index ca78348af..f8e289191 100644
          "description": "ซิงโครไนซ์ข้อมูล ELO ของลีดเดอร์บอร์ด Arena AI เป็นระยะสำหรับการจัดอันดับความฉลาดของโมเดล"
        },
 diff --git a/src/i18n/messages/tr.json b/src/i18n/messages/tr.json
-index 43d303540..a3f7803c1 100644
+index dedf6e35f..9a55efe10 100644
 --- a/src/i18n/messages/tr.json
 +++ b/src/i18n/messages/tr.json
-@@ -11802,9 +11802,6 @@
+@@ -11804,9 +11804,6 @@
        "MODEL_CATALOG_INCLUDE_NAMES": {
          "description": "/v1/models yanıtlarına görüntüleme dostu ad alanlarını dahil edin. Yalnızca model kimliklerini kabul eden istemciler için bunu devre dışı bırakın."
        },
@@ -4252,10 +4252,10 @@ index 43d303540..a3f7803c1 100644
          "description": "Model zekası sıralamaları için Arena AI liderlik tablosu ELO verilerini periyodik olarak senkronize edin."
        },
 diff --git a/src/i18n/messages/uk-UA.json b/src/i18n/messages/uk-UA.json
-index 6685571c5..d5214a756 100644
+index abcc651e7..9441b3eab 100644
 --- a/src/i18n/messages/uk-UA.json
 +++ b/src/i18n/messages/uk-UA.json
-@@ -11802,9 +11802,6 @@
+@@ -11804,9 +11804,6 @@
        "MODEL_CATALOG_INCLUDE_NAMES": {
          "description": "Включати зручні для відображення поля назв у відповіді /v1/models. Вимкніть це для клієнтів, які приймають лише ідентифікатори моделей."
        },
@@ -4266,10 +4266,10 @@ index 6685571c5..d5214a756 100644
          "description": "Періодично синхронізувати дані ELO таблиці лідерів Arena AI для рейтингу інтелекту моделей."
        },
 diff --git a/src/i18n/messages/ur.json b/src/i18n/messages/ur.json
-index dedbb20e5..f8118eec7 100644
+index 33b248d77..7bb3567bf 100644
 --- a/src/i18n/messages/ur.json
 +++ b/src/i18n/messages/ur.json
-@@ -11802,9 +11802,6 @@
+@@ -11804,9 +11804,6 @@
        "MODEL_CATALOG_INCLUDE_NAMES": {
          "description": "/v1/models کے جوابات میں ڈسپلے کے لیے موزوں نام کے فیلڈز شامل کریں۔ ان کلائنٹس کے لیے اسے غیر فعال کریں جو صرف ماڈل IDs قبول کرتے ہیں۔"
        },
@@ -4280,10 +4280,10 @@ index dedbb20e5..f8118eec7 100644
          "description": "ماڈل انٹیلیجنس رینکنگ کے لیے Arena AI لیڈر بورڈ ELO ڈیٹا کو وقتاً فوقتاً سنکرونائز کریں۔"
        },
 diff --git a/src/i18n/messages/vi.json b/src/i18n/messages/vi.json
-index 9ad7c0abe..36d9aa221 100644
+index 091e603d2..18ab27d52 100644
 --- a/src/i18n/messages/vi.json
 +++ b/src/i18n/messages/vi.json
-@@ -11827,9 +11827,6 @@
+@@ -11829,9 +11829,6 @@
        "MODEL_CATALOG_INCLUDE_NAMES": {
          "description": "Thêm trường tên dễ đọc vào phản hồi /v1/models. Tắt với các ứng dụng khách chỉ chấp nhận ID mô hình."
        },
@@ -4294,10 +4294,10 @@ index 9ad7c0abe..36d9aa221 100644
          "description": "Định kỳ đồng bộ điểm ELO từ bảng xếp hạng Arena AI để xếp hạng năng lực mô hình."
        },
 diff --git a/src/i18n/messages/zh-CN.json b/src/i18n/messages/zh-CN.json
-index 3bf881c7f..b56109a85 100644
+index 550c72703..a5e4680f7 100644
 --- a/src/i18n/messages/zh-CN.json
 +++ b/src/i18n/messages/zh-CN.json
-@@ -11802,9 +11802,6 @@
+@@ -11804,9 +11804,6 @@
        "MODEL_CATALOG_INCLUDE_NAMES": {
          "description": "在 /v1/models 响应中包含易于显示的名称字段。对于仅接受模型 ID 的客户端，请禁用此项。"
        },
@@ -4308,10 +4308,10 @@ index 3bf881c7f..b56109a85 100644
          "description": "定期同步 Arena AI 排行榜 ELO 数据以进行模型智能排名。"
        },
 diff --git a/src/i18n/messages/zh-TW.json b/src/i18n/messages/zh-TW.json
-index 638231c2b..57c21ad6b 100644
+index 8f64e8bef..c009a14d2 100644
 --- a/src/i18n/messages/zh-TW.json
 +++ b/src/i18n/messages/zh-TW.json
-@@ -11802,9 +11802,6 @@
+@@ -11804,9 +11804,6 @@
        "MODEL_CATALOG_INCLUDE_NAMES": {
          "description": "在 /v1/models 回應中包含顯示友善的名稱欄位。對於僅接受模型 ID 的用戶端請停用此項。"
        },
