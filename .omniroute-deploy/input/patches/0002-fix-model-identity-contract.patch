@@ -1,3 +1,10 @@
+diff --git a/changelog.d/fixes/8072-model-identity-contract.md b/changelog.d/fixes/8072-model-identity-contract.md
+new file mode 100644
+index 000000000..e398492ad
+--- /dev/null
++++ b/changelog.d/fixes/8072-model-identity-contract.md
+@@ -0,0 +1 @@
++- **fix(models):** align the provider model-identity contract across catalog surfaces: POST/PUT provider-node prefix validation now reserves the union of runtime guard names and the wider public provider-name surface, while pre-existing rows stay report-only; `/v1/models` `owned_by` resolves through the shared provider-identity authority (compatible-node UUID → configured prefix, built-in providers canonical); synced reasoning-effort variants are advertised in the catalog and Combo Builder under the base model's single public prefix and owner; stale `#8869`, `catalogOrder`, MCP-identity and alias-layer comments corrected to describe the current contract only.
 diff --git a/open-sse/config/providerModels.ts b/open-sse/config/providerModels.ts
 index 4051e00e9..a9eba0b9b 100644
 --- a/open-sse/config/providerModels.ts
@@ -1603,7 +1610,7 @@ index af1884079..b94000deb 100644
      return estimated;
    }
 diff --git a/src/app/api/v1/models/catalog.ts b/src/app/api/v1/models/catalog.ts
-index 34ccbdfba..964bf828d 100644
+index 34ccbdfba..f4bfb3f99 100644
 --- a/src/app/api/v1/models/catalog.ts
 +++ b/src/app/api/v1/models/catalog.ts
 @@ -35,7 +35,7 @@ import {
@@ -1632,7 +1639,15 @@ index 34ccbdfba..964bf828d 100644
  } from "./catalogHelpers";
  import {
    qualifyOpenRouterModelId,
-@@ -90,6 +91,7 @@ import {
+@@ -77,6 +78,7 @@ import {
+   getOpenRouterDisplayName,
+ } from "./catalogOpenrouter";
+ import { getVisionCapabilityFields, getCustomVisionCapabilityFields } from "./catalogVision";
++import { resolveProviderSegment, resolvePublicOwnerId } from "@/shared/providers/identity";
+ import {
+   buildAliasMaps,
+   prefixRoutesToProvider,
+@@ -90,6 +92,7 @@ import {
    isCcDiscoveryModelCatalogClient,
  } from "./catalogRequest";
  import { incrementCcDiscoveryHitCount } from "@/lib/db/ccDiscoveryMetrics";
@@ -1640,7 +1655,7 @@ index 34ccbdfba..964bf828d 100644
  import { isFreeModel, providerHasFreeModels } from "@/shared/utils/freeModels";
  import { isCodexDiscoveryModelExcluded } from "@/shared/services/codexDiscoveryPolicy";
  import { buildErrorBody } from "@omniroute/open-sse/utils/error";
-@@ -214,11 +216,6 @@ async function buildUnifiedModelsResponseCore(
+@@ -214,11 +217,6 @@ async function buildUnifiedModelsResponseCore(
      });
      if (authRejection) return authRejection;
      const { aliasToProviderId, providerIdToAlias } = buildAliasMaps();
@@ -1652,31 +1667,49 @@ index 34ccbdfba..964bf828d 100644
      const resolveCanonicalProviderId = (aliasOrProviderId: string, fallbackProviderId?: string) =>
        resolveCanonicalProviderIdFromMaps(aliasToProviderId, aliasOrProviderId, fallbackProviderId);
      const aliasMaps = { aliasToProviderId, providerIdToAlias };
-@@ -283,6 +280,46 @@ async function buildUnifiedModelsResponseCore(
-     const resolvePublicOwnerId = (providerId: string, canonicalProviderId: string): string =>
-       providerIdToPrefix[providerId] || canonicalProviderId;
+@@ -271,17 +269,52 @@ async function buildUnifiedModelsResponseCore(
+       }
+     }
  
-+    // #8869 — exactly ONE public model-id prefix per effective provider/model.
+-    // #8327: `resolveCanonicalProviderId`/`canonicalProviderId` only know the static
+-    // AI_PROVIDERS/PROVIDER_MODELS alias maps, so a compatible-provider node (whose raw
+-    // `id` is an internal UUID, never present in those static maps) falls through every
+-    // lookup and returns the raw UUID verbatim. That UUID is still required for the
+-    // internal registry/connection/hidden-model lookups that key off `canonicalProviderId`
+-    // (getConnectionsForProvider, getModelIsHidden, etc. are keyed by the raw node id, not
+-    // the prefix) — so `canonicalProviderId` itself must stay untouched. What must NOT leak
+-    // is the raw UUID in the *public* `owned_by` field: resolve it to the operator's
+-    // configured prefix there, and only there.
+-    const resolvePublicOwnerId = (providerId: string, canonicalProviderId: string): string =>
+-      providerIdToPrefix[providerId] || canonicalProviderId;
++    // #8327: compatible-provider nodes use an internal UUID for registry,
++    // connection, and hidden-model lookups. That storage-facing identity must stay
++    // unchanged, but the UUID must not appear in the public `owned_by` field.
 +    //
-+    // The catalog used to publish the SAME model under two ids (alias `<alias>/<m>`
-+    // AND canonical `<canonicalId>/<m>`) under the default `prefixMode: "dual"`,
-+    // which is what fragmented every selector/lookup that keys on `id`. The contract
-+    // is: legacy aliases stay INBOUND-callable (`parseModel`/`resolveProviderSegment`
-+    // still accept them) but never create a second catalog identity.
++    // Use the shared provider-identity authority to resolve the supplied provider
++    // segment, then resolve its public owner. For a compatible node, this preserves
++    // the UUID until `resolvePublicOwnerId` maps it to the operator-configured node
++    // prefix. For built-in providers, the shared resolver supplies the canonical
++    // owner identity.
 +    //
-+    // Precedence, matching the outbound half of the identity contract (see
-+    // catalogProviderMaps.ts `aliasRoundTripsTo`):
-+    //   1. the operator's node prefix wins (compatible providers store a UUID node id
-+    //      that must never be published; their configured prefix is the public id);
-+    //   2. else the canonical registry id, but ONLY when `${canonicalId}/x` round-trips
-+    //      through parseModel to that provider AND existing policy permits it. The
-+    //      noauth guard is preserved verbatim: the free `opencode` provider's canonical
-+    //      id is slug-hijacked to `opencode-zen` (open-sse/services/model.ts), so it
-+    //      fails the round-trip and correctly publishes under its alias `oc/` only;
-+    //   3. else the routable alias (the provider's own id is unreachable as a prefix).
++    // Keeping this path shared with other catalog surfaces is defensive: it makes
++    // public owner resolution authoritative in one place and preserves future
++    // cross-surface parity as provider identity rules evolve.
++    const ownerResolveOptions = { nodes: providerNodes, aliasToProviderId, providerIdToAlias };
++    const resolvePublicOwnerIdForCatalog = (providerId: string): string =>
++      resolvePublicOwnerId(
++        resolveProviderSegment(providerId, ownerResolveOptions).providerId || providerId,
++        ownerResolveOptions
++      );
++
++    // #8869 — choose one public prefix for each provider/model catalog identity.
 +    //
-+    // Returns the single prefix string (never both). Every publishing loop below uses
-+    // this instead of the old includeAlias/includeCanonical pair.
++    // Legacy aliases remain accepted by inbound parsing, but catalog publication uses
++    // a single prefix. A compatible node publishes its configured prefix. Other
++    // providers publish their canonical id when that prefix routes back to the same
++    // provider and policy permits it; otherwise they publish the routable alias.
++    //
++    // Every source loop below calls this helper instead of selecting prefixes locally.
 +    const resolvePublicPrefix = (params: {
 +      canonicalProviderId: string;
 +      alias: string;
@@ -1695,11 +1728,10 @@ index 34ccbdfba..964bf828d 100644
 +      }
 +      return alias;
 +    };
-+
+ 
      // Get combos
      let combos = [];
-     try {
-@@ -352,13 +389,29 @@ async function buildUnifiedModelsResponseCore(
+@@ -352,13 +385,29 @@ async function buildUnifiedModelsResponseCore(
      };
  
      // prefixRoutesToProvider is imported directly from catalogProviderMaps.ts (no
@@ -1734,7 +1766,7 @@ index 34ccbdfba..964bf828d 100644
  
      const getComboTargetCatalogMetadata = (
        target: ComboCatalogTarget
-@@ -550,7 +603,6 @@ async function buildUnifiedModelsResponseCore(
+@@ -550,7 +599,6 @@ async function buildUnifiedModelsResponseCore(
          );
          const quotaFinal = applyCatalogPostFilters(request, quotaModels, {
            connections,
@@ -1742,7 +1774,7 @@ index 34ccbdfba..964bf828d 100644
            aliasToProviderId,
          });
          return finalizeCatalogResponse(request, quotaFinal, () => undefined, {
-@@ -613,26 +665,17 @@ async function buildUnifiedModelsResponseCore(
+@@ -613,26 +661,17 @@ async function buildUnifiedModelsResponseCore(
        }
      }
  
@@ -1776,7 +1808,7 @@ index 34ccbdfba..964bf828d 100644
        const comboMetadata = buildComboCatalogMetadata(combo, combos);
  
        listedIds.add(combo.name);
-@@ -701,45 +744,37 @@ async function buildUnifiedModelsResponseCore(
+@@ -701,45 +740,31 @@ async function buildUnifiedModelsResponseCore(
          )
            continue;
          if (!providerSupportsModel(canonicalProviderId, model.id)) continue;
@@ -1785,8 +1817,7 @@ index 34ccbdfba..964bf828d 100644
          if (shouldHidePaid(canonicalProviderId, model.id, (model as { pricing?: unknown }).pricing))
            continue;
  
-+        // #8869 — one public id per model: canonical registry prefix when it
-+        // round-trips and policy permits, else the routable alias.
++        // #8869 — publish this static model under the shared single-prefix rule.
 +        const publicId = `${resolvePublicPrefix({ canonicalProviderId, alias })}/${model.id}`;
          const visionFields =
 -          getVisionCapabilityFields(aliasId) || getVisionCapabilityFields(model.id);
@@ -1823,14 +1854,9 @@ index 34ccbdfba..964bf828d 100644
 -          });
 -        }
 +          getVisionCapabilityFields(publicId) || getVisionCapabilityFields(model.id);
-+        // #8869 single-prefix + #6457 cross-surface: some models are genuinely dual
-+        // chat+image (e.g. codex `gpt-5.6-sol`). Under one public id this chat row and
-+        // the image-registry row (`type:"image"`, added later) share `publicId`. The
-+        // chat row is a real Responses-API surface here, NOT the bogus defaulted-chat
-+        // sibling that #6457 drops, so declare its endpoint explicitly: dedupe keeps a
-+        // row whose `supported_endpoints` name a genuinely non-chat surface, while the
-+        // image row keeps its own listing identity. Only the Responses-format providers
-+        // can be dual this way, so scope the declaration to them + registered image ids.
++        // #8869 + #6457: a Responses-capable chat row and an image-registry row may
++        // intentionally share this public id while representing different surfaces.
++        // Mark the chat row as responses so final deduplication retains both rows.
 +        const isDualResponsesSurface =
 +          REGISTRY[canonicalProviderId]?.format === "openai-responses" &&
 +          isRegisteredImageModel(canonicalProviderId, model.id);
@@ -1848,13 +1874,11 @@ index 34ccbdfba..964bf828d 100644
        }
      }
  
-@@ -747,27 +782,21 @@ async function buildUnifiedModelsResponseCore(
+@@ -747,27 +772,19 @@ async function buildUnifiedModelsResponseCore(
        if (!providerSupportsModel("codex", modelId)) continue;
        if (getModelIsHidden("codex", modelId)) continue;
  
-+      // #8869 — one public id for codex-native models too: the old trio
-+      // (cx/<m>, codex/<m>, bare <m>) collapsed to the single routable prefix.
-+      // The bare id and alias remain inbound-callable via parseModel.
++      // #8869 — apply the same single-prefix rule to Codex-native models.
        const alias = providerIdToAlias.codex || "cx";
 -      const aliasId = `${alias}/${modelId}`;
 -      const providerIdModel = `codex/${modelId}`;
@@ -1890,7 +1914,7 @@ index 34ccbdfba..964bf828d 100644
      }
  
      try {
-@@ -828,7 +857,6 @@ async function buildUnifiedModelsResponseCore(
+@@ -828,7 +845,6 @@ async function buildUnifiedModelsResponseCore(
                ? sm.id.slice(registryEntry.modelIdPrefix.length)
                : sm.id;
  
@@ -1898,7 +1922,7 @@ index 34ccbdfba..964bf828d 100644
            const endpoints = Array.isArray(sm.supportedEndpoints) ? sm.supportedEndpoints : ["chat"];
            const apiFormat = typeof sm.apiFormat === "string" ? sm.apiFormat : "chat-completions";
            let modelType: string | undefined;
-@@ -852,29 +880,34 @@ async function buildUnifiedModelsResponseCore(
+@@ -852,32 +868,35 @@ async function buildUnifiedModelsResponseCore(
              ...(buildSyncedCapabilities(sm) ? { capabilities: buildSyncedCapabilities(sm) } : {}),
            };
  
@@ -1907,9 +1931,7 @@ index 34ccbdfba..964bf828d 100644
 -            const mergedCapabilities = mergeSyncedCapabilities(existingAliasModel.capabilities, sm);
 -            Object.assign(existingAliasModel, syncedFields);
 -            if (mergedCapabilities) existingAliasModel.capabilities = mergedCapabilities;
-+          // #8869 — one public id per synced model: operator node-prefix wins,
-+          // else the canonical registry id when it round-trips + policy permits,
-+          // else the routable alias. Replaces the old alias+canonical dual emission.
++          // #8869 — publish this synced model under the shared single-prefix rule.
 +          const publicId = `${resolvePublicPrefix({ canonicalProviderId, alias, nodePrefix: prefix })}/${displayModelId}`;
 +
 +          const existingModel = models.find((model) => model.id === publicId);
@@ -1937,7 +1959,7 @@ index 34ccbdfba..964bf828d 100644
 +            id: publicId,
 +            object: "model",
 +            created: timestamp,
-+            owned_by: resolvePublicOwnerId(providerId, canonicalProviderId),
++            owned_by: resolvePublicOwnerIdForCatalog(providerId),
 +            permission: [],
 +            root: sm.id,
 +            parent: null,
@@ -1951,8 +1973,12 @@ index 34ccbdfba..964bf828d 100644
 +              id: publicId,
                object: "model",
                created: timestamp,
-               owned_by: resolvePublicOwnerId(providerId, canonicalProviderId),
-@@ -892,22 +925,6 @@ async function buildUnifiedModelsResponseCore(
+-              owned_by: resolvePublicOwnerId(providerId, canonicalProviderId),
++              owned_by: resolvePublicOwnerIdForCatalog(providerId),
+               permission: [],
+               root: sm.id,
+               parent: null,
+@@ -892,22 +911,6 @@ async function buildUnifiedModelsResponseCore(
                  : {}),
              });
            }
@@ -1975,7 +2001,7 @@ index 34ccbdfba..964bf828d 100644
          }
        }
      } catch (err) {
-@@ -925,6 +942,14 @@ async function buildUnifiedModelsResponseCore(
+@@ -925,6 +928,14 @@ async function buildUnifiedModelsResponseCore(
            if (!openRouterModel?.id || typeof openRouterModel.id !== "string") continue;
            const qualifiedId = qualifyOpenRouterModelId(openRouterModel.id);
            if (models.some((existingModel: any) => existingModel?.id === qualifiedId)) continue;
@@ -1990,7 +2016,7 @@ index 34ccbdfba..964bf828d 100644
  
            const inputModalities = normalizeOpenRouterModalities(
              openRouterModel.architecture?.input_modalities
-@@ -1012,7 +1037,7 @@ async function buildUnifiedModelsResponseCore(
+@@ -1012,7 +1023,7 @@ async function buildUnifiedModelsResponseCore(
            typeof model?.root === "string"
              ? model.root
              : typeof model?.id === "string"
@@ -1999,7 +2025,7 @@ index 34ccbdfba..964bf828d 100644
                : null;
          return existingRoot === rawModelId;
        });
-@@ -1020,9 +1045,7 @@ async function buildUnifiedModelsResponseCore(
+@@ -1020,9 +1031,7 @@ async function buildUnifiedModelsResponseCore(
      // Add embedding models (filtered by active providers)
      for (const embModel of getAllEmbeddingModels()) {
        if (!isProviderActive(embModel.provider)) continue;
@@ -2010,7 +2036,7 @@ index 34ccbdfba..964bf828d 100644
        if (!providerSupportsModel(embModel.provider, rawModelId)) continue;
        if (getModelIsHidden(embModel.provider, rawModelId)) continue;
        if (hasEquivalentSpecialtyModel(embModel.provider, rawModelId, "embedding", embModel.id)) {
-@@ -1042,7 +1065,7 @@ async function buildUnifiedModelsResponseCore(
+@@ -1042,7 +1051,7 @@ async function buildUnifiedModelsResponseCore(
      // Add image models (filtered by active providers)
      for (const imgModel of getAllImageModels()) {
        if (!isProviderActive(imgModel.provider)) continue;
@@ -2019,7 +2045,7 @@ index 34ccbdfba..964bf828d 100644
        if (!providerSupportsModel(imgModel.provider, rawModelId)) continue;
        if (getModelIsHidden(imgModel.provider, rawModelId)) continue;
        models.push({
-@@ -1061,7 +1084,7 @@ async function buildUnifiedModelsResponseCore(
+@@ -1061,7 +1070,7 @@ async function buildUnifiedModelsResponseCore(
      // Add rerank models (filtered by active providers)
      for (const rerankModel of getAllRerankModels()) {
        if (!isProviderActive(rerankModel.provider)) continue;
@@ -2028,7 +2054,7 @@ index 34ccbdfba..964bf828d 100644
        if (!providerSupportsModel(rerankModel.provider, rawModelId)) continue;
        if (getModelIsHidden(rerankModel.provider, rawModelId)) continue;
        if (hasEquivalentSpecialtyModel(rerankModel.provider, rawModelId, "rerank", rerankModel.id)) {
-@@ -1080,7 +1103,7 @@ async function buildUnifiedModelsResponseCore(
+@@ -1080,7 +1089,7 @@ async function buildUnifiedModelsResponseCore(
      // Add audio models (filtered by active providers)
      for (const audioModel of getAllAudioModels()) {
        if (!isProviderActive(audioModel.provider)) continue;
@@ -2037,7 +2063,7 @@ index 34ccbdfba..964bf828d 100644
        if (!providerSupportsModel(audioModel.provider, rawModelId)) continue;
        if (getModelIsHidden(audioModel.provider, rawModelId)) continue;
        models.push({
-@@ -1096,7 +1119,7 @@ async function buildUnifiedModelsResponseCore(
+@@ -1096,7 +1105,7 @@ async function buildUnifiedModelsResponseCore(
      // Add moderation models (filtered by active providers)
      for (const modModel of getAllModerationModels()) {
        if (!isProviderActive(modModel.provider)) continue;
@@ -2046,7 +2072,7 @@ index 34ccbdfba..964bf828d 100644
        if (!providerSupportsModel(modModel.provider, rawModelId)) continue;
        if (getModelIsHidden(modModel.provider, rawModelId)) continue;
        models.push({
-@@ -1111,7 +1134,7 @@ async function buildUnifiedModelsResponseCore(
+@@ -1111,7 +1120,7 @@ async function buildUnifiedModelsResponseCore(
      // Add video models (filtered by active providers)
      for (const videoModel of getAllVideoModels()) {
        if (!isProviderActive(videoModel.provider)) continue;
@@ -2055,7 +2081,7 @@ index 34ccbdfba..964bf828d 100644
        if (!providerSupportsModel(videoModel.provider, rawModelId)) continue;
        if (getModelIsHidden(videoModel.provider, rawModelId)) continue;
        models.push({
-@@ -1126,7 +1149,7 @@ async function buildUnifiedModelsResponseCore(
+@@ -1126,7 +1135,7 @@ async function buildUnifiedModelsResponseCore(
      // Add music models (filtered by active providers)
      for (const musicModel of getAllMusicModels()) {
        if (!isProviderActive(musicModel.provider)) continue;
@@ -2064,21 +2090,19 @@ index 34ccbdfba..964bf828d 100644
        if (!providerSupportsModel(musicModel.provider, rawModelId)) continue;
        if (getModelIsHidden(musicModel.provider, rawModelId)) continue;
        models.push({
-@@ -1194,8 +1217,11 @@ async function buildUnifiedModelsResponseCore(
+@@ -1194,8 +1203,9 @@ async function buildUnifiedModelsResponseCore(
            }
  
            // Skip if already added as built-in
 -          const aliasId = `${alias}/${modelId}`;
 -          if (models.some((m) => m.id === aliasId)) continue;
-+          // #8869 — one public id per custom model: operator node-prefix wins,
-+          // else canonical registry id when it round-trips + policy permits,
-+          // else the routable alias. Replaces the old alias+canonical dual emission.
++          // #8869 — publish this custom model under the shared single-prefix rule.
 +          const publicId = `${resolvePublicPrefix({ canonicalProviderId, alias, nodePrefix: prefix })}/${modelId}`;
 +          if (models.some((m) => m.id === publicId)) continue;
  
            // Determine type from supportedEndpoints
            const endpoints = Array.isArray(model.supportedEndpoints)
-@@ -1210,64 +1236,35 @@ async function buildUnifiedModelsResponseCore(
+@@ -1210,64 +1220,35 @@ async function buildUnifiedModelsResponseCore(
            else if (endpoints.includes("audio")) modelType = "audio";
            if (
              modelType &&
@@ -2089,7 +2113,8 @@ index 34ccbdfba..964bf828d 100644
            }
            const visionFields =
 -            modelType === "chat" ? getCustomVisionCapabilityFields(model, aliasId, modelId) : null;
--
++            modelType === "chat" ? getCustomVisionCapabilityFields(model, publicId, modelId) : null;
+ 
 -          if (includeAlias) {
 -            models.push({
 -              id: aliasId,
@@ -2114,8 +2139,7 @@ index 34ccbdfba..964bf828d 100644
 -              ...(visionFields || {}),
 -            });
 -          }
-+            modelType === "chat" ? getCustomVisionCapabilityFields(model, publicId, modelId) : null;
- 
+-
 -          if (includeCanonical && canonicalProviderId !== alias && !prefix && !isNoAuthProvider) {
 -            const providerPrefixedId = `${canonicalProviderId}/${modelId}`;
 -            if (models.some((m) => m.id === providerPrefixedId)) continue;
@@ -2146,7 +2170,7 @@ index 34ccbdfba..964bf828d 100644
 +            id: publicId,
 +            object: "model",
 +            created: timestamp,
-+            owned_by: resolvePublicOwnerId(providerId, canonicalProviderId),
++            owned_by: resolvePublicOwnerIdForCatalog(providerId),
 +            permission: [],
 +            root: modelId,
 +            parent: null,
@@ -2167,7 +2191,7 @@ index 34ccbdfba..964bf828d 100644
          }
        }
      } catch (e) {
-@@ -1295,7 +1292,14 @@ async function buildUnifiedModelsResponseCore(
+@@ -1295,7 +1276,14 @@ async function buildUnifiedModelsResponseCore(
            continue;
          }
  
@@ -2183,16 +2207,12 @@ index 34ccbdfba..964bf828d 100644
          if (
            !activeAliases.has(alias) &&
            !activeAliases.has(canonicalProviderId) &&
-@@ -1310,51 +1314,33 @@ async function buildUnifiedModelsResponseCore(
+@@ -1310,51 +1298,29 @@ async function buildUnifiedModelsResponseCore(
          // decides via the FREE_MODEL_IDS_BY_PROVIDER catalog tier.
          if (shouldHidePaid(canonicalProviderId, modelId)) continue;
  
 -        const aliasId = `${alias}/${modelId}`;
-+        // #8869 — one public id per alias-backed model: operator node-prefix wins,
-+        // else canonical registry id when it round-trips + policy permits, else the
-+        // routable alias. Replaces the old alias+canonical dual emission (the
-+        // canonical branch here was already gated on the same !nodePrefix +
-+        // round-trip contract the helper now centralizes).
++        // #8869 — publish this alias-backed model under the shared single-prefix rule.
 +        const publicId = `${resolvePublicPrefix({ canonicalProviderId, alias, nodePrefix })}/${modelId}`;
          const rawPrefixedId = `${providerKey}/${modelId}`;
          if (
@@ -2244,7 +2264,7 @@ index 34ccbdfba..964bf828d 100644
 +          id: publicId,
 +          object: "model",
 +          created: timestamp,
-+          owned_by: resolvePublicOwnerId(providerKey, canonicalProviderId),
++          owned_by: resolvePublicOwnerIdForCatalog(providerKey),
 +          permission: [],
 +          root: modelId,
 +          parent: null,
@@ -2253,15 +2273,13 @@ index 34ccbdfba..964bf828d 100644
        }
      } catch (e) {
        console.log("Could not fetch model aliases");
-@@ -1384,16 +1370,19 @@ async function buildUnifiedModelsResponseCore(
+@@ -1384,19 +1350,20 @@ async function buildUnifiedModelsResponseCore(
            continue;
          if (!hasEligibleConnectionForModel([conn], modelId)) continue;
  
 -        const aliasId = `${alias}/${modelId}`;
 -        if (models.some((m) => m.id === aliasId)) continue;
-+        // #8869 — one public id per managed-fallback model, via the shared
-+        // routability contract (operator prefix wins, else canonical registry
-+        // id when it round-trips + policy permits, else the routable alias).
++        // #8869 — publish this managed fallback under the shared single-prefix rule.
 +        const publicId = `${resolvePublicPrefix({ canonicalProviderId, alias, nodePrefix: prefix })}/${modelId}`;
 +        if (models.some((m) => m.id === publicId)) continue;
  
@@ -2276,8 +2294,12 @@ index 34ccbdfba..964bf828d 100644
 +          id: publicId,
            object: "model",
            created: timestamp,
-           owned_by: resolvePublicOwnerId(providerId, canonicalProviderId),
-@@ -1433,8 +1422,30 @@ async function buildUnifiedModelsResponseCore(
+-          owned_by: resolvePublicOwnerId(providerId, canonicalProviderId),
++          owned_by: resolvePublicOwnerIdForCatalog(providerId),
+           permission: [],
+           root: modelId,
+           parent: null,
+@@ -1433,8 +1400,30 @@ async function buildUnifiedModelsResponseCore(
          // Without this branch, isModelAllowedForKey returns false for every model
          // (metadata missing → deny), collapsing /v1/models to 0 entries.
        } else {
@@ -2308,7 +2330,7 @@ index 34ccbdfba..964bf828d 100644
            // m.id is the full identifier (e.g. openai/gpt-4o), m.root is the raw model string
            // check either one as the config could use either patterns
            if (
-@@ -1447,10 +1458,12 @@ async function buildUnifiedModelsResponseCore(
+@@ -1447,10 +1436,12 @@ async function buildUnifiedModelsResponseCore(
          finalModels = filtered;
        }
      }
@@ -2323,7 +2345,7 @@ index 34ccbdfba..964bf828d 100644
        aliasToProviderId,
      });
  
-@@ -1467,7 +1480,10 @@ async function buildUnifiedModelsResponseCore(
+@@ -1467,7 +1458,10 @@ async function buildUnifiedModelsResponseCore(
        if (registryFallback) return registryFallback;
  
        const modelId =
@@ -2493,47 +2515,47 @@ index 1dcd106c3..93acb37f7 100644
    try {
 diff --git a/src/app/api/v1/models/catalogOrder.ts b/src/app/api/v1/models/catalogOrder.ts
 new file mode 100644
-index 0000000000000000000000000000000000000000..d34645e90098fc813b6c4cf4dd172566ae48e779
+index 0000000000000000000000000000000000000000..ee93b3b5f44e52c60cdb72605133c43a40030f1c
 GIT binary patch
-literal 4058
-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
-E1ENAtmH+?%
+literal 4102
+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
+br!MhG<Wisze#q4uUmpJ{_4Go#kG=l_rf*=6
 
 literal 0
 HcmV?d00001
@@ -2773,16 +2795,16 @@ index 6de91e645..7d3594f46 100644
      if (modelStr.startsWith(prefixWithSlash)) {
        const modelId = modelStr.slice(prefixWithSlash.length).trim();
 diff --git a/src/app/api/v1/models/catalogResponse.ts b/src/app/api/v1/models/catalogResponse.ts
-index dee78d995..98ba70d21 100644
+index dee78d995..8b3750915 100644
 --- a/src/app/api/v1/models/catalogResponse.ts
 +++ b/src/app/api/v1/models/catalogResponse.ts
-@@ -8,21 +8,19 @@
+@@ -8,21 +8,21 @@
   * mirrors the first time it was written as a duplicate.
   */
  
 -import { appendNoThinkingVariants } from "@omniroute/open-sse/utils/noThinkingAlias";
--import { appendClaudeEffortVariants } from "@omniroute/open-sse/utils/claudeEffortVariants";
--import { appendSyncedEffortVariants } from "@omniroute/open-sse/utils/syncedEffortVariants";
+ import { appendClaudeEffortVariants } from "@omniroute/open-sse/utils/claudeEffortVariants";
+ import { appendSyncedEffortVariants } from "@omniroute/open-sse/utils/syncedEffortVariants";
  import { appendCcDiscoveryAliases } from "@omniroute/open-sse/utils/ccDiscoveryAliases";
  import { isCcAliasGlobalEnabled, getCcAliasSettingsBulk } from "@/lib/db/ccDiscoveryAliases";
  import { buildCcAliasPredicate } from "./ccAliasPredicate";
@@ -2801,7 +2823,7 @@ index dee78d995..98ba70d21 100644
  
  /**
   * Post-filter chain applied AFTER the API-key filter, so variants and mirrors are
-@@ -37,7 +35,6 @@ export function applyCatalogPostFilters(
+@@ -37,7 +37,6 @@ export function applyCatalogPostFilters(
    models: Array<Record<string, any>>,
    ctx: {
      connections: any;
@@ -2809,7 +2831,7 @@ index dee78d995..98ba70d21 100644
      aliasToProviderId: Record<string, string>;
    }
  ): Array<Record<string, any>> {
-@@ -51,52 +48,33 @@ export function applyCatalogPostFilters(
+@@ -51,52 +50,48 @@ export function applyCatalogPostFilters(
      });
    }
  
@@ -2822,18 +2844,27 @@ index dee78d995..98ba70d21 100644
 -    finalModels,
 -    ctx.prefixMode === "canonical" ? ctx.aliasToProviderId : undefined
 -  );
--
++  // Collapse source rows that carry the same storage identity under more than one
++  // public prefix. The catalog now publishes exactly one routable public identity per
++  // model, so this is a defensive guard against any source that still pushes two. It must
++  // run before synthetic variants are derived so those rows inherit a single base.
++  finalModels = dedupeCanonicalModelIdentities(finalModels);
+ 
 -  // Advertise no-thinking gateway variants (Fase 8.1). Derived from the already
 -  // key-filtered list, so a variant only appears when its real model is permitted.
 -  finalModels = appendNoThinkingVariants(
 -    finalModels,
 -    ctx.prefixMode === "canonical" ? ctx.aliasToProviderId : undefined
 -  );
-+  // Collapse source rows that carry the same storage identity under more than one
-+  // public prefix. The catalog now publishes exactly one routable public identity per
-+  // model, so this is a defensive guard against any source that still pushes two. It must
-+  // run before synthetic variants are derived so those rows inherit a single base.
-+  finalModels = dedupeCanonicalModelIdentities(finalModels);
++  // Advertise Claude reasoning-effort variants (<published>/<model>-{low,medium,high[,xhigh]}).
++  // Derived from the already key-filtered list so a variant only appears when its real
++  // model is permitted. The variant inherits the base model's single routable public
++  // prefix verbatim — we must NOT rewrite the prefix through aliasToProviderId, because the
++  // published prefix is not always the registry id: the free `oc` provider publishes
++  // `oc/<model>`, and its registry id `opencode` is slug-hijacked to opencode-zen. The
++  // gateway already routes these suffixed ids (claudeEffortVariant.ts); this just makes
++  // them selectable in catalog-only clients that can't set reasoning_effort like VS Code.
++  finalModels = appendClaudeEffortVariants(finalModels);
  
 -  // Advertise `claude/<id>` discovery-mirror aliases so Claude Code's gateway
 -  // model discovery (which only lists `claude`/`anthropic`-prefixed ids) can see
@@ -2871,11 +2902,11 @@ index dee78d995..98ba70d21 100644
 +    }
    }
 -
--  // #7694: advertise `<provider>/<model>-<tier>` variants for synced models that
--  // captured `reasoning.supported_efforts` at sync time (capabilities.effort_tiers).
--  // Derived from the already key-filtered list; skips codex/kimi (own suffix mechanism).
--  finalModels = appendSyncedEffortVariants(finalModels);
--
+   // #7694: advertise `<provider>/<model>-<tier>` variants for synced models that
+   // captured `reasoning.supported_efforts` at sync time (capabilities.effort_tiers).
+   // Derived from the already key-filtered list; skips codex/kimi (own suffix mechanism).
+   finalModels = appendSyncedEffortVariants(finalModels);
+ 
 -  // #4424 follow-up — drop exact-duplicate ids that slip through the per-source push
 -  // guards (e.g. `codex/gpt-5.5`, `veo-free/seedance` listed twice). Keyed by listing
 -  // identity (id, type, subtype) so the intentional same-id audio transcription/speech
@@ -2887,7 +2918,7 @@ index dee78d995..98ba70d21 100644
    finalModels = dedupeExactCatalogIds(finalModels);
  
    return finalModels;
-@@ -130,6 +108,12 @@ export function finalizeCatalogResponse(
+@@ -130,6 +125,12 @@ export function finalizeCatalogResponse(
        return maybeOmitCatalogModelName(listedModel, includeModelNames);
      })
    );
@@ -2900,7 +2931,7 @@ index dee78d995..98ba70d21 100644
    // Codex CLI compatibility: its model-catalog refresh (codex_models_manager) does
    // GET /v1/models?client_version=<v> and decodes a JSON object with a TOP-LEVEL
    // `models` array, so the OpenAI-standard `{object,data}` shape makes it fail with
-@@ -146,7 +130,7 @@ export function finalizeCatalogResponse(
+@@ -146,7 +147,7 @@ export function finalizeCatalogResponse(
    // keeps codex on its built-in model info — same inference as today, minus the error.
    const responseBody: Record<string, unknown> = {
      object: "list",
@@ -4481,7 +4512,7 @@ index 822265d5c..398a7b548 100755
      { initGracefulShutdown },
      { initApiBridgeServer },
 diff --git a/src/lib/combos/builderOptions.ts b/src/lib/combos/builderOptions.ts
-index 8d73047e9..0e8c8840b 100644
+index 8d73047e9..c9c9f4ce5 100644
 --- a/src/lib/combos/builderOptions.ts
 +++ b/src/lib/combos/builderOptions.ts
 @@ -8,7 +8,7 @@ import {
@@ -4493,80 +4524,7 @@ index 8d73047e9..0e8c8840b 100644
  import { getResolvedModelCapabilities } from "@/lib/modelCapabilities";
  import { getSyncedCapabilities } from "@/lib/modelsDevSync";
  import { getModelsByProviderId } from "@/shared/constants/models";
-@@ -20,7 +20,6 @@ import {
-   isOpenAICompatibleProvider,
- } from "@/shared/constants/providers";
- import type { RegistryModel } from "@omniroute/open-sse/config/providerRegistry.ts";
--import { appendSyncedEffortVariants } from "@omniroute/open-sse/utils/syncedEffortVariants";
- 
- type JsonRecord = Record<string, unknown>;
- 
-@@ -384,64 +383,6 @@ function buildModelOptions(
-     });
-   }
- 
--  // #8072: expose reasoning-effort variants (e.g. model-high, model-medium)
--  // in the Combo Builder picker, matching the catalog/Playground behaviour.
--  // Convert synced models with supportedThinkingEfforts into catalog-shaped
--  // entries, run the shared appendSyncedEffortVariants utility, and add any
--  // new variant ids that aren't already in the model map.
--  const catalogShaped = syncedModels
--    .filter(
--      (m): m is SyncedModelLike & { id: string; supportedThinkingEfforts: string[] } =>
--        typeof m.id === "string" &&
--        Array.isArray(m.supportedThinkingEfforts) &&
--        m.supportedThinkingEfforts.length > 0
--    )
--    .map((m) => ({
--      id: `${providerId}/${m.id}`,
--      owned_by: providerId,
--      root: m.id,
--      name: m.name || m.id,
--      capabilities: { effort_tiers: m.supportedThinkingEfforts },
--    }));
--  if (catalogShaped.length > 0) {
--    // Track each tier variant's true base model id (the synced model's own raw,
--    // unsuffixed id) directly while iterating tiers here. We can't re-derive the
--    // base id from `variant.root` after calling appendSyncedEffortVariants: that
--    // utility sets a variant's `root` to `${baseRoot}-${tier}` (still tier-suffixed,
--    // see open-sse/utils/syncedEffortVariants.ts), not the base model id, so a
--    // lookup keyed on it never matches an entry in modelMap and variants silently
--    // fail to inherit contextLength/outputTokenLimit/supportedEndpoints/supportsThinking.
--    const baseRawIdByVariantId = new Map<string, string>();
--    for (const shaped of catalogShaped) {
--      for (const tier of shaped.capabilities.effort_tiers) {
--        if (typeof tier === "string" && tier.length > 0) {
--          baseRawIdByVariantId.set(`${shaped.id}-${tier}`, shaped.root);
--        }
--      }
--    }
--
--    const withVariants = appendSyncedEffortVariants(catalogShaped);
--    for (const variant of withVariants) {
--      if (typeof variant.id !== "string") continue;
--      // Strip the provider prefix to get the raw model id for the builder
--      const rawId = variant.id.startsWith(`${providerId}/`)
--        ? variant.id.slice(providerId.length + 1)
--        : variant.id;
--      if (modelMap.has(rawId)) continue;
--      const baseId = baseRawIdByVariantId.get(variant.id) ?? rawId;
--      const base = modelMap.get(baseId);
--      addModelOption(modelMap, providerId, {
--        id: rawId,
--        name: base ? `${base.name} (${rawId.slice(baseId.length + 1)})` : rawId,
--        source: "imported",
--        supportedEndpoints: base?.supportedEndpoints,
--        contextLength: base?.contextLength ?? null,
--        outputTokenLimit: base?.outputTokenLimit ?? null,
--        supportsThinking: base?.supportsThinking,
--      });
--    }
--  }
--
-   for (const model of builtInModels) {
-     const resolved = getResolvedModelCapabilities({
-       provider: providerId,
-@@ -635,6 +576,21 @@ export async function getComboBuilderOptions(): Promise<ComboBuilderOptionsPaylo
+@@ -635,6 +635,21 @@ export async function getComboBuilderOptions(): Promise<ComboBuilderOptionsPaylo
        customModels
      );
  
@@ -6347,10 +6305,10 @@ index 000000000..2f53c40a1
 +}
 diff --git a/src/shared/providers/nodePrefix.ts b/src/shared/providers/nodePrefix.ts
 new file mode 100644
-index 000000000..69783618b
+index 000000000..901acd4b7
 --- /dev/null
 +++ b/src/shared/providers/nodePrefix.ts
-@@ -0,0 +1,254 @@
+@@ -0,0 +1,260 @@
 +/**
 + * Provider-node prefix validation — the one place that decides whether an operator
 + * may claim a given `provider_nodes.prefix`.
@@ -6436,12 +6394,18 @@ index 000000000..69783618b
 +let _reservedProviderPrefixes: Set<string> | null = null;
 +
 +/**
-+ * Every built-in provider id and alias, from BOTH sources of truth.
++ * Built-in provider names reserved when an operator creates or edits a node prefix.
 + *
-+ * `REGISTRY` alone is not enough: it carries 328 names while `AI_PROVIDERS` carries
-+ * 449, and the 122 ids present only in `AI_PROVIDERS` (`auto`, `azure`, `copilot`,
-+ * `cliproxyapi`, …) were exactly the ones a node could shadow unnoticed. Both are
-+ * walked so the reserved set matches what the router can actually resolve.
++ * `REGISTRY` supplies the exact built-in provider ids and aliases used by the
++ * existing runtime collision guard. `AI_PROVIDERS` contributes a wider public and
++ * configuration provider-name surface for create/edit validation.
++ *
++ * New and edited node prefixes are checked against the union of both sources.
++ * Existing rows are reported through `findProviderNodePrefixConflicts` rather than
++ * rewritten, so model ids already published from those rows are preserved.
++ *
++ * The validation set and the runtime collision-guard set therefore intentionally
++ * are not required to be equal.
 + *
 + * Built lazily and cached: `AI_PROVIDERS` is a Proxy that materializes its backing
 + * map on first access.
@@ -6825,6 +6789,42 @@ index 1fa02d2a9..f42cdb9cb 100644
 -  return null; // Not a compatible provider, use default PROVIDER_COLORS
 -}
 +export { getCompatibleProviderLabel as getProviderDisplayLabel } from "@/lib/display/names";
+diff --git a/src/sse/services/model.ts b/src/sse/services/model.ts
+index 590d0e925..61bb6e3d6 100644
+--- a/src/sse/services/model.ts
++++ b/src/sse/services/model.ts
+@@ -60,7 +60,7 @@ function buildWildcardAliasMap(settings: Record<string, unknown>): Record<string
+ }
+ 
+ /**
+- * Build a combined model alias map that merges all alias stores:
++ * Build the request-configured alias map passed to `getModelInfoCore()`:
+  * 1. DB-namespace aliases (key_value WHERE namespace='modelAliases') — set via
+  *    /api/models/alias/ and seeded at startup.
+  * 2. Settings-based exact aliases (settings.modelAliases) — set via the Settings UI and
+@@ -68,12 +68,16 @@ function buildWildcardAliasMap(settings: Record<string, unknown>): Record<string
+  * 3. Settings-based wildcard aliases (settings.wildcardAliases) — set via the Settings
+  *    UI's "Wildcard Pattern" mode, PATCH /api/settings (#7693).
+  *
+- * Settings-based exact aliases take priority over DB-namespace aliases so that UI
+- * configuration always wins. Without this merge, aliases configured via the Settings
+- * UI were never consulted during provider routing, causing provider inference (e.g.
+- * /^gpt-/ → openai) to silently override them (issue #2618 / #2208). Wildcard entries
+- * are folded in last: they are keyed by pattern string (containing `*`/`?`), which
+- * cannot collide with a real model id, so ordering never affects exact-alias lookups.
++ * Settings-based exact aliases take priority over DB-namespace aliases. Wildcard
++ * entries are folded in last because their pattern keys cannot collide with exact
++ * model ids.
++ *
++ * This map is intentionally separate from the static compatibility aliases resolved
++ * inside `open-sse/services/model.ts`: provider aliases, provider-scoped legacy model
++ * aliases, and cross-proxy model aliases are not stored in any of these three
++ * configuration locations. Request handling also applies the deprecation/custom-alias
++ * store in `modelDeprecation.ts` before routing. Keep those layers distinct when
++ * documenting or changing alias behavior.
+  */
+ async function getCombinedModelAliases(): Promise<Record<string, unknown>> {
+   const [dbAliases, settings] = await Promise.all([
 diff --git a/tests/integration/provider-journey.contract.test.ts b/tests/integration/provider-journey.contract.test.ts
 index b34670855..807690c7d 100644
 --- a/tests/integration/provider-journey.contract.test.ts
@@ -9304,89 +9304,6 @@ index 000000000..6038d1fec
 +  assert.equal(response.status, 200);
 +  assertQuotaContract(await expectedQuotaIds(poolId), comboNames(body));
 +});
-diff --git a/tests/unit/combo-builder-effort-variants-8072.test.ts b/tests/unit/combo-builder-effort-variants-8072.test.ts
-index 166a00a17..fb5259f89 100644
---- a/tests/unit/combo-builder-effort-variants-8072.test.ts
-+++ b/tests/unit/combo-builder-effort-variants-8072.test.ts
-@@ -1,23 +1,8 @@
- /**
-- * #8072 — the Combo Builder model picker did not expose the `<model>-<tier>`
-- * reasoning-effort variants that the catalog/Playground already surface for
-- * synced models declaring `supportedThinkingEfforts` (#7694). PR #8165 wired
-- * `buildModelOptions()` (src/lib/combos/builderOptions.ts) to run the shared
-- * `appendSyncedEffortVariants` utility and add the resulting variant ids.
-- *
-- * Regression guard for a baseId-derivation bug found in that wiring:
-- * `appendSyncedEffortVariants` sets a variant's own `root` field to
-- * `${baseRoot}-${tier}` (still tier-suffixed — see
-- * open-sse/utils/syncedEffortVariants.ts), not the true base model id. Deriving
-- * `baseId` from `variant.root` therefore never matches an entry in `modelMap`,
-- * so every effort variant silently fell back to bare defaults instead of
-- * inheriting contextLength/outputTokenLimit/supportedEndpoints/supportsThinking
-- * from its base model. This test seeds a synced model with
-- * `supportedThinkingEfforts` via `replaceSyncedAvailableModelsForConnection`,
-- * calls `getComboBuilderOptions()`, and asserts both that the variant ids
-- * appear and that they inherit the base entry's metadata.
-- */
--import test from "node:test";
-+ * Universal selectors publish one canonical model identity. Synced reasoning-effort
-+ * metadata belongs to the base model; suffixed compatibility ids remain an inbound
-+ * routing concern and must not multiply Combo Builder options.
-+ */ import test from "node:test";
- import assert from "node:assert/strict";
- import fs from "node:fs";
- import os from "node:os";
-@@ -36,7 +21,7 @@ test.after(() => {
-   fs.rmSync(TEST_DATA_DIR, { recursive: true, force: true });
- });
- 
--test("#8072 buildModelOptions: synced <model>-<tier> effort variants appear in the Combo Builder picker and inherit the base model's metadata", async () => {
-+test("Combo Builder keeps one base identity for synced effort-capable models", async () => {
-   const connection = await providersDb.createProviderConnection({
-     provider: "huggingface",
-     authType: "apikey",
-@@ -67,33 +52,17 @@ test("#8072 buildModelOptions: synced <model>-<tier> effort variants appear in t
-   const base = provider!.models.find((m) => m.id === BASE_MODEL_ID);
-   assert.ok(base, "base synced model must appear in the provider's models list");
- 
-+  assert.equal(base!.contextLength, 131072);
-+  assert.equal(base!.outputTokenLimit, 8192);
-+  assert.deepEqual(base!.supportedEndpoints, ["chat"]);
-+  assert.equal(base!.supportsThinking, true);
-+
-   for (const tier of ["low", "medium", "high"]) {
-     const variantId = `${BASE_MODEL_ID}-${tier}`;
--    const variant = provider!.models.find((m) => m.id === variantId);
--    assert.ok(variant, `expected a "${variantId}" effort-variant entry in the model picker`);
--
--    // The bug: baseId was derived from `variant.root` (tier-suffixed), which never
--    // matched the base entry in modelMap, so these fields silently fell back to
--    // null/undefined instead of being inherited from the base model.
--    assert.equal(
--      variant!.contextLength,
--      base!.contextLength,
--      `${variantId} must inherit contextLength from the base model`
--    );
--    assert.equal(
--      variant!.outputTokenLimit,
--      base!.outputTokenLimit,
--      `${variantId} must inherit outputTokenLimit from the base model`
--    );
--    assert.deepEqual(
--      variant!.supportedEndpoints,
--      base!.supportedEndpoints,
--      `${variantId} must inherit supportedEndpoints from the base model`
--    );
-     assert.equal(
--      variant!.supportsThinking,
--      base!.supportsThinking,
--      `${variantId} must inherit supportsThinking from the base model`
-+      provider!.models.some((model) => model.id === variantId),
-+      false,
-+      `${variantId} must stay inbound-only instead of becoming a second picker identity`
-     );
-   }
- });
 diff --git a/tests/unit/combo-target-node-prefix.test.ts b/tests/unit/combo-target-node-prefix.test.ts
 new file mode 100644
 index 000000000..76b4d1813
@@ -9946,10 +9863,10 @@ index 263586756..0ff19b1c7 100644
    deleteManagedAvailableModelAliasesForProvider,
 diff --git a/tests/unit/mcp-catalog-provider-identity.test.ts b/tests/unit/mcp-catalog-provider-identity.test.ts
 new file mode 100644
-index 000000000..7238d682f
+index 000000000..5cf0d048b
 --- /dev/null
 +++ b/tests/unit/mcp-catalog-provider-identity.test.ts
-@@ -0,0 +1,165 @@
+@@ -0,0 +1,228 @@
 +import test from "node:test";
 +import assert from "node:assert/strict";
 +import fs from "node:fs";
@@ -9983,7 +9900,9 @@ index 000000000..7238d682f
 +
 +const core = await import("../../src/lib/db/core.ts");
 +const providersDb = await import("../../src/lib/db/providers.ts");
++const modelsDb = await import("../../src/lib/db/models.ts");
 +const readCache = await import("../../src/lib/db/readCache.ts");
++const v1ModelsCatalog = await import("../../src/app/api/v1/models/catalog.ts");
 +const { getMcpModelsCatalog } = await import("../../open-sse/mcp-server/catalog.ts");
 +
 +const NODE_ID = "anthropic-compatible-12121212-3434-5656-7878-909090909090";
@@ -10008,6 +9927,24 @@ index 000000000..7238d682f
 +    baseUrl: "https://example.invalid/v1",
 +  } as never);
 +  readCache.invalidateReadCaches?.();
++  v1ModelsCatalog.__resetCatalogBuilderRunsForTest();
++}
++
++async function seedCatalogModel() {
++  const connection = await providersDb.createProviderConnection({
++    provider: NODE_ID,
++    authType: "apikey",
++    name: "pix4k-catalog",
++    apiKey: "sk-test",
++    isActive: true,
++    testStatus: "active",
++    providerSpecificData: {},
++  });
++  await modelsDb.replaceSyncedAvailableModelsForConnection(NODE_ID, connection.id, [
++    { id: "claude-opus-5", supportedEndpoints: ["chat"] },
++  ]);
++  readCache.invalidateReadCaches?.();
++  v1ModelsCatalog.__resetCatalogBuilderRunsForTest();
 +}
 +
 +async function callCatalog(provider: string | undefined) {
@@ -10077,16 +10014,59 @@ index 000000000..7238d682f
 +  }
 +});
 +
++test("the unified catalog and MCP use the same public owner for a compatible node", async () => {
++  await seedNode();
++  await seedCatalogModel();
++
++  const v1Response = await v1ModelsCatalog.getUnifiedModelsResponse(
++    new Request("http://localhost/api/v1/models")
++  );
++  assert.equal(v1Response.status, 200);
++  const v1Body = (await v1Response.json()) as {
++    data: Array<{ id?: string; owned_by?: string }>;
++  };
++
++  const v1Models = v1Body.data.filter(
++    (model): model is { id: string; owned_by: string } =>
++      typeof model.id === "string" &&
++      model.id.startsWith(`${NODE_PREFIX}/`) &&
++      typeof model.owned_by === "string"
++  );
++  assert.ok(v1Models.length > 0, "the unified catalog must publish a prefixed node model");
++
++  const v1Owners = new Set(v1Models.map((model) => model.owned_by));
++  assert.ok(
++    !v1Owners.has(NODE_ID),
++    "the unified catalog must not expose the storage UUID as an owner"
++  );
++
++  const { result } = await callCatalog(NODE_PREFIX);
++  const publishedModelIds = new Set(
++    v1Models.map((model) => model.id.slice(`${NODE_PREFIX}/`.length))
++  );
++  const matchingMcpModels = result.models.filter((model) => publishedModelIds.has(model.id));
++
++  assert.ok(
++    matchingMcpModels.length > 0,
++    "MCP must return at least one model also published by the unified catalog"
++  );
++
++  const mcpOwners = new Set(matchingMcpModels.map((model) => model.provider));
++  assert.deepEqual(
++    mcpOwners,
++    v1Owners,
++    "catalog and MCP must publish matching models under the same public owner"
++  );
++  assert.ok(
++    !mcpOwners.has(NODE_ID),
++    "MCP must not expose the storage UUID as a provider"
++  );
++});
++
 +test("owner naming matches /v1/models: canonical id, not the short alias", async () => {
-+  // /v1/models reports `owned_by: "github"` while publishing both `github/x` and
-+  // `gh/x` ids. If MCP reported `gh`, a client grouping by owner across the two
-+  // surfaces would silently see two different providers.
-+  //
-+  // This one passes on the old code too — built-in owners were echoed verbatim, so
-+  // they were already canonical. It is here as a REGRESSION GUARD on the fix: the
-+  // obvious "publish the public prefix" helper (getPublicProviderPrefix) prefers the
-+  // registry ALIAS, which would have turned every built-in owner into its short form
-+  // and broken cross-surface grouping. `resolvePublicOwnerId` is the correct rule.
++  // Generic /v1/models publishes GitHub under `github/` with
++  // `owned_by: "github"`; `gh/` is inbound-only. MCP addressed by `gh` must
++  // return the same canonical owner, `github`.
 +  const result = await getMcpModelsCatalog(
 +    { provider: "gh" },
 +    {
@@ -11725,36 +11705,17 @@ index 000000000..27619b66a
 +});
 diff --git a/tests/unit/provider-node-prefix-validation.test.ts b/tests/unit/provider-node-prefix-validation.test.ts
 new file mode 100644
-index 000000000..08e16e53f
+index 000000000..35d7becaa
 --- /dev/null
 +++ b/tests/unit/provider-node-prefix-validation.test.ts
-@@ -0,0 +1,328 @@
+@@ -0,0 +1,341 @@
 +/**
-+ * tests/unit/provider-node-prefix-validation.test.ts
++ * Provider-node prefix policy.
 + *
-+ * A provider node's `prefix` becomes the first segment of every model id it publishes,
-+ * and the request path resolves that segment back to a provider. Nothing validated it —
-+ * the schema only did `.trim().min(1)` and the column has no UNIQUE constraint — so three
-+ * shapes of permanently-broken configuration saved cleanly through the normal UI. All
-+ * three were reproduced against the real routes before the fix:
-+ *
-+ *   • prefix shadowing a BUILT-IN id/alias ("openai", "vllm", "lm-studio", "zed"):
-+ *     `getModelInfo("openai/gpt-4o")` still resolved to the built-in, so the node was
-+ *     unreachable. The reserved set the router consulted was built from REGISTRY alone
-+ *     (328 names) and missed the 122 ids that live only in AI_PROVIDERS.
-+ *
-+ *   • prefix shadowing a SYNTHETIC namespace ("auto", "combo", "no-think", "qtSd"):
-+ *     here the node WINS — verified that a node with prefix `auto` captured
-+ *     `auto/best` and one with prefix `no-think` captured `no-think/openai/gpt-4o`, so a
-+ *     single node silently took over auto-routing and the no-thinking alias namespace.
-+ *
-+ *   • DUPLICATE prefix: both nodes saved, and the first one won every lookup, leaving the
-+ *     second permanently dead.
-+ *
-+ * Policy (operator's decision): block new/edited nodes, only WARN about pre-existing rows.
-+ * A hard UNIQUE constraint was rejected because migrations are all-or-nothing and a
-+ * failure stops the DB from starting, which would brick any install that already has a
-+ * duplicate. So these tests also pin that existing rows are REPORTED and never rewritten.
++ * Create and update validation reserve the union of runtime built-in names and the
++ * wider public/configuration provider-name surface. Existing rows are reported without
++ * changing their published ids. These tests exercise both write anchors and the legacy
++ * reporting path without relying on provider counts or historical routing probes.
 + */
 +
 +import test from "node:test";
@@ -11775,6 +11736,9 @@ index 000000000..08e16e53f
 +const nodeIdRoute = await import("../../src/app/api/provider-nodes/[id]/route.ts");
 +const { validateProviderNodePrefix, findProviderNodePrefixConflicts, getReservedNodePrefixes } =
 +  await import("../../src/shared/providers/nodePrefix.ts");
++const { REGISTRY } = await import("../../open-sse/config/providerRegistry.ts");
++const { AI_PROVIDERS } = await import("../../src/shared/constants/providers.ts");
++const { SYNTHETIC_MODEL_NAMESPACES } = await import("../../src/shared/providers/identity.ts");
 +
 +// ---------------------------------------------------------------------------
 +// Helpers
@@ -11857,20 +11821,36 @@ index 000000000..08e16e53f
 +});
 +
 +// ---------------------------------------------------------------------------
-+// Reserved set completeness — the root cause of the built-in shadowing
++// Reserved set policy — runtime names plus the wider public/configuration surface
 +// ---------------------------------------------------------------------------
 +
-+test("the reserved set covers AI_PROVIDERS ids, not just the REGISTRY", async () => {
++function findPublicOnlyProviderName(): string {
++  const runtimeNames = new Set<string>();
++  for (const entry of Object.values(REGISTRY)) {
++    if (typeof entry?.id === "string") runtimeNames.add(entry.id.toLowerCase());
++    if (typeof entry?.alias === "string") runtimeNames.add(entry.alias.toLowerCase());
++  }
++
++  const publicOnly = Object.keys(AI_PROVIDERS).find(
++    (providerId) =>
++      !runtimeNames.has(providerId.toLowerCase()) && !SYNTHETIC_MODEL_NAMESPACES.has(providerId)
++  );
++  assert.ok(publicOnly, "AI_PROVIDERS must contribute a name beyond the runtime guard");
++  return publicOnly;
++}
++
++test("the create/edit reserved set includes runtime names and the wider public provider surface", () => {
 +  const reserved = getReservedNodePrefixes();
-+  // Present in AI_PROVIDERS but absent from REGISTRY — the gap a node could shadow.
-+  for (const providerId of ["vllm", "lm-studio", "zed", "azure", "copilot", "cliproxyapi"]) {
-+    assert.ok(reserved.has(providerId), `"${providerId}" must be reserved`);
-+  }
-+  // And the registry half still applies.
-+  for (const providerId of ["openai", "claude", "codex"]) {
-+    assert.ok(reserved.has(providerId), `"${providerId}" must be reserved`);
-+  }
-+  assert.ok(reserved.size > 400, `expected both sources merged; got ${reserved.size} names`);
++  const runtimeName = Object.values(REGISTRY).find(
++    (entry) => typeof entry?.id === "string" || typeof entry?.alias === "string"
++  );
++  const exactRuntimeName = runtimeName?.id || runtimeName?.alias;
++  assert.ok(exactRuntimeName, "REGISTRY must expose at least one built-in name");
++  assert.ok(reserved.has(exactRuntimeName.toLowerCase()));
++
++  const publicOnly = findPublicOnlyProviderName();
++  assert.ok(reserved.has(publicOnly.toLowerCase()));
++  assert.equal(validateProviderNodePrefix(publicOnly)?.code, "reserved-provider");
 +});
 +
 +// ---------------------------------------------------------------------------
@@ -11938,13 +11918,26 @@ index 000000000..08e16e53f
 +// Editing is blocked the same way, but a no-op re-save is not a self-collision
 +// ---------------------------------------------------------------------------
 +
-+test("editing a node onto a reserved or duplicate prefix is rejected", async () => {
++test("POST and PUT enforce the same wider reserved-prefix policy", async () => {
++  const publicOnly = findPublicOnlyProviderName();
++  const rejectedCreate = await createViaRoute(publicOnly);
++  assert.equal(rejectedCreate.status, 400);
++  assert.equal(rejectedCreate.body.error?.code, "reserved-provider");
++
++  const created = await createViaRoute("editable-node");
++  const id = created.body.node?.id as string;
++  assert.ok(id, "precondition: ordinary prefix creates a node");
++  const rejectedUpdate = await updateViaRoute(id, publicOnly);
++  assert.equal(rejectedUpdate.status, 400);
++  assert.equal(rejectedUpdate.body.error?.code, "reserved-provider");
++});
++
++test("editing a node onto a synthetic or duplicate prefix is rejected", async () => {
 +  const mine = await createViaRoute("mine");
 +  const other = await createViaRoute("other");
 +  const mineId = mine.body.node?.id as string;
 +  assert.ok(mineId && other.status === 201, "precondition: two nodes exist");
 +
-+  assert.equal((await updateViaRoute(mineId, "openai")).body.error?.code, "reserved-provider");
 +  assert.equal((await updateViaRoute(mineId, "auto")).body.error?.code, "reserved-synthetic");
 +  assert.equal((await updateViaRoute(mineId, "other")).body.error?.code, "duplicate");
 +});
@@ -12954,7 +12947,7 @@ index 73c95336e..34f12403d 100644
    await seedConnection("kie");
  
 diff --git a/tests/unit/sync-reasoning-supported-efforts-7694.test.ts b/tests/unit/sync-reasoning-supported-efforts-7694.test.ts
-index f81440ea1..d8673f319 100644
+index f81440ea1..a0774c85f 100644
 --- a/tests/unit/sync-reasoning-supported-efforts-7694.test.ts
 +++ b/tests/unit/sync-reasoning-supported-efforts-7694.test.ts
 @@ -24,18 +24,16 @@ const providersDb = await import("../../src/lib/db/providers.ts");
@@ -12985,22 +12978,32 @@ index f81440ea1..d8673f319 100644
  
  // ---------------------------------------------------------------------------
 -// Step 4: catalog generates `-{effort}` alias ids per declared tier.
-+// Step 4: universal catalog keeps effort aliases inbound-only.
++// Step 4: universal catalog publishes effort variants for effort-capable models.
  // ---------------------------------------------------------------------------
  
 -test("#7694 catalog: GET /api/v1/models advertises a <model>-<tier> alias id per declared effort tier", async () => {
-+test("#7694 catalog: GET /api/v1/models publishes only the base identity for effort-capable models", async () => {
++test("#7694 catalog: GET /api/v1/models publishes <model>-<tier> variants for effort-capable models", async () => {
    const connection = await seedProviderConnection("huggingface");
  
    await modelsDb.replaceSyncedAvailableModelsForConnection("huggingface", connection.id, [
-@@ -193,8 +191,8 @@ test("#7694 catalog: GET /api/v1/models advertises a <model>-<tier> alias id per
+@@ -187,14 +185,15 @@ test("#7694 catalog: GET /api/v1/models advertises a <model>-<tier> alias id per
+   const response = await v1ModelsCatalog.getUnifiedModelsResponse(
+     new Request("http://localhost/api/v1/models")
+   );
+-  const body = (await response.json()) as { data: Array<{ id: string }> };
++  const body = (await response.json()) as { data: Array<{ id: string; owned_by?: string }> };
+   const baseEntry = body.data.find((m) => m.id.endsWith("some-org/reasoning-model-alias-7694"));
+   assert.ok(baseEntry, "base model must appear in the catalog");
  
-   const highVariant = body.data.find((m) => m.id === `${baseEntry!.id}-high`);
-   const lowVariant = body.data.find((m) => m.id === `${baseEntry!.id}-low`);
+-  const highVariant = body.data.find((m) => m.id === `${baseEntry!.id}-high`);
+-  const lowVariant = body.data.find((m) => m.id === `${baseEntry!.id}-low`);
 -  assert.ok(highVariant, `expected a "${baseEntry!.id}-high" alias entry`);
 -  assert.ok(lowVariant, `expected a "${baseEntry!.id}-low" alias entry`);
-+  assert.equal(highVariant, undefined, "high effort alias must stay inbound-only");
-+  assert.equal(lowVariant, undefined, "low effort alias must stay inbound-only");
++  for (const tier of ["low", "high"]) {
++    const variant = body.data.find((m) => m.id === `${baseEntry!.id}-${tier}`);
++    assert.ok(variant, `${tier} effort variant must be published next to the base identity`);
++    assert.equal(variant!.owned_by, baseEntry!.owned_by, "variant must inherit the base owner");
++  }
  });
  
  // ---------------------------------------------------------------------------
