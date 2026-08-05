@@ -1,0 +1,160 @@
+diff --git a/.env.example b/.env.example
+index 4cb877425..a66114112 100644
+--- a/.env.example
++++ b/.env.example
+@@ -337,8 +337,11 @@ ALLOW_API_KEY_REVEAL=false
+ # OMNIROUTE_CHAT_HEAVY_TOOL_COUNT=64
+ # Conservative string-size token estimate that classifies a request as heavyweight. Default 32000.
+ # OMNIROUTE_CHAT_HEAVY_ESTIMATED_TOKENS=32000
+-# Hard message-count cap; excess receives compact-required 413. Default 800.
+-# OMNIROUTE_CHAT_HARD_MAX_MESSAGES=800
++# Optional opt-in hard message-count cap; excess receives compact-required 413 before
++# compression can run. Unset/0 (the default) means no history cap: heap growth is bounded
++# by OMNIROUTE_CHAT_MAX_HEAVY_IN_FLIGHT and the heap-pressure shed instead. Set a positive
++# value only on memory-constrained deployments that need a hard ceiling.
++# OMNIROUTE_CHAT_HARD_MAX_MESSAGES=0
+ 
+ # Hard cap (bytes) for a non-streaming upstream response buffered fully into memory
+ # (#5152). Past this the upstream reader is cancelled and the request fails fast
+diff --git a/changelog.d/fixes/9494-chat-history-cap-opt-in.md b/changelog.d/fixes/9494-chat-history-cap-opt-in.md
+new file mode 100644
+index 000000000..30e0be1e0
+--- /dev/null
++++ b/changelog.d/fixes/9494-chat-history-cap-opt-in.md
+@@ -0,0 +1 @@
++- fix(api): make the 800-message chat history cap opt-in so long conversations reach compression instead of a terminal 413 (#9494)
+diff --git a/docs/reference/ENVIRONMENT.md b/docs/reference/ENVIRONMENT.md
+index 1bf2f0f06..b99b83dd8 100644
+--- a/docs/reference/ENVIRONMENT.md
++++ b/docs/reference/ENVIRONMENT.md
+@@ -193,7 +193,7 @@ OmniRoute uses **SQLite** (via `better-sqlite3`) for all persistence. These vari
+ | `OMNIROUTE_CHAT_HEAVY_MESSAGE_COUNT`    | `200`                   | `src/shared/middleware/chatBodyAdmission.ts`     | Message count that classifies a chat request as heavyweight even when its body is below the byte threshold.                                                                                                                                                                                                                                                        |
+ | `OMNIROUTE_CHAT_HEAVY_TOOL_COUNT`       | `64`                    | `src/shared/middleware/chatBodyAdmission.ts`     | Tool count that classifies a chat request as heavyweight even when its body is below the byte threshold.                                                                                                                                                                                                                                                           |
+ | `OMNIROUTE_CHAT_HEAVY_ESTIMATED_TOKENS` | `32000`                 | `src/shared/middleware/chatBodyAdmission.ts`     | Conservative string-size token estimate that classifies a request as heavyweight; this is an admission-cost proxy, not provider billing tokenization.                                                                                                                                                                                                              |
+-| `OMNIROUTE_CHAT_HARD_MAX_MESSAGES`      | `800`                   | `src/shared/middleware/chatBodyAdmission.ts`     | Hard chat history cap. Requests above it receive structured compact-required `413` before compression, translation, or provider dispatch.                                                                                                                                                                                                                           |
++| `OMNIROUTE_CHAT_HARD_MAX_MESSAGES`      | `0` (disabled)          | `src/shared/middleware/chatBodyAdmission.ts`     | Optional opt-in chat history cap. Disabled by default: a message count is deployment policy, not a universal property of a request, and capping here rejects conversations with a terminal `413` before the compression pipeline can make them servable. Heap growth is bounded by `OMNIROUTE_CHAT_MAX_HEAVY_IN_FLIGHT` and the heap-pressure shed. Set a positive value on memory-constrained deployments that need a hard ceiling; excess then receives structured compact-required `413`. |
+ | `OMNIROUTE_MAX_NONSTREAMING_RESPONSE_BYTES` | `67108864` (64 MB)  | `open-sse/handlers/chatCore/nonStreamingResponseBody.ts` | Hard cap for a non-streaming upstream response buffered fully into memory. Past this the upstream reader is cancelled and the request fails fast instead of growing an unbounded string until the heap is exhausted.                                                                                                                                                 |
+ | `CORS_ORIGIN`                           | _(unset)_               | `src/server/cors/origins.ts`                    | Legacy single-origin CORS allowlist. Prefer `CORS_ALLOWED_ORIGINS` for new deployments. CORS is only for cross-origin browser API clients; authenticated dashboard writes use same-origin requests plus session-bound CSRF protection instead.                                                                                                                     |
+ | `CORS_ALLOWED_ORIGINS`                  | _(unset)_               | `src/server/cors/origins.ts`                    | Comma-separated CORS allowlist. No wildcard is sent unless `CORS_ALLOW_ALL=true` is explicitly configured.                                                                                                                                                                                                                                                         |
+diff --git a/src/shared/middleware/chatBodyAdmission.ts b/src/shared/middleware/chatBodyAdmission.ts
+index 57719d4e0..0dc81e475 100644
+--- a/src/shared/middleware/chatBodyAdmission.ts
++++ b/src/shared/middleware/chatBodyAdmission.ts
+@@ -42,9 +42,25 @@ export const CHAT_HEAVY_ESTIMATED_TOKENS = parsePositiveInt(
+   process.env.OMNIROUTE_CHAT_HEAVY_ESTIMATED_TOKENS,
+   32_000
+ );
++/**
++ * Optional per-deployment history cap. `0` (the default) disables it.
++ *
++ * A fixed message count is a *deployment policy*, not a universal property of a chat request:
++ * the same 900-message conversation is trivial on a 16 GB host and fatal in a 1 GB container.
++ * Enforcing one here rejected conversations before OmniRoute's own compression pipeline — the
++ * component that exists precisely to make them servable — ever ran, and returned a terminal 413
++ * that no client can retry its way out of. Message count is also not an input the caller fully
++ * controls: translation from other protocols expands a single turn into several `messages[]`
++ * entries, so the metric an operator caps is partly manufactured by OmniRoute itself.
++ *
++ * What actually bounds heap growth is the heavyweight lease below (bounded concurrency through
++ * the allocation-heavy path) plus the heap-pressure shed in the chat handler. Both remain in
++ * force for every request, including large ones. Constrained deployments that still want a hard
++ * ceiling opt in with `OMNIROUTE_CHAT_HARD_MAX_MESSAGES`.
++ */
+ export const CHAT_HARD_MAX_MESSAGES = parsePositiveInt(
+   process.env.OMNIROUTE_CHAT_HARD_MAX_MESSAGES,
+-  800
++  0
+ );
+ 
+ export interface ChatAdmissionLease {
+@@ -210,7 +226,9 @@ export function admitChatStructure(
+   const messages = Array.isArray(record.messages) ? record.messages : [];
+   const tools = Array.isArray(record.tools) ? record.tools : [];
+   const maxMessages = options.maxMessages ?? CHAT_HARD_MAX_MESSAGES;
+-  if (messages.length > maxMessages) {
++  // Opt-in only: `0`/unset means no history cap, so oversized conversations reach the
++  // compression pipeline and the bounded heavyweight path instead of a terminal 413.
++  if (maxMessages > 0 && messages.length > maxMessages) {
+     return { admit: false, response: structuralRejectionResponse(413, maxMessages) };
+   }
+ 
+diff --git a/tests/unit/chat-body-admission.test.ts b/tests/unit/chat-body-admission.test.ts
+index ee70ec1de..4343c0714 100644
+--- a/tests/unit/chat-body-admission.test.ts
++++ b/tests/unit/chat-body-admission.test.ts
+@@ -6,6 +6,7 @@ const {
+   admitChatRequest,
+   admitChatStructure,
+   ChatAdmissionController,
++  CHAT_HARD_MAX_MESSAGES,
+   releaseChatAdmissionAfterHandler,
+   releaseChatAdmissionWhenDone,
+ } = await import("../../src/shared/middleware/chatBodyAdmission.ts");
+@@ -66,7 +67,7 @@ test("a byte-light request above the tool threshold is rejected when heavy capac
+   occupied.release();
+ });
+ 
+-test("a request above the hard history cap returns structured compact-required 413", async () => {
++test("an opt-in history cap still returns the structured compact-required 413", async () => {
+   const controller = new ChatAdmissionController(1);
+   const result = admitChatStructure(
+     { messages: Array.from({ length: 3 }, () => ({ role: "user", content: "x" })) },
+@@ -83,6 +84,58 @@ test("a request above the hard history cap returns structured compact-required 4
+   assert.equal(controller.activeHeavy, 0);
+ });
+ 
++// A message-count ceiling is deployment policy, not a universal default. With no cap
++// configured, a long conversation must reach compression and the bounded heavyweight path
++// rather than a terminal 413 the client cannot retry out of.
++test("no history cap is enforced by default; long conversations are admitted", async () => {
++  assert.equal(CHAT_HARD_MAX_MESSAGES, 0, "the shipped default must not cap history");
++
++  const controller = new ChatAdmissionController(1);
++  const result = admitChatStructure(
++    { messages: Array.from({ length: 5_000 }, () => ({ role: "user", content: "x" })) },
++    null,
++    { controller, heavyMessages: 200, heavyTools: 64, heavyTokens: 32_000 }
++  );
++
++  assert.equal(result.admit, true, "a 5,000-message conversation must not be rejected outright");
++  if (!result.admit) return;
++  assert.equal(controller.activeHeavy, 1, "it is still admitted through heavyweight capacity");
++  result.lease?.release();
++});
++
++test("an uncapped oversized conversation still yields to occupied heavyweight capacity", async () => {
++  const controller = new ChatAdmissionController(1);
++  const occupied = controller.tryAcquireHeavy();
++  assert.ok(occupied);
++
++  const result = admitChatStructure(
++    { messages: Array.from({ length: 5_000 }, () => ({ role: "user", content: "x" })) },
++    null,
++    { controller, maxMessages: 0, heavyMessages: 200, heavyTools: 64, heavyTokens: 32_000 }
++  );
++
++  assert.equal(result.admit, false);
++  if (result.admit) return;
++  assert.equal(result.response.status, 503, "backpressure is retryable, not a terminal 413");
++  assert.equal(result.response.headers.get("retry-after"), "1");
++  const payload = await result.response.json();
++  assert.equal(payload.error.code, "chat_admission_busy");
++  assert.equal(payload.error.reason, "structure_limit");
++  occupied.release();
++});
++
++test("maxMessages: 0 explicitly disables the history cap", () => {
++  const controller = new ChatAdmissionController(1);
++  const result = admitChatStructure(
++    { messages: Array.from({ length: 3 }, () => ({ role: "user", content: "x" })) },
++    null,
++    { controller, maxMessages: 0, heavyMessages: 1, heavyTools: 10, heavyTokens: 10_000 }
++  );
++
++  assert.equal(result.admit, true);
++  if (result.admit) result.lease?.release();
++});
++
+ test("a conservative token estimate classifies string messages and tool schemas as heavy", () => {
+   const controller = new ChatAdmissionController(1);
+   const result = admitChatStructure(
